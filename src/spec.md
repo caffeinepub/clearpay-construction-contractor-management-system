@@ -1,0 +1,1571 @@
+# ClearPay Construction Contractor Management System
+
+## Overview
+A comprehensive contractor management platform for construction businesses with admin and user roles, featuring project management, billing, payments, client management, reporting, analytics, and an integrated AI chatbot assistant.
+
+## Authentication & User Management
+- **Internet Identity Authentication System**:
+  - Single "Login with Internet Identity" button with professional ClearPay styling
+  - Green, full-width button with rounded corners matching ClearPay design system
+  - Helper text below button: "Click above to authenticate securely"
+  - **CRITICAL**: ClearPay branding with logo, title "ClearPay" in **bold** Century Gothic font with existing brand color, subtitle "Billing Management System" in **normal-weight (400)** Century Gothic with **grey** color, separated by 8-12px vertical spacing
+  - **CRITICAL**: Century Gothic font with bold headings (h1-h6, titles) and regular weight for supporting text, labels, and body content
+  - **CRITICAL**: Century Gothic font files must be locally embedded or imported via CSS `@font-face` declarations in `index.css` to guarantee font rendering in all browsers and devices
+  - **CRITICAL**: Global font application through `index.css` and `tailwind.config.js` must use `"Century Gothic"` for all UI components, dialogs, tables, forms, and exports (CSV/PDF)
+  - **CRITICAL**: Font weights reinforced - headlines (h1-h6, table headers, card titles, button labels) use `font-weight: 700`, body text (labels, inputs, table cells, content) use `font-weight: 400`
+  - Centered login card with white background, soft shadow, and rounded corners
+  - After successful authentication, redirect users directly to Dashboard page
+  - Backend integration with Internet Identity for secure authentication
+  - Session management based on Internet Identity authentication
+  - Remove all email/password and OTP-related authentication code
+- **CRITICAL**: Login Access Validation:
+  - **CRITICAL**: Fix backend `hasActiveProfile` and `validateActiveUser` functions to properly recognize users whose profiles exist and are marked as ACTIVE, avoiding false negatives like "no active user exist"
+  - **CRITICAL**: Backend validation must correctly identify first created users after migration as valid active users
+  - **CRITICAL**: Update ProfileSetupPage.tsx and login flow hooks to handle updated backend response gracefully
+  - Only users whose email is listed in the system and marked as ACTIVE can access the app
+  - If email not found or inactive → show exact error message: "Your email ID is not activated." on login attempt before loading any page
+  - Backend validation must check user email existence and active status before allowing authentication
+- Profile setup form capturing Full Name, Company Name, Contact, and Email (read-only)
+- Two user roles: Admin (full CRUD access) and User (view-only with print/export capabilities)
+- **CRITICAL**: User management with enhanced access control:
+  - Auto-generated Principal IDs, admin-only role editing
+  - **CRITICAL**: Remove Principal ID input field from Add/Edit user forms - auto-generate and assign upon Save, make read-only and visible in list view only
+  - **CRITICAL**: New Access Status field with checkbox UI in each user row:
+    - Checked → user is **ACTIVE** (can access the app)
+    - Unchecked → user is **INACTIVE** (cannot access the app)
+    - Save access status to backend instantly when checkbox is toggled
+    - Default status for new users is INACTIVE unless specified
+  - **CRITICAL**: Access Status column must be included in user table display
+- **CRITICAL**: Remove company name display from user info section or sidebar entirely
+
+## Core Data Management
+
+### Projects
+- Store project details including name, client, start/end dates, unit price, quantity, estimated amount, contact number, location, project notes, address, attachment links
+- **CRITICAL**: Sort by project Date (latest first, DESC) - show most recent projects at top
+- **CRITICAL**: Show two attachment link icons that open in new tab if link exists, hidden/disabled if empty
+- **CRITICAL**: Ensure export templates include all fields: Project Name, Client, Dates, Price, Unit, Estimated Amount, Notes, Address, Contact, Links 1 & 2, Location
+- Full CRUD operations with form validation
+- **CRITICAL**: Delete confirmation with masked password popup using admin password (3554)
+- Bulk delete functionality with password protection (3554)
+- CSV/XLSX import and export capabilities with proper file parsing and backend updates
+- Real-time search functionality across project name, client name, location, and contact number
+- Advanced filtering by project name, client, date range, and unit price range
+- Sortable columns for all project data fields
+- Export functionality must reflect current filtered data
+- Download Format generates accurate CSV templates matching all form fields
+- **CRITICAL**: Standardize all date inputs, filters, table displays, and exports to DD-MM-YYYY format
+
+### Bills
+- Store bill information linked to projects including date, block ID, bill number, description, quantity, unit, unit price, total amount, remarks
+- **CRITICAL**: Auto-Close on Save - New Bill form should automatically close after successful save and redirect to Bills list
+- **CRITICAL**: Default sort by latest Date (DESC) - show most recent bills at top
+- **CRITICAL**: Enhanced Bills Unique Identification System:
+  - **CRITICAL**: Each bill entry must be uniquely identified by the combination of **Project Name + Bill Number** instead of Bill Number alone
+  - **CRITICAL**: Backend validation must prevent overwriting or deletion of existing bills when a new bill has the same Bill Number but belongs to a different project
+  - **CRITICAL**: Backend must reject save attempts (manual entry or CSV import) when both Project and Bill Number match an existing entry, displaying the exact error message: "This bill number already entered in this project."
+  - **CRITICAL**: Bills from different projects but with the same bill number must be saved successfully, remain visible in the list, and never overwrite other bills
+  - **CRITICAL**: CSV import logic must follow the same combination-based validation, skipping exact duplicates but importing valid unique combinations
+  - **CRITICAL**: Backend database constraints must enforce uniqueness on the combination of (projectId + billNumber) rather than billNumber alone
+  - **CRITICAL**: Frontend validation must check for Project + Bill Number combination duplicates before form submission
+  - **CRITICAL**: All duplicate validation error messages must display the exact text: "This bill number already entered in this project."
+- **CRITICAL**: Bill number field is mandatory numeric/alphanumeric entry that saves to backend and appears in Bills list
+- **CRITICAL**: Block ID field allows duplicate values without validation errors - multiple bills can share the same Block ID within the same project or across different projects
+- Full CRUD operations with enhanced filtering capabilities
+- **CRITICAL**: Enhanced Bills filtering system with the following filters:
+  - Projects (multi-select with placeholder "Select projects...")
+  - Client (text search by client name)
+  - Block ID (text search by block ID)
+  - **CRITICAL**: Bill No (text search by bill number)
+  - Year dropdown (default "All years")
+  - Financial Year dropdown (default "All financial years")
+  - Start Date (DD-MM-YYYY format)
+  - End Date (DD-MM-YYYY format)
+  - Clear Filters button
+  - Record count display (e.g., "Showing 163 of 163 bills")
+- **CRITICAL**: Show Filters / Hide Filters toggle button positioned in the page header on the right side
+- **CRITICAL**: Filters panel collapsed by default with smooth expand/collapse animation
+- **CRITICAL**: Bills filter panel must use compact two-row layout with uniform filter sizing - all filter inputs (Projects, Client, Block ID, Bill No, Year, Financial Year, Start Date, End Date) must have equal width and height matching the "All Financial Years" dropdown dimensions
+- **CRITICAL**: All filter inputs must be aligned neatly in rows with consistent spacing and grid alignment for a compact, balanced appearance
+- **CRITICAL**: Start Date and End Date fields must include calendar icons positioned inside the input (on the right) or adjacent to it, clickable to open the date picker
+- **CRITICAL**: Calendar icons must have uniform size and Century Gothic styling across all date inputs
+- **CRITICAL**: Bills table data display fix - Backend API must return complete bill data with proper field names and correct data types:
+  - blockId field must be returned as "blockId" in API response with string value
+  - description field must be returned as "description" in API response with string value
+  - quantity field must be returned as "quantity" with numeric value (not null/undefined)
+  - unit field must be returned as "unit" with string value (not null/undefined)
+  - unitPrice field must be returned as "unitPrice" with numeric value (not null/undefined)
+  - remarks field must be returned as "remarks" in API response with string value or null
+- **CRITICAL**: Frontend Bills table component data binding fix in BillsPage.tsx:
+  - **CRITICAL**: Bills table must include "Bill No" column positioned immediately after "Block ID" column
+  - **CRITICAL**: Bill No column must display the `billNumber` field value from the backend (each Bill's bill number)
+  - **CRITICAL**: Bill No column header must use Century Gothic font with bold weight matching adjacent column headers
+  - **CRITICAL**: Bill No column data must use Century Gothic font with regular weight matching adjacent column data
+  - **CRITICAL**: Display actual saved values for Block ID, Description, Quantity, Unit, Unit Price, and Remarks columns without unnecessary "–" placeholders
+  - Map Block ID column to bill.blockId property, display actual string value or "–" only when truly null/empty
+  - Map Description column to bill.description property, display actual string value
+  - Map Quantity column to bill.quantity property with numeric formatting (2 decimal places, e.g., "100.00")
+  - Map Unit column to bill.unit property, display actual string value
+  - Map Unit Price column to bill.unitPrice property with Indian currency formatting (₹ symbol, commas, 2 decimal places, e.g., "₹5,00.00")
+  - Map Remarks column to bill.remarks property, display actual text value or "–" only when truly null/undefined/empty
+- **CRITICAL**: React Query hook (useQueries.ts) must fetch and return all bill fields without omission:
+  - Ensure getBills API call returns complete Bill objects with all fields populated
+  - Verify no fields are being filtered out or set to null during data fetching
+  - Maintain proper data types for each field (string for text fields, number for numeric fields)
+- **CRITICAL**: Backend Bill type definition and API response validation:
+  - Bill type must include all fields: id, date, projectId, blockId, billNumber, description, quantity, unit, unitPrice, totalAmount, remarks
+  - Backend getBills endpoint must return all fields with correct data types
+  - Ensure no fields are omitted or transformed during serialization
+  - Validate that all bill creation/update operations properly save all field values
+- **CRITICAL**: Numeric formatting for Bills table:
+  - Quantity: Display as number with 2 decimal places (e.g., "100.00")
+  - Unit Price: Display with ₹ symbol, Indian number formatting with commas, 2 decimal places (e.g., "₹5,00.00")
+  - Total Amount: Display with ₹ symbol, Indian number formatting with commas, 2 decimal places
+- **CRITICAL**: Text field display for Bills table:
+  - Block ID: Display actual string value from bill.blockId field, show "–" only when truly null/undefined/empty
+  - Bill No: Display actual value from bill.billNumber field
+  - Description: Display actual string value from bill.description field
+  - Unit: Display actual string value from bill.unit field
+  - Remarks: Display actual string value from bill.remarks field, show "–" only when truly null/undefined/empty
+- **CRITICAL**: End-to-end data flow validation:
+  - Bills form must correctly save all field values to backend with proper field mapping
+  - Backend must store all fields with correct data types in database
+  - API responses must include all fields without omission
+  - Frontend table must correctly display all field values without defaulting to "–" when data exists
+- **CRITICAL**: Maintain Century Gothic font with bold column headers and regular-weight row data throughout Bills table
+- **CRITICAL**: Bills Table Column Sorting:
+  - Add sortable column headers with A–Z / Z–A icons for: Date, Project Name, Client, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount
+  - Sorting behavior cycles through Ascending → Descending → Default on consecutive clicks
+  - Active sorted column visually highlights with bold header text and highlighted sorting indicator
+  - Ensure sorting works seamlessly with existing filters and pagination
+  - Client-side sorting preferred for responsiveness (no page reload)
+  - Smooth transition for icon highlighting or color change when sorting
+  - Backend support for sorting operations when needed
+- **CRITICAL**: Bills Table Row Actions:
+  - Add new "Actions" column containing ✏️ Edit and 🗑️ Delete buttons
+  - Edit button opens the Bill form pre-filled with the selected record
+  - Delete button shows confirmation popup before deleting
+  - Actions column positioned at the end of the table
+  - Century Gothic font styling for action buttons
+- **CRITICAL**: Bills Table Negative Total Amount Highlighting:
+  - When Total Amount value is less than 0, display the amount text in red color
+  - When Total Amount value is less than 0, highlight the entire row background with soft light yellow color
+  - All columns in the negative amount row (Date, Project, Client, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount, Remarks, Actions) must adopt the light yellow background for visual consistency
+  - Ensure highlighting works correctly with sorting, filters, and pagination
+  - Light yellow background should be subtle and non-conflicting with zebra striping or hover effects
+  - Hover and selection states must remain clearly visible when applied to highlighted rows
+  - Maintain Century Gothic font throughout with bold column headers and regular weight data
+- **CRITICAL**: Bills Bulk Delete Confirmation Modal:
+  - **CRITICAL**: Mask password input (type="password") with no prefill, text "Please enter your password to confirm bulk deletion."
+  - Maintain same placeholder text style and alignment as reference design
+  - Display number of selected bills in confirmation message
+  - Use ClearPay design system for "Cancel" and "Delete Bills" buttons
+  - Delete Bills button styled as destructive action with red background
+  - Century Gothic font throughout modal
+- Bulk delete with password protection (3554)
+- Checkbox row selection for bulk operations
+- CSV/XLSX import and export capabilities with proper file parsing and backend updates
+- **CRITICAL**: Bills CSV Export must export only filtered/visible bills data with columns in exact order: Date, Project, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount, Remarks
+- **CRITICAL**: Bills PDF Export must include Bill No column in the same position as CSV export, maintaining column order consistency
+- Export functionality must reflect current filtered data with DD-MM-YYYY date format
+- **CRITICAL**: Download Format must generate CSV template with columns in exact order: `Date, Project, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount, Remarks`
+- **CRITICAL**: Download Format must include sample row: `01-01-2026, Sample Project, Block A, 1001, Construction, 100, Sft, 500, 50000, First floor work`
+- **CRITICAL**: Import CSV must validate exact column structure and order matching the download format
+- **CRITICAL**: Import CSV validation requirements with optional Block ID and Remarks fields:
+  - Exact column count (10 columns) and order validation
+  - Mandatory field validation: Date, Project, Bill No, Description, Quantity, Unit, Unit Price, Total Amount
+  - **CRITICAL**: Block ID and Remarks fields are OPTIONAL - import should proceed successfully when these columns are blank, empty, or missing
+  - **CRITICAL**: Block ID field allows duplicate values - no uniqueness validation or error checking for repeated Block ID values within the same project or across different projects
+  - **CRITICAL**: Apply enhanced duplicate validation during Bills import for (Project + Bill No) combination using the new unique identification system. Skip duplicates, show clear error notifications for skipped rows with exact message "This bill number already entered in this project.", import valid rows
+  - **CRITICAL**: When Block ID or Remarks are blank/empty in CSV, store as null or empty string in backend
+  - **CRITICAL**: In Bills table display, show "–" for Block ID and Remarks only when values are truly null/undefined/empty
+  - Numeric validation for Quantity, Unit Price, and Total Amount fields
+  - Project name must exist in system
+  - Date format validation (DD-MM-YYYY)
+  - Clear error messages for invalid data or format mismatches
+  - Toast notifications for successful imports and validation errors
+- **CRITICAL**: All toolbar actions must be fully functional:
+  - Export PDF: Generate downloadable PDF with visible filtered data using Century Gothic font and consistent table formatting
+  - Export CSV: Export current filtered table data as downloadable .csv file
+  - Download Format: Provide downloadable CSV template with correct headers and sample data for Bills module
+  - Import CSV: Parse uploaded CSV files, validate data structure and content, skip invalid rows gracefully, update tables in real-time
+- Export/import functionality must use utility methods in `frontend/src/lib/exportUtils.ts`
+- **CRITICAL**: Standardize all date inputs, filters, table displays, and exports to DD-MM-YYYY format
+
+### Payments
+- Record payments linked to projects with payment modes (Account/Cash)
+- Store payment date, project name, payment amount, payment mode, reference information, remarks
+- **CRITICAL**: Sort by latest Date first (DESC) - show most recent payments at top
+- **CRITICAL**: Backend Payment data structure must include remarks field as optional Text type (?Text)
+- **CRITICAL**: Payment form must fully support remarks field:
+  - Include remarks field in create/edit payment forms
+  - Save remarks data to backend through API integration
+  - Ensure remarks persist through create, update, and list operations
+  - Display saved remarks in Payments List table, showing "–" when empty
+  - Pre-fill saved remarks field when editing existing payments
+  - Integrate remarks with existing filters, sorting, and CSV/PDF exports
+  - Maintain Century Gothic font styling with bold labels/headings and regular help text
+- Multi-select project filtering and real-time updates
+- **CRITICAL**: Add "Reference" as a filter field in Payments filters, styled consistently with other filter boxes and included in filtering logic
+- **CRITICAL**: Payments Page Layout Update:
+  - Page Header with title "Payments" on left, aligned with Century Gothic bold style
+  - Action Toolbar directly below header containing `Print`, `Export PDF`, `Import CSV`, `Export CSV`, `Download Format`, and `New Payment` buttons aligned to the right
+  - **CRITICAL**: Bulk Delete button in Action Toolbar styled as destructive action:
+    - Background color: full red (#FF0000 or similar)
+    - Text color: white
+    - Icon color: white
+    - Maintain readability and consistency across hover and active states with slightly darker red hover transition
+    - Placement remains unchanged in the Payments Action Toolbar
+  - "Show Filters / Hide Filters" toggle positioned below the action toolbar
+  - Filters panel expands or collapses below the action toolbar (not above)
+  - Remove previous filter toggle alignment above the toolbar for consistency
+- **CRITICAL**: Payments Filters Panel with Show/Hide Toggle:
+  - Toggle functionality: Hide Filters (collapse panel smoothly), Show Filters (expand panel back)
+  - Maintain state consistency (open/closed) across page navigation
+  - Apply light pastel green background, smooth animation, and proper spacing matching other modules
+  - Default state: collapsed filters panel
+- **CRITICAL**: Payments Multi-Select with Bulk Delete:
+  - Add checkbox column at the start of the Payments table for multi-row selection
+  - Include Select All checkbox in the table header
+  - Selected rows highlight subtly using ClearPay's selection color scheme
+  - Add Bulk Delete button above or near the table
+  - Delete confirmation modal: "Are you sure you want to delete X selected payments?"
+  - Disable delete button or show validation message when no rows selected: "Please select at least one payment"
+  - Success toast message confirming deletion
+  - Error feedback on failure
+  - Century Gothic font, button shadows, and rounded edges matching ClearPay's design system
+- **CRITICAL**: Payments Table Column Sorting:
+  - Add sortable column headers with A–Z / Z–A icons for: Payment Date, Project Name, Payment Amount, Payment Mode, Reference
+  - Sorting behavior cycles through Ascending → Descending → Default on consecutive clicks
+  - Active sorted column visually highlights with bold header text and highlighted sorting indicator
+  - Ensure sorting works seamlessly with existing filters and pagination
+  - Client-side sorting preferred for responsiveness (no page reload)
+  - Smooth transition for icon highlighting or color change when sorting
+  - Backend support for sorting operations when needed
+- **CRITICAL**: Payments Table Negative Payment Amount Highlighting:
+  - When Payment Amount value is less than 0, display the amount text in red color (#FF0000)
+  - When Payment Amount value is less than 0, highlight the entire row background with soft light yellow color (#FFF9C4)
+  - All columns in the negative payment row (Payment Date, Project Name, Payment Amount, Payment Mode, Reference, Remarks, Actions) must adopt the light yellow background for visual consistency
+  - Ensure highlighting works correctly with sorting, filters, and pagination
+  - Light yellow background should be subtle and non-conflicting with zebra striping or hover effects
+  - Hover and selection states must remain clearly visible when applied to highlighted rows
+  - Maintain Century Gothic font throughout with bold column headers and regular weight data
+  - Positive and zero payment amounts retain default styling
+  - Conditional highlighting overrides zebra striping but maintains hover and selection styles
+  - Consistent behavior across desktop and mobile views
+- **CRITICAL**: Remarks Column Data Fix:
+  - Ensure the Remarks column in the Payments list table correctly displays the actual 'remarks' value from backend data when available
+  - If remarks are blank or null, display a dash "–"
+  - Maintain data integrity so that remarks display correctly after applying filters, sorting, editing, or refreshing the page
+  - Ensure the Remarks field is also correctly reflected in the Edit Payment modal form
+- Bulk delete functionality with password protection (3554)
+- CSV/XLSX import and export capabilities with proper file parsing and backend updates
+- Export functionality must reflect current filtered data
+- **CRITICAL**: Download Format must generate CSV template with columns in exact order: `Project, Date, Amount Paid, Payment Mode, Reference, Remarks`
+- **CRITICAL**: Download Format must include sample row: `Sample Project, 31-12-2025, 10000, Account, Harsha, Payment for first phase`
+- **CRITICAL**: Import CSV must validate exact column structure and order matching the download format
+- **CRITICAL**: Import CSV validation requirements:
+  - Exact column count (6 columns) and order validation
+  - Mandatory field validation for all fields
+  - Numeric validation for Amount Paid field
+  - Date format validation (DD-MM-YYYY)
+  - Payment Mode validation (must be "Account" or "Cash" only)
+  - Project name must exist in system
+  - Clear error messages for invalid data or format mismatches
+  - Toast notifications for successful imports and validation errors
+- **CRITICAL**: All toolbar actions must be fully functional:
+  - Export PDF: Generate downloadable PDF with visible filtered data using Century Gothic font and consistent table formatting
+  - Export CSV: Export current filtered table data as downloadable .csv file
+  - Download Format: Provide downloadable CSV template with correct headers and sample data for Payments module
+  - Import CSV: Parse uploaded CSV files, validate data structure and content, skip invalid rows gracefully, update tables in real-time
+- Export/import functionality must use utility methods in `frontend/src/lib/exportUtils.ts`
+- **CRITICAL**: Standardize all date inputs, filters, table displays, and exports to DD-MM-YYYY format
+
+### Clients
+- Store client contact information including client name, company, contact number, email, address, notes
+- Full CRUD operations with validation
+- **CRITICAL**: Delete confirmation with masked password popup using admin password (3554)
+- CSV/XLSX import and export capabilities
+
+### Users
+- **CRITICAL**: Enhanced User Management with Access Control:
+  - Store user information including Full Name, Contact, Email, Role, Principal ID, and Access Status
+  - **CRITICAL**: Remove Principal ID input field from Add/Edit user forms - auto-generate and assign upon Save, make read-only and visible in list view only
+  - **CRITICAL**: Access Status field with boolean value (ACTIVE/INACTIVE)
+  - **CRITICAL**: Default status for new users is INACTIVE unless specified during creation
+  - **CRITICAL**: Access Status controls login permissions - only ACTIVE users can access the app
+  - Full CRUD operations with validation and instant access revocation
+- **CRITICAL**: Delete confirmation with masked password popup using admin password (3554)
+- **CRITICAL**: Users Page Toolbar Actions - All Must Be Fully Functional:
+  - **CRITICAL**: Import CSV: Parse uploaded CSV files with user data, validate structure and content, allow bulk user creation with default INACTIVE status unless specified, update backend and refresh table in real-time
+  - **CRITICAL**: Export CSV: Export current filtered/visible user data as downloadable .csv file with columns: Full Name, Contact, Email, Role, Access Status
+  - **CRITICAL**: Export PDF: Generate downloadable PDF with visible filtered user data using Century Gothic font and consistent table formatting
+  - **CRITICAL**: Download Format: Provide downloadable CSV template with correct headers and sample data for Users module
+  - **CRITICAL**: All export functions must operate only on currently visible (filtered) user records
+  - **CRITICAL**: All import/export operations must include Access Status field in data processing
+- **CRITICAL**: Users Page Filters Toolbar - Reactive Filtering:
+  - **CRITICAL**: Name filter: Text search across Full Name field with instant table updates
+  - **CRITICAL**: Contact filter: Text search across Contact field with instant table updates
+  - **CRITICAL**: Email filter: Text search across Email field with instant table updates
+  - **CRITICAL**: Role filter: Dropdown selection (All Roles, Admin, User) with instant table updates
+  - **CRITICAL**: Clear Filters button: Resets all filter fields and reloads complete user list instantly
+  - **CRITICAL**: All filters must update the table and user count display in real-time
+  - **CRITICAL**: Filtering must work seamlessly with sorting and pagination
+- **CRITICAL**: Users List Actions - Edit and Delete Functionality:
+  - **CRITICAL**: Edit button: Opens user form modal with all fields pre-filled and editable except Principal ID (read-only)
+  - **CRITICAL**: Delete button: Shows confirmation dialog, then removes user from system and immediately revokes their access
+  - **CRITICAL**: Both actions must update the user list and count instantly after completion
+  - **CRITICAL**: Success/error toast notifications for all user operations
+- **CRITICAL**: Access Status Column with Checkbox UI:
+  - **CRITICAL**: New "Access Status" column in users table with checkbox in each row
+  - **CRITICAL**: Checked checkbox → user is ACTIVE (can access app)
+  - **CRITICAL**: Unchecked checkbox → user is INACTIVE (cannot access app)
+  - **CRITICAL**: Clicking checkbox toggles status and saves to backend instantly
+  - **CRITICAL**: Visual feedback during status change (loading state, success confirmation)
+  - **CRITICAL**: Access Status must be included in all export formats (CSV/PDF)
+
+## Unit List (Unified)
+- **CRITICAL**: Restrict available unit options globally to only: `Rft`, `Sft`, `Cuft`, `Rmt`, `Smt`, `Cumt`
+- Apply unified unit list across Projects, Bills, and all related forms and imports
+- Remove all full-form units and maintain only short codes
+
+## Dashboard & Analytics
+- Real-time metrics: Total Bills, Total Payments, Outstanding amounts, Total GST (18%)
+- **CRITICAL**: Standardized Amount Text Formatting for Summary Cards:
+  - **CRITICAL**: All numeric values and currency symbol (₹) must use the same font size (28–32px) and bold weight (700)
+  - **CRITICAL**: Apply Century Gothic font family for all amount text
+  - **CRITICAL**: Align amount text centrally with no superscript/subscript or smaller decimals
+  - **CRITICAL**: Set card titles to normal weight (400) and maintain consistent padding and height across all cards
+  - **CRITICAL**: Maintain equal font sizes across all cards to ensure balance on both desktop and mobile displays
+  - **CRITICAL**: If an amount is negative, render the text in red but keep the same size and weight
+  - **CRITICAL**: Use the `.amount-text` CSS class globally to enforce uniform bold styling and spacing in both Dashboard and Analytics summary cards
+- Three summary cards with specific styling:
+  - Total Bills: Light Blue background, Soft Blue border, Blue icon, amount display with subtext showing bill count
+  - Received Payments: Light Green background, Soft Green border, Green icon, amount display with subtext showing payment count
+  - Outstanding: Light Orange background, Soft Orange border, Orange icon, amount display with subtext "Pending collection"
+- Outstanding calculations ignore negative values in totals (Outstanding = Total Bills - Total Payments, positive values only)
+- Multi-project filtering with collapsible filter panel
+- **CRITICAL**: Dashboard Filters UI modifications:
+  - **CRITICAL**: Move filter controls to the right side of the page header with show/hide toggle behavior
+  - **CRITICAL**: Header layout: `[ Page Title (Dashboard) ] [ Filters (Show/Hide Toggle) ]`
+  - **Remove the "Month" filter** completely from the Dashboard filters
+  - Filters include only: Project (multi-select), Client, Year, Financial Year, Start Date, End Date (DD-MM-YYYY format)
+  - **CRITICAL**: All filter inputs must have uniform width and height matching the "All Financial Years" dropdown dimensions for consistent appearance
+  - **CRITICAL**: Start Date and End Date fields must include calendar icons positioned inside the input (on the right) or adjacent to it, clickable to open the date picker
+  - **CRITICAL**: Calendar icons must have uniform size and Century Gothic styling
+  - **Add a Filter/Control Panel icon** (settings-style, matching ClearPay's design style) aligned next to the "Filters" header text
+  - Maintain proper spacing, light cream background, clean Century Gothic font usage with consistent font weight (headings bold, labels regular)
+  - Preserve existing collapsible Show/Hide functionality for the Filters section
+- Six analytics charts in white rounded containers with soft shadows, displayed in 2-column responsive grid:
+  1. Monthly Bills vs Payments (Bar Chart) - Red bars for Bills, Green bars for Payments
+  2. Bills & Payments – Project Wise (Bar Chart) - Red for Bills, Green for Payments
+  3. Payment Mode Analysis (Bar Chart) - Account (Green), Cash (Black), grouped by Project
+  4. Outstanding with GST (Pie Chart) - **CRITICAL**: Change from Donut Chart to full Pie Chart (no hollow center), only projects with positive outstanding, 18% GST calculation, project-wise values with clear color separation and amount labels in ₹ formatted with "L / Cr" units
+  5. Bills Distribution (Donut Chart) - Percentage of total bills by project
+  6. Payments Trend (Line Chart) - Green line showing payment trend over time
+
+### Chart Zoom Functionality
+- **CRITICAL**: All Dashboard and Analytics charts must include zoom functionality:
+  - Display a blue "+" zoom icon at the top-right corner of each chart card
+  - Icon should be always visible with ClearPay-styled design (blue, circular hover shadow)
+  - On clicking the zoom icon, open the chart in a modal overlay view
+  - Modal backdrop dims the background page with semi-transparent overlay
+  - **CRITICAL**: Modal must be perfectly centered both horizontally and vertically on the screen
+  - **CRITICAL**: Fixed modal size: Width 1550px, Height 770px
+  - Display only the selected chart prominently, centered in modal
+  - Show chart title at the top with a close (✖) button
+  - Provide optional "Export CSV" button at the top right of the zoomed chart
+  - **CRITICAL**: Chart must be fully visible and properly scaled within modal, avoiding any cropping
+  - Show scrollbar only if chart content exceeds modal height
+- **CRITICAL**: Zoomed Chart Modal Specifications:
+  - **CRITICAL**: Chart must reflect all current filters, legends, tooltips, labels, and color coding exactly as seen in the base chart
+  - Modal design consistent with ClearPay theme using Century Gothic font
+  - **CRITICAL**: Smooth fade-in/fade-out animation for modal transitions
+  - Visually balanced, professional design throughout
+- **CRITICAL**: Data and Filter Consistency:
+  - Zoomed chart must use the same data, filters, and color coding as the main chart
+  - Any filters applied before zoom should remain active in the zoomed view
+  - No recalculation required - display identical data representation
+
+## Analytics
+- **CRITICAL**: Analytics Filters UI modifications:
+  - **CRITICAL**: Move filter controls to the right side of the page header with show/hide toggle behavior
+  - **CRITICAL**: Header layout: `[ Page Title (Analytics) ] [ Filters (Show/Hide Toggle) ]`
+  - Collapsible light cream background filter panel at the top with rounded corners
+  - Show/Hide toggle functionality with smooth open/close animation, default collapsed state
+  - Compact layout with reduced padding and height while maintaining usability
+  - **CRITICAL**: All filter inputs must have uniform width and height matching the "All Financial Years" dropdown dimensions
+  - Filters: Multi-select Project (default: all), Client, Year, Financial Year, Start Date, End Date (DD-MM-YYYY format)
+  - **CRITICAL**: Start Date and End Date fields must include calendar icons positioned inside the input (on the right) or adjacent to it, clickable to open the date picker
+  - **CRITICAL**: Calendar icons must have uniform size and Century Gothic styling
+  - "Clear Filters" button with instant data refresh
+  - Responsive filter behavior with smooth animations
+
+### Summary Cards (Top Section)
+- **CRITICAL**: Standardized Amount Text Formatting for Analytics Summary Cards:
+  - **CRITICAL**: All numeric values and currency symbol (₹) must use the same font size (28–32px) and bold weight (700)
+  - **CRITICAL**: Apply Century Gothic font family for all amount text
+  - **CRITICAL**: Align amount text centrally with no superscript/subscript or smaller decimals
+  - **CRITICAL**: Set card titles to normal weight (400) and maintain consistent padding and height across all cards
+  - **CRITICAL**: Maintain equal font sizes across all cards to ensure balance on both desktop and mobile displays
+  - **CRITICAL**: If an amount is negative, render the text in red but keep the same size and weight
+  - **CRITICAL**: Use the `.amount-text` CSS class globally to enforce uniform bold styling and spacing
+- Four cards in a row with responsive 2x2 grid layout on smaller screens:
+  1. Total Bills: Light Orange background with clean currency formatting
+  2. Total Payments: Light Green background with clean currency formatting
+  3. Total Outstanding: Light Pink background, subtext "Positive outstanding only"
+  4. Total GST (18%): Light Purple background, subtext "On positive outstanding"
+- Indian Rupee (₹) formatting with commas for all amounts
+- All calculations auto-update when filters change with animated transitions
+- Only projects with positive outstanding included in total outstanding and total GST calculations
+
+### Project-Wise Analytics (Main Section)
+- Each project displayed as white container card with soft shadow
+- Header strip: Light blue or lavender gradient showing Project Name (bold) and Client Name (sub-text)
+- Four inner metric cards per project:
+  - Bills amount: Light Orange background, label "Bills"
+  - Payments amount: Light Green background, label "Payments"
+  - Outstanding: Light Pink if positive (subtext "Pending"), Light Green if negative (subtext "Overpaid")
+  - GST: Light Purple background, label "GST (18%)"
+- **CRITICAL**: Ensure all numeric values in project-wise cards are bold without size change (affects Bills, Payments, Outstanding, GST Outstanding)
+- GST calculation logic:
+  - Outstanding = Bills - Payments
+  - GST = 18% of Outstanding only if Outstanding > 0
+  - GST = 0 if Outstanding ≤ 0
+  - Overpaid projects show "N/A (Overpaid)" in GST card
+- Two project cards per row layout on desktop, single-column on mobile
+- Real-time updates across all projects when filters change
+- Animated transitions for filter changes and card updates
+
+## Reports
+- Generate Bills, Payments, Outstanding, and GST reports
+- Multi-project filtering (mandatory) and date range filtering
+- **CRITICAL**: Start Date and End Date fields must include calendar icons positioned inside the input (on the right) or adjacent to it, clickable to open the date picker
+- **CRITICAL**: Calendar icons must have uniform size and Century Gothic styling
+- Summary cards with pastel backgrounds dynamically updated based on filters
+- Bills and payments summaries with project-wise totals
+- Export capabilities in CSV and PDF formats
+- **CRITICAL**: Delete confirmation with masked password popup using admin password (3554)
+- Consistent date format (DD-MM-YYYY) across all data
+
+## Seri AI Assistant
+- **CRITICAL**: Smart Project-wise Responses Feature:
+  - **Trigger Keyword Detection**: Detect keywords in user messages: "Projects", "Bills", "Payments", "Outstanding", "With GST Outstanding", or any project name
+  - When detected, respond with: "Please select a project from the list below 👇" followed by clickable project names fetched from the backend
+  - **Project Selection Handling**: On user click/tap of a project name, display a formatted Project Summary with:
+    - Total Bills: count + formatted total amount (₹ symbol)
+    - Total Payments: count + total amount
+    - Payment Split (Account vs Cash)
+    - Outstanding amount (ignore negatives)
+    - GST Outstanding = Outstanding × 18%
+  - All values use ₹ currency formatting and commas
+  - **Keyword-Based Detail Replies**: Support targeted queries like:
+    - `{project-name} – bills`
+    - `{project-name} – payments`
+    - `{project-name} – outstanding`
+    - `{project-name} – with gst`
+    - `{project-name} – account`
+    - `{project-name} – cash`
+    - `{project-name} – client`
+    - `{project-name} – unit price`
+    - `{project-name} – est qty`
+    - `{project-name} – est amount`
+  - Return clearly labeled summaries per section with bold titles and consistent ₹ formatting
+  - **Client Information Display**: For "{project name – client}" queries, include Client Name, Contact, and Address fields
+  - **Error Handling**: If no matching data found, display: "ℹ️ Sorry, the requested information is not available in the system." "📞 +91 7575 94 4949 for more details."
+  - **UI/UX Requirements**: Project list displays clickable project-name buttons, Century Gothic font with bold for titles and normal for body text, consistent chat design with existing Seri AI bubbles, icons, and colors
+  - **Data Source Integration**: Use Analytics + Project modules as data sources, fetch, aggregate, and display data in real time
+  - Negative outstanding values are ignored in totals and GST calculations
+- Integrated chatbot with access to real-time project, bill, and payment data
+- Context-aware responses for queries about Bills, Payments, Outstanding, Projects, GST
+- Time-sensitive greetings based on user's name and time of day
+- Project-wise summaries and clickable project lists
+- Session-based chat that resets on close
+- Read-only data access through backend APIs
+- Century Gothic font family applied consistently throughout chat interface
+
+## User Interface Design
+
+### Global Typography System
+- **CRITICAL**: Century Gothic font family applied consistently across the entire application:
+  - **CRITICAL**: Century Gothic font files must be locally embedded or imported via CSS `@font-face` declarations in `index.css` to guarantee font rendering in all browsers and devices
+  - **CRITICAL**: Global font application through `index.css` and `tailwind.config.js` must use `"Century Gothic"` for all UI components, dialogs, tables, forms, and exports (CSV/PDF)
+  - **CRITICAL**: Font weights reinforced - headlines (h1-h6, table headers, card titles, button labels) use `font-weight: 700`, body text (labels, inputs, table cells, content) use `font-weight: 400`
+  - **CRITICAL**: Confirm consistent visual rendering in all responsive layouts and exported files
+  - All pages, dialogs, forms, filters, tables, buttons, navigation, cards, modals
+  - Seri AI chat interface and all text elements
+  - Export documents and generated PDF files
+  - CSV template files and import/export UI elements
+  - Toast notifications and modal confirmations
+  - Chart zoom modals and all chart elements
+  - **CRITICAL**: Login screen with Internet Identity authentication flow and consistent styling
+  - **CRITICAL**: All headings (h1-h6), table headers, section titles, card titles, and dialog titles must be bold weight (700)
+  - **CRITICAL**: All body text, labels, input fields, table cells, and regular content must use regular weight (400)
+  - Font weights: 400 (regular), 600 (semi-bold), 700 (bold)
+  - No fallback fonts or inconsistent typography
+  - **CRITICAL**: Ensure consistent typography across Dashboard, Analytics, Projects, Bills, Payments, Clients, Users, Reports, and Seri AI pages
+
+### Global Button Design System
+- All action buttons across all modules (Dashboard, Analytics, Projects, Bills, Payments, Clients, Users, Reports) must follow the ClearPay button design system:
+  - Rounded white boxes with soft grey borders (#E0E0E0) and subtle shadow (0 2px 4px rgba(0,0,0,0.1))
+  - Black text (#333333) using Century Gothic font family
+  - Left-aligned icons with uniform 8px spacing from text
+  - Consistent padding: 8px horizontal, 6px vertical
+  - Light hover effect: slight darken (background: #F8F8F8) with raised shadow (0 4px 8px rgba(0,0,0,0.15))
+  - Focus states with subtle blue outline for accessibility
+- **CRITICAL**: Projects Page Action Button Hover Enhancement:
+  - **CRITICAL**: Action buttons on the Projects page (Print, Export PDF, Import CSV, Export CSV, Download Format) must have a hover background color of **#88CDF6**
+  - **CRITICAL**: Maintain button text and icons clearly visible with high contrast during hover state
+  - **CRITICAL**: Add smooth CSS transition for the hover effect to ensure refined, professional interaction
+  - **CRITICAL**: Keep all other button properties unchanged (size, shape, layout, icon placement, active behavior)
+  - **CRITICAL**: Apply hover style uniformly across all specified buttons, matching ClearPay's design system
+- **CRITICAL**: Bills Page Action Button Hover Enhancement:
+  - **CRITICAL**: Action buttons on the Bills page (Print, Export PDF, Import CSV, Export CSV, Download Format) must have a hover background color of **#FFBE88**
+  - **CRITICAL**: Maintain button text and icons clearly visible with high contrast during hover state
+  - **CRITICAL**: Add smooth CSS transition for the hover effect to ensure refined, professional interaction
+  - **CRITICAL**: Keep all other button properties unchanged (size, shape, layout, icon placement, active behavior)
+  - **CRITICAL**: Apply hover style uniformly across all specified buttons, matching ClearPay's design system
+- **CRITICAL**: Payments Page Action Button Hover Enhancement:
+  - **CRITICAL**: Action buttons on the Payments page (Print, Export PDF, Import CSV, Export CSV, Download Format) must have a hover background color of **#56C596**
+  - **CRITICAL**: Maintain button text and icons clearly visible with high contrast during hover state
+  - **CRITICAL**: Add smooth CSS transition for the hover effect to ensure refined, professional interaction
+  - **CRITICAL**: Keep all other button properties unchanged (size, shape, layout, icon placement, active behavior)
+  - **CRITICAL**: Apply hover style uniformly across all specified buttons, matching ClearPay's design system
+- **CRITICAL**: Payments Page Bulk Delete Button Styling:
+  - **CRITICAL**: Bulk Delete button styled as destructive action with full red background (#FF0000 or similar)
+  - **CRITICAL**: Text color: white, Icon color: white
+  - **CRITICAL**: Maintain readability and consistency across hover and active states with slightly darker red hover transition
+  - **CRITICAL**: Placement remains unchanged in the Payments Action Toolbar
+- Action buttons include: Export PDF, Import CSV, Export CSV, Download Format, Print, Add New, New Project, New Bill, New Payment, New Client, Add User, Bulk Delete
+- Horizontal layout on all top action bars with consistent spacing between button clusters
+- Equal padding and icon alignment across all buttons
+- Responsive behavior: stack vertically on mobile devices while maintaining button styling
+- Clear visual grouping between different button clusters (e.g., export buttons vs. add buttons)
+- **CRITICAL**: Toolbar button UI alignment must match reference images with white rounded boxes, grey borders, and proper icon spacing
+
+### Page Header System
+- **CRITICAL**: Dynamic page header title system across all primary modules:
+  - **CRITICAL**: Page header must dynamically display the current page/module name based on the active route
+  - **CRITICAL**: Titles must update automatically when navigating via menu clicks, page refresh, or direct URL access
+  - **CRITICAL**: No static or hardcoded header titles - all titles must be route-based and dynamic
+  - **CRITICAL**: Page title mapping:
+    - Dashboard → "Dashboard"
+    - Analytics → "Analytics"
+    - Projects → "Projects"
+    - Bills → "Bills"
+    - Payments → "Payments"
+    - Reports → "Reports"
+    - Users → "Users"
+    - Seri AI → "Seri AI"
+  - **CRITICAL**: Font: Century Gothic, Font weight: Bold, Position: Left side of the header
+  - **CRITICAL**: Remove any duplicate titles displayed below headers
+- **CRITICAL**: Unified page header layout across all primary modules:
+  - **CRITICAL**: Dashboard: `[ Dynamic Page Title (Dashboard) ] [ Filters (Show/Hide Toggle) ]`
+  - **CRITICAL**: Analytics: `[ Dynamic Page Title (Analytics) ] [ Filters (Show/Hide Toggle) ]`
+  - **CRITICAL**: Projects: `[ Dynamic Page Title (Projects) ] [ Print | Export PDF | Import CSV | Export CSV | Download Format | + New Project ]`
+  - **CRITICAL**: Bills: `[ Dynamic Page Title (Bills) ] [ Print | Export PDF | Import CSV | Export CSV | Download Format | + New Bill ]`
+  - **CRITICAL**: Payments: `[ Dynamic Page Title (Payments) ] [ Action Toolbar Below ] [ Show/Hide Filters Toggle Below Toolbar ]`
+  - **CRITICAL**: Users: `[ Dynamic Page Title (Users) ] [ Add User | Import CSV | Print | Export PDF | Export CSV | Download Format ]`
+  - **CRITICAL**: Other pages (Clients, Reports, Seri AI): `[ Dynamic Page Title ] [ Action Buttons or Filters ]`
+- **CRITICAL**: Remove all duplicate action buttons below page headers - all actions must be consolidated into the header or positioned as specified
+- **CRITICAL**: Remove the left-side "✕" close icon from page headers on all normal (non-popup) pages
+- **CRITICAL**: App branding display restrictions:
+  - **CRITICAL**: Display "ClearPay" app name and "Billing Management System" tagline ONLY in:
+    - Login page
+    - Sidebar/navigation panel (if visible)
+    - Splash/landing screen (if applicable)
+  - **CRITICAL**: Remove app name and tagline entirely from all internal page headers
+  - **CRITICAL**: Internal page headers must display only the current page title dynamically
+  - **CRITICAL**: Remove company name display from user info section or sidebar entirely
+- **CRITICAL**: Browser Tab Header Update:
+  - **CRITICAL**: Update browser tab header to show only the provided logo (`logo mkt-1.png`) and the app name "ClearPay"
+  - **CRITICAL**: Remove any tagline text from the browser tab
+  - **CRITICAL**: Ensure consistent branding across all pages with logo and "ClearPay" name only
+- Page headers should display only the dynamic page title with consistent Century Gothic bold font styling
+- Maintain clean, uncluttered header design across all pages
+- Keep close icons only for modal dialogs and popup windows
+
+### Date Picker System
+- **CRITICAL**: All date input fields across the application must include a consistent calendar icon positioned inside the input (on the right) or adjacent to it
+- **CRITICAL**: Calendar icon must open the date picker when clicked
+- **CRITICAL**: Calendar icons must have uniform size and Century Gothic styling across all date inputs
+- **CRITICAL**: Apply calendar icons to all pages containing date fields:
+  - Dashboard filters (Start Date and End Date fields)
+  - Analytics filters (Start Date and End Date fields)
+  - **CRITICAL**: Bills form (Date field) - must include visible calendar icon that opens date picker on click
+  - Payments form (Date field)
+  - Projects form (Project Date field)
+  - **CRITICAL**: Projects filters (From Date and To Date fields)
+  - **CRITICAL**: Payments filters (From Date and To Date fields)
+  - Reports filters (Start Date and End Date fields)
+  - All other Start Date and End Date fields throughout the application
+- **CRITICAL**: Maintain DD-MM-YYYY format consistency across all date inputs
+- Date picker must open smoothly with proper positioning relative to the input field
+
+### Filter System
+- **CRITICAL**: Uniform filter sizing across all pages - all filter inputs must have equal width and height matching the "All Financial Years" dropdown dimensions
+- **CRITICAL**: Bills page filter system with Show Filters / Hide Filters toggle button positioned in the page header on the right side
+- **CRITICAL**: Filters panel collapsed by default with smooth expand/collapse animation
+- **CRITICAL**: Bills filter panel design with light cream background, rounded borders, proper padding matching ClearPay design consistency
+- **CRITICAL**: Bills filters layout with compact two-row layout using uniform filter sizing, clean alignment, reduced padding, and lightweight presentation exactly matching reference design:
+  - Row 1: Projects (multi-select with placeholder "Select projects..."), Client (text search), Block ID (text search)
+  - Row 2: **CRITICAL**: Bill No (text search by bill number), Year dropdown (default "All years"), Financial Year dropdown (default "All financial years"), Start Date and End Date (DD-MM-YYYY format with calendar icons)
+  - Clear Filters button positioned appropriately
+  - Record count display (e.g., "Showing 163 of 163 bills")
+- **CRITICAL**: Dashboard Filters UI with updated design:
+  - **CRITICAL**: Move filter controls to the right side of the page header
+  - Remove "Month" filter completely
+  - Filters: Project (multi-select), Client, Year, Financial Year, Start Date, End Date
+  - All filter inputs have uniform width and height matching "All Financial Years" dropdown
+  - Calendar icons positioned inside or adjacent to Start Date and End Date fields
+  - Filter/Control Panel icon next to "Filters" header text
+  - Light cream background, proper spacing, Century Gothic font with bold headings and regular labels
+  - Preserve existing collapsible Show/Hide functionality for the Filters section
+- **CRITICAL**: Analytics Filters UI with uniform sizing:
+  - **CRITICAL**: Move filter controls to the right side of the page header
+  - All filter inputs have uniform width and height matching "All Financial Years" dropdown
+  - Calendar icons positioned inside or adjacent to Start Date and End Date fields
+- **CRITICAL**: Projects Filters UI with uniform sizing and background color:
+  - **CRITICAL**: Apply the same background color (#FFF8E1) as used in the Bills filters panel
+  - **CRITICAL**: Reduced height filter toolbar with smaller vertical padding and compact layout for a sleeker appearance
+  - **CRITICAL**: Decreased height and vertical spacing of individual filter option cards/boxes (Project Name, Client, From Date, To Date, Min/Max Unit Price) to make them visually smaller and more compact while maintaining clear readability and alignment
+  - All filter inputs have uniform width and height for consistent appearance
+  - **CRITICAL**: Calendar icons positioned inside or adjacent to From Date and To Date fields
+  - **CRITICAL**: Include "Clear Filters" and "Hide Filters" buttons styled identically to the Bills page filters
+  - **CRITICAL**: Ensure all filter boxes have uniform height and width, aligned neatly in two rows with even spacing
+  - **CRITICAL**: Maintain all existing functionality (Show/Hide, Clear Filters, date picker, etc.) while achieving the reduced-size appearance
+  - **CRITICAL**: Maintain consistent styling with Century Gothic font and light background color, ensuring responsive alignment remains intact
+- **CRITICAL**: Payments Filters UI with Show/Hide Toggle and uniform sizing:
+  - **CRITICAL**: Show/Hide Filters toggle button positioned below the action toolbar (not above)
+  - **CRITICAL**: Toggle functionality with smooth expand/collapse animation, default collapsed state
+  - **CRITICAL**: Light pastel green background, proper spacing, Century Gothic font with bold headings and regular labels
+  - All filter inputs have uniform width and height for consistent appearance
+  - Add "Reference" as a filter field styled consistently with other filter boxes
+  - Include Reference field in filtering logic
+  - Calendar icons positioned inside or adjacent to From Date and To Date fields
+  - State consistency (open/closed) maintained across page navigation
+- **CRITICAL**: Users Page Filters UI with reactive filtering:
+  - **CRITICAL**: Name filter: Text search across Full Name field with instant table updates
+  - **CRITICAL**: Contact filter: Text search across Contact field with instant table updates
+  - **CRITICAL**: Email filter: Text search across Email field with instant table updates
+  - **CRITICAL**: Role filter: Dropdown selection (All Roles, Admin, User) with instant table updates
+  - **CRITICAL**: Clear Filters button: Resets all filter fields and reloads complete user list instantly
+  - **CRITICAL**: All filters must update the table and user count display in real-time
+  - **CRITICAL**: Filtering must work seamlessly with sorting and pagination
+- Collapsible filter panels on Dashboard and Analytics pages with Show/Hide toggle functionality
+- Smooth open/close animations with default collapsed state
+- Compact layout with reduced padding and height while maintaining usability
+- Light cream background filter panels with rounded corners and consistent spacing
+- **CRITICAL**: Projects filter panel with background color (#FFF8E1) matching Bills filters panel
+- **CRITICAL**: Payments filter panel with light pastel green background matching ClearPay design system
+- Global ClearPay button design system with rounded white boxes, soft grey borders, black Century Gothic text, left-aligned icons, and light hover effects
+- Multi-select project filters on all pages with enhanced multi-selection support for Bills and Payments pages
+- Unified filter integration: Client, Date Range, Financial Year, Year
+- "Clear Filters" and "Hide Filters" functionality with instant data refresh
+- Real-time filter updates with seamless integration
+
+### Table Zebra Striping System
+- **CRITICAL**: Implement zebra striping (alternate row color styling) for all major list tables following the ClearPay design system:
+  - **Projects List Page**: Apply soft light blue (#E3F2FD) background to odd-numbered rows, even rows retain white background
+  - **Bills List Page**: Apply soft light red/pink (#FFEBEE) background to odd-numbered rows, even rows retain white background
+  - **Payments List Page**: Apply soft light green (#E8F5E9) background to odd-numbered rows, even rows retain white background
+  - **Users List Page**: Apply soft light purple (#F3E5F5) background to odd-numbered rows, even rows retain white background
+- **CRITICAL**: Common zebra striping styling rules:
+  - Header row remains unchanged with no zebra striping
+  - Hover effects must continue to function over zebra striping
+  - Row selection (checkbox-selected) background color overrides zebra striping for visual clarity
+  - Maintain Century Gothic font styling (700 for headers, 400 for data cells) across all tables
+  - Ensure consistent contrast and readability across all color themes
+  - Zebra striping applies only to data rows, not header or footer rows
+  - Smooth visual transitions when rows are added, removed, or reordered
+
+### Table Column Sorting System
+- **CRITICAL**: Implement column sorting functionality for Bills and Payments tables:
+  - **CRITICAL**: Bills table sortable columns: Date, Project Name, Client, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount
+  - **CRITICAL**: Payments table sortable columns: Payment Date, Project Name, Payment Amount, Payment Mode, Reference
+  - **CRITICAL**: Sorting behavior cycles through three states on consecutive clicks: Ascending → Descending → Default (original order)
+  - **CRITICAL**: Display A–Z / Z–A icons in column headers to indicate sorting capability
+  - **CRITICAL**: Active sorted column visually highlights with bold header text and highlighted sorting indicator
+  - **CRITICAL**: Ensure sorting works seamlessly with existing filters and pagination
+  - **CRITICAL**: Client-side sorting preferred for responsiveness (no page reload during sorting)
+  - **CRITICAL**: Smooth transition for icon highlighting or color change when sorting
+  - **CRITICAL**: Century Gothic font styling maintained for all sortable column headers
+  - **CRITICAL**: Backend support for sorting operations when client-side sorting is insufficient
+  - **CRITICAL**: Sorting state persists during filter changes and data updates
+  - **CRITICAL**: Clear visual feedback for users indicating which column is currently sorted and in which direction
+
+### Form Design System
+- All forms use dialog-style modal layout for consistency
+- Centered dialog modals with semi-transparent dark background overlay, rounded corners, and soft shadow
+- Modal validation for mandatory fields with real-time calculations
+- Modal buttons positioned at bottom-right: Cancel (grey outline) and Save (green solid)
+- Dialog closes on outside click or Cancel button with fade-out animation
+- Responsive and scrollable dialogs on mobile devices with fade-in/fade-out animations
+- **CRITICAL**: Forms auto-close post-save and redirect to respective list pages
+
+#### New Project Form
+- Two-column layout with proper field alignment and spacing
+- Left column: Project Name* (text input), Project Date (date picker with DD-MM-YYYY format and calendar icon), Unit* (dropdown: Rft, Sft, Cuft, Rmt, Smt, Cumt), Estimated Amount (auto-calculated, read-only with grey background), Project Notes (text area), Address (text area), Attachment Link 1 (text input)
+- Right column: Client Name* (text input), Unit Price* (₹ with +/- increment/decrement controls), Estimated Quantity* (numeric input with +/- controls), Location (text input for City, State), Contact Number* (+91 format), Attachment Link 2 (text input)
+- **CRITICAL**: Project Date field must include calendar icon that opens date picker when clicked
+- Real-time calculation: Estimated Amount = Unit Price × Estimated Quantity
+- Fixed bottom buttons: Cancel (white with grey border) and Save Project (green solid)
+- Scrollable content if form exceeds viewport height
+- Century Gothic font throughout with consistent field heights and spacing
+
+#### New Bill Form
+- Single-column layout with compact field arrangement
+- **CRITICAL**: Fields in order: Date* (DD-MM-YYYY with calendar icon that opens date picker when clicked), Project* (dropdown), Block ID (text), Bill No* (mandatory numeric/alphanumeric input), Description of Item* (text), Quantity* (numeric with +/- controls), Unit* (dropdown: Rft, Sft, Cuft, Rmt, Smt, Cumt), Unit Price (₹)* (numeric with +/- controls), Total Amount (auto-calculated, read-only), Remarks (text area)
+- **CRITICAL**: Date field must include visible calendar icon next to the input that opens the date picker when clicked, maintaining DD-MM-YYYY format
+- **CRITICAL**: Bill No field specifications:
+  - Label: "Bill No"
+  - Field type: Mandatory numeric/alphanumeric input
+  - Validation: "Bill number is required"
+  - **CRITICAL**: Enhanced duplicate validation using the new unique identification system - if Project + Bill No combination already exists, prevent saving and show exact error message: "This bill number already entered in this project."
+  - If Bill No is the same but Project is different, allow saving normally
+  - Apply validation consistently across both backend and frontend workflows
+  - Saves to backend billNumber field
+  - Appears in Bills list table
+  - Century Gothic font for all text elements
+- **CRITICAL**: Unit field specifications:
+  - Label: "Unit"
+  - Description: "Select the measurement unit applicable to this bill item."
+  - **CRITICAL**: Dropdown options: Rft, Sft, Cuft, Rmt, Smt, Cumt (short codes only, no full-form units)
+  - Helper text: "Please choose the correct unit based on the work measurement."
+  - Validation: "Unit selection is required."
+  - Century Gothic font for all text elements
+- **CRITICAL**: Form must properly save all field values to backend with correct field mapping:
+  - Block ID saves to blockId field as string value (optional field, allows duplicate values)
+  - Bill No saves to billNumber field as string/numeric value (mandatory field)
+  - **CRITICAL**: Enforce enhanced duplicate validation for Project + Bill No combination using the new unique identification system before saving
+  - Description saves to description field as string value
+  - Quantity saves to quantity field as numeric value
+  - Unit saves to unit field as string value
+  - Unit Price saves to unitPrice field as numeric value
+  - Remarks saves to remarks field as string value (optional field)
+- **CRITICAL**: Backend must store all fields with correct data types and return them in API responses
+- Real-time calculation: Total Amount = Quantity × Unit Price
+- Fixed bottom buttons: Cancel and Save
+- Compact spacing with consistent field heights
+
+#### Payment Form
+- Single-column layout with clean field arrangement
+- Fields: Project* (dropdown), Date* (DD-MM-YYYY with calendar icon), Amount* (₹ numeric input), Payment Mode* (toggle buttons - Account/Cash with only one selectable), Reference (text input), Remarks (text area)
+- **CRITICAL**: Date field must include calendar icon that opens date picker when clicked
+- **CRITICAL**: Remarks field must be fully integrated:
+  - Include remarks field in create/edit payment forms
+  - Save remarks data to backend through API integration
+  - Ensure remarks persist through create, update, and list operations
+  - Pre-fill saved remarks field when editing existing payments
+  - Maintain Century Gothic font styling with bold labels/headings and regular help text
+- Payment Mode toggle buttons: Account (green when selected), Cash (white outline when not selected)
+- Fixed bottom buttons: Cancel and Save
+- Clean spacing with proper field alignment
+
+#### New User Form
+- Single-column layout with simplified fields
+- **CRITICAL**: Fields: Full Name* (text input), Contact* (text input with +91 format), Email* (email input), Role* (dropdown with default "User"), Access Status (checkbox with default INACTIVE)
+- **CRITICAL**: Remove Principal ID input field - auto-generate and assign upon Save, make read-only and visible in list view only
+- **CRITICAL**: Access Status field with checkbox UI:
+  - Label: "Access Status"
+  - Checkbox: Checked = ACTIVE, Unchecked = INACTIVE
+  - Default state: INACTIVE (unchecked)
+  - Helper text: "Check to allow user access to the application"
+- Remove Company Name field from form (handled by backend)
+- Fixed bottom buttons: Cancel and Save User
+- Clean, minimal design with proper field spacing
+- Century Gothic font throughout with consistent styling
+
+### Notification System
+- Toast notifications for import/export operations with Century Gothic font
+- Success notifications for successful CSV imports with count of processed records
+- Error notifications for validation failures with specific error details
+- **CRITICAL**: Specific error notification for Bills duplicate validation: "This bill number already entered in this project."
+- Modal confirmations for critical operations with consistent styling
+- Smooth fade-in/fade-out animations for all notifications
+
+### Page Layouts
+
+#### Login Page
+- **CRITICAL**: Internet Identity authentication with professional ClearPay styling:
+  - ClearPay logo centered at the top of the login card
+  - **CRITICAL**: App name "ClearPay" below the logo in Century Gothic **bold** font with existing brand color
+  - **CRITICAL**: Subtitle "Billing Management System" below the app name in **normal-weight (400)** Century Gothic with **grey** color, separated by 8-12px vertical spacing
+  - Supporting text: "Secure authentication for construction contractors"
+  - Single green "Login with Internet Identity" button, full-width with rounded corners
+  - Helper text below button: "Click above to authenticate securely"
+  - Centered login card with white background, soft shadow, and rounded corners
+  - Century Gothic font throughout with bold headings and regular weight for supporting text
+  - Responsive design for desktop and tablet
+  - **CRITICAL**: Login access validation - only users whose email is listed and marked as ACTIVE can access the app
+  - **CRITICAL**: If email not found or inactive → show exact error message: "Your email ID is not activated." on login attempt before loading any page
+  - After successful authentication, redirect directly to Dashboard page
+  - Remove all email/password and OTP-related elements completely
+
+#### Dashboard
+- Light pastel grey page background with consistent margins and spacing
+- **CRITICAL**: Updated Dashboard Filters UI:
+  - **CRITICAL**: Move filter controls to the right side of the page header with show/hide toggle behavior
+  - **CRITICAL**: Header layout: `[ Dynamic Page Title (Dashboard) ] [ Filters (Show/Hide Toggle) ]`
+  - Collapsible light cream background filter panel with Show/Hide toggle, default collapsed
+  - **Remove "Month" filter** completely from Dashboard filters
+  - Filters include only: Project (multi-select), Client, Year, Financial Year, Start Date, End Date (DD-MM-YYYY format)
+  - **CRITICAL**: All filter inputs have uniform width and height matching "All Financial Years" dropdown dimensions
+  - **CRITICAL**: Calendar icons positioned inside or adjacent to Start Date and End Date fields, clickable to open date picker
+  - **Add Filter/Control Panel icon** (settings-style, matching ClearPay design) aligned next to "Filters" header text
+  - Maintain proper spacing, light cream background, Century Gothic font with bold headings and regular labels
+  - Preserve existing collapsible Show/Hide functionality
+- Smooth open/close animation with compact layout and reduced padding
+- **CRITICAL**: Three summary cards with standardized amount text formatting:
+  - **CRITICAL**: All numeric values and currency symbol (₹) use the same font size (28–32px) and bold weight (700)
+  - **CRITICAL**: Century Gothic font family for all amount text
+  - **CRITICAL**: Centrally aligned amount text with no superscript/subscript or smaller decimals
+  - **CRITICAL**: Card titles use normal weight (400) with consistent padding and height
+  - **CRITICAL**: Equal font sizes across all cards for balance on desktop and mobile
+  - **CRITICAL**: Negative amounts render in red but maintain same size and weight
+  - **CRITICAL**: Use `.amount-text` CSS class globally for uniform bold styling and spacing
+- Three summary cards in responsive layout with soft rounded corners, shadows, and padding
+- Six analytics charts in white rounded containers with soft shadows, arranged in 2-column responsive grid
+- **CRITICAL**: Each chart card must include a blue "+" zoom icon at the top-right corner for chart zoom functionality
+- All charts and cards update instantly based on active filters
+- Century Gothic font throughout all dashboard components
+- Indian Rupee symbol (₹) formatting for all amounts
+
+#### Analytics
+- **CRITICAL**: Updated Analytics Filters UI:
+  - **CRITICAL**: Move filter controls to the right side of the page header with show/hide toggle behavior
+  - **CRITICAL**: Header layout: `[ Dynamic Page Title (Analytics) ] [ Filters (Show/Hide Toggle) ]`
+  - Collapsible light cream background filter panel with Show/Hide toggle functionality
+  - Default collapsed state with smooth open/close animation
+  - Compact layout with reduced filter box height, padding, and visually lighter professional appearance
+  - **CRITICAL**: All filter inputs have uniform width and height matching the "All Financial Years" dropdown dimensions
+  - **CRITICAL**: Calendar icons positioned inside or adjacent to Start Date and End Date fields, clickable to open date picker
+- **CRITICAL**: Four summary cards with standardized amount text formatting:
+  - **CRITICAL**: All numeric values and currency symbol (₹) use the same font size (28–32px) and bold weight (700)
+  - **CRITICAL**: Century Gothic font family for all amount text
+  - **CRITICAL**: Centrally aligned amount text with no superscript/subscript or smaller decimals
+  - **CRITICAL**: Card titles use normal weight (400) with consistent padding and height
+  - **CRITICAL**: Equal font sizes across all cards for balance on desktop and mobile
+  - **CRITICAL**: Negative amounts render in red but maintain same size and weight
+  - **CRITICAL**: Use `.amount-text` CSS class globally for uniform bold styling and spacing
+- Four summary cards with pastel backgrounds and responsive layout
+- Project-wise breakdown cards with gradient headers and metric cards
+- Multi-select project and unified filters with animated transitions
+- GST calculations only on positive outstanding with clear labeling
+- Century Gothic font family with consistent styling
+- **CRITICAL**: All analytics charts must include zoom functionality with blue "+" icons and modal overlay capability
+
+#### Projects
+- **CRITICAL**: Updated Projects Page Header Layout:
+  - **CRITICAL**: Move all action buttons (Print, Export PDF, Import CSV, Export CSV, Download Format, New Project) into the page header
+  - **CRITICAL**: Align all buttons to the right side of the page header
+  - **CRITICAL**: Header layout: `[ Dynamic Page Title (Projects) ] [ Print | Export PDF | Import CSV | Export CSV | Download Format | + New Project ]`
+  - **CRITICAL**: Remove all duplicate action buttons below the header
+  - **CRITICAL**: Maintain smooth hover transitions and Century Gothic styling for all buttons
+- **CRITICAL**: Projects Page Action Button Hover Enhancement:
+  - **CRITICAL**: Action buttons (Print, Export PDF, Import CSV, Export CSV, Download Format) must have hover background color of **#88CDF6**
+  - **CRITICAL**: Maintain button text and icons clearly visible with high contrast during hover state
+  - **CRITICAL**: Add smooth CSS transition for the hover effect to ensure refined, professional interaction
+  - **CRITICAL**: Keep all other button properties unchanged (size, shape, layout, icon placement, active behavior)
+  - **CRITICAL**: Apply hover style uniformly across all specified buttons, matching ClearPay's design system
+- All export/import buttons must function correctly:
+  - Export PDF: generates PDF of current filtered data
+  - Import CSV: accepts valid CSV files, parses correctly, updates backend
+  - Export CSV: exports current filtered data to CSV format
+  - Download Format: generates accurate CSV template matching all form fields
+- Responsive search bar with placeholder "Search projects..." that searches across Project Name, Client Name, Location, and Contact Number
+- **CRITICAL**: Advanced filter panel with background color (#FFF8E1) matching the Bills filters panel:
+  - **CRITICAL**: Reduced height filter toolbar with smaller vertical padding and compact layout for a sleeker appearance
+  - **CRITICAL**: Decreased height and vertical spacing of individual filter option cards/boxes (Project Name, Client, From Date, To Date, Min/Max Unit Price) to make them visually smaller and more compact while maintaining clear readability and alignment
+  - Fields: Project Name, Client, From Date, To Date, Min Unit Price, Max Unit Price
+  - **CRITICAL**: Calendar icons positioned inside or adjacent to From Date and To Date fields
+  - **CRITICAL**: All filter boxes have uniform height and width, aligned neatly in two rows with even spacing
+  - **CRITICAL**: Include "Clear Filters" and "Hide Filters" buttons styled identically to the Bills page filters
+  - **CRITICAL**: Maintain all existing functionality (Show/Hide, Clear Filters, date picker, etc.) while achieving the reduced-size appearance
+  - **CRITICAL**: Maintain consistent styling with Century Gothic font and light background color, ensuring responsive alignment remains intact
+- Filters apply instantly with clear/reset functionality
+- Project list header showing "Project List (X projects)" with auto-updating count
+- Sortable table with columns: Project Name, Client, Date (DD-MM-YYYY), Unit Price (₹), Quantity, Estimated Amount (₹), Contact Number, Location, Actions (Edit/Delete)
+- **CRITICAL**: Projects table zebra striping with soft light blue (#E3F2FD) background for odd-numbered rows, white background for even rows
+- Centered dialog modal for New/Edit Project following the new form design specifications
+- Delete confirmation dialog for project removal
+- Projects instantly propagate to Dashboard, Analytics, Bills, and Payments selectors
+
+#### Bills
+- **CRITICAL**: Updated Bills Page Header Layout:
+  - **CRITICAL**: Move all action buttons (Print, Export PDF, Import CSV, Export CSV, Download Format, New Bill) into the page header
+  - **CRITICAL**: Align all buttons to the right side of the page header
+  - **CRITICAL**: Header layout: `[ Dynamic Page Title (Bills) ] [ Print | Export PDF | Import CSV | Export CSV | Download Format | + New Bill ]`
+  - **CRITICAL**: Remove all duplicate action buttons below the header
+  - **CRITICAL**: Show Filters / Hide Filters toggle button positioned in the page header on the right side alongside action buttons
+- **CRITICAL**: Enhanced Bills filtering system with light cream background, rounded borders, proper padding using compact two-row layout:
+  - Row 1: Projects (multi-select with placeholder "Select projects..."), Client (text search by client name), Block ID (text search by block ID)
+  - Row 2: **CRITICAL**: Bill No (text search by bill number), Year dropdown (default "All years"), Financial Year dropdown (default "All financial years"), Start Date and End Date (DD-MM-YYYY format with calendar icons)
+  - Clear Filters button positioned appropriately
+  - Record count display (e.g., "Showing 163 of 163 bills")
+- **CRITICAL**: Filters panel collapsed by default with smooth expand/collapse animation
+- **CRITICAL**: All filter inputs must have uniform width and height matching "All Financial Years" dropdown dimensions with clean alignment, reduced padding, and lightweight presentation
+- **CRITICAL**: Start Date and End Date fields must include calendar icons positioned inside the input (on the right) or adjacent to it, clickable to open date picker
+- **CRITICAL**: Bills table data display and formatting requirements:
+  - **CRITICAL**: Backend Bill type must include all fields with correct data types: id, date, projectId, blockId (string), billNumber, description (string), quantity (number), unit (string), unitPrice (number), totalAmount, remarks (string)
+  - **CRITICAL**: Backend getBills API must return complete bill data with all fields populated and correct data types
+  - **CRITICAL**: React Query hook (useQueries.ts) must fetch and return all bill fields without omission or null value masking
+  - **CRITICAL**: Frontend Bills table component (BillsPage.tsx) must correctly map each column to its corresponding bill property:
+    - Block ID column maps to bill.blockId property, displays actual string value or "–" only when truly null/undefined/empty
+    - **CRITICAL**: Bill No column positioned immediately after Block ID column, maps to bill.billNumber property, displays the bill number value
+    - Description column maps to bill.description property, displays actual string value
+    - Quantity column maps to bill.quantity property with numeric formatting (2 decimal places, e.g., "100.00")
+    - Unit column maps to bill.unit property, displays actual string value
+    - Unit Price column maps to bill.unitPrice property with Indian currency formatting (₹ symbol, commas, 2 decimal places, e.g., "₹5,00.00")
+    - Remarks column maps to bill.remarks property, displays actual text value or "–" only when truly null/undefined/empty
+  - **CRITICAL**: Display actual saved values for Block ID, Description, Quantity, Unit, Unit Price, and Remarks columns without unnecessary "–" placeholders
+  - **CRITICAL**: Show "–" only when field values are truly null/undefined/empty
+- **CRITICAL**: End-to-end data flow validation:
+  - Bills form must correctly save all field values to backend with proper field mapping (blockId, billNumber, description, quantity, unit, unitPrice, remarks)
+  - **CRITICAL**: Enforce enhanced duplicate validation for Project + Bill No combination using the new unique identification system during form submission and CSV import
+  - Backend must store all fields with correct data types in database
+  - Backend API responses must include all fields without omission
+  - Frontend table must correctly display all field values matching the uploaded reference image
+- **CRITICAL**: Maintain Century Gothic font with bold column headers and regular-weight row data throughout Bills table
+- **CRITICAL**: Bill No column header must use Century Gothic font with bold weight matching adjacent column headers
+- **CRITICAL**: Bill No column data must use Century Gothic font with regular weight matching adjacent column data
+- **CRITICAL**: Bills table zebra striping with soft light red/pink (#FFEBEE) background for odd-numbered rows, white background for even rows
+- **CRITICAL**: Bills Table Column Sorting:
+  - Add sortable column headers with A–Z / Z–A icons for: Date, Project Name, Client, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount
+  - Sorting behavior cycles through Ascending → Descending → Default on consecutive clicks
+  - Active sorted column visually highlights with bold header text and highlighted sorting indicator
+  - Ensure sorting works seamlessly with existing filters and pagination
+  - Client-side sorting preferred for responsiveness (no page reload)
+  - Smooth transition for icon highlighting or color change when sorting
+  - Backend support for sorting operations when needed
+- **CRITICAL**: Bills Table Row Actions:
+  - Add new "Actions" column containing ✏️ Edit and 🗑️ Delete buttons
+  - Edit button opens the Bill form pre-filled with the selected record
+  - Delete button shows confirmation popup before deleting
+  - Actions column positioned at the end of the table
+  - Century Gothic font styling for action buttons
+- **CRITICAL**: Bills Table Negative Total Amount Highlighting:
+  - When Total Amount value is less than 0, display the amount text in red color
+  - When Total Amount value is less than 0, highlight the entire row background with soft light yellow color
+  - All columns in the negative amount row (Date, Project, Client, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount, Remarks, Actions) must adopt the light yellow background for visual consistency
+  - Ensure highlighting works correctly with sorting, filters, and pagination
+  - Light yellow background should be subtle and non-conflicting with zebra striping or hover effects
+  - Hover and selection states must remain clearly visible when applied to highlighted rows
+  - Maintain Century Gothic font throughout with bold column headers and regular weight data
+- **CRITICAL**: Bills Bulk Delete Confirmation Modal:
+  - **CRITICAL**: Mask password input (type="password") with no prefill, text "Please enter your password to confirm bulk deletion."
+  - Maintain same placeholder text style and alignment as reference design
+  - Display number of selected bills in confirmation message
+  - Use ClearPay design system for "Cancel" and "Delete Bills" buttons
+  - Delete Bills button styled as destructive action with red background
+  - Century Gothic font throughout modal
+- Bulk delete option requiring password "3554"
+- **CRITICAL**: Bills Page Action Button Hover Enhancement:
+  - **CRITICAL**: Action buttons (Print, Export PDF, Import CSV, Export CSV, Download Format) must have hover background color of **#FFBE88**
+  - **CRITICAL**: Maintain button text and icons clearly visible with high contrast during hover state
+  - **CRITICAL**: Add smooth CSS transition for the hover effect to ensure refined, professional interaction
+  - **CRITICAL**: Keep all other button properties unchanged (size, shape, layout, icon placement, active behavior)
+  - **CRITICAL**: Apply hover style uniformly across all specified buttons, matching ClearPay's design system
+- **CRITICAL**: Bills CSV Export must export only filtered/visible bills data with exact column order: Date, Project, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount, Remarks
+- **CRITICAL**: Bills PDF Export must include Bill No column in the same position as CSV export, maintaining column order consistency
+- **CRITICAL**: All export/import buttons must function correctly with proper error handling:
+  - Export PDF: generates PDF of current filtered data using Century Gothic font and consistent table formatting
+  - Import CSV: accepts valid CSV files with exact column structure, validates data comprehensively with optional Block ID and Remarks fields, allows duplicate Block ID values without errors, **CRITICAL**: enforces enhanced duplicate validation for Project + Bill No combination using the new unique identification system and shows exact error message "This bill number already entered in this project." for duplicates, displays clear error messages for invalid data, shows toast notifications for success/failure, updates backend and refreshes table in real-time
+  - Export CSV: exports current filtered data to CSV format with DD-MM-YYYY date format
+  - Download Format: generates accurate CSV template with exact column order and sample data matching Bills requirements
+- Export/import functionality must use utility methods in `frontend/src/lib/exportUtils.ts` with correct file generation
+- **CRITICAL**: Table columns in exact order: Date, Project, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount, Remarks, Actions
+- Dialog-style modal form for New/Edit Bill with calendar icon next to Date field that opens date picker when clicked
+- Real-time total amount calculation
+- Checkbox row selection for bulk operations
+- Century Gothic font applied consistently throughout Bills page with bold headings and regular weight labels/text
+- Toast notifications for all import/export operations with success/error feedback
+
+#### Payments
+- **CRITICAL**: Updated Payments Page Layout:
+  - Page Header with dynamic title "Payments" on left, aligned with Century Gothic bold style
+  - Action Toolbar directly below header containing `Print`, `Export PDF`, `Import CSV`, `Export CSV`, `Download Format`, and `New Payment` buttons aligned to the right
+  - **CRITICAL**: Bulk Delete button in Action Toolbar styled as destructive action:
+    - Background color: full red (#FF0000 or similar)
+    - Text color: white
+    - Icon color: white
+    - Maintain readability and consistency across hover and active states with slightly darker red hover transition
+    - Placement remains unchanged in the Payments Action Toolbar
+  - "Show Filters / Hide Filters" toggle positioned below the action toolbar
+  - Filters panel expands or collapses below the action toolbar (not above)
+  - Remove previous filter toggle alignment above the toolbar for consistency
+- **CRITICAL**: Payments Filters Panel with Show/Hide Toggle:
+  - Toggle functionality: Hide Filters (collapse panel smoothly), Show Filters (expand panel back)
+  - Default state: collapsed filters panel with smooth expand/collapse animation
+  - Light pastel green background, proper spacing, Century Gothic font with bold headings and regular labels
+  - State consistency (open/closed) maintained across page navigation
+- Fixed-position filters with enhanced multi-select Projects support, Payment Mode, From Date, To Date (with calendar icons)
+- **CRITICAL**: Add "Reference" as a filter field styled consistently with other filter boxes and included in filtering logic
+- **CRITICAL**: All filter inputs have uniform width and height for consistent appearance
+- **CRITICAL**: Calendar icons positioned inside or adjacent to date fields
+- **CRITICAL**: Payments Page Action Button Hover Enhancement:
+  - **CRITICAL**: Action buttons (Print, Export PDF, Import CSV, Export CSV, Download Format) must have hover background color of **#56C596**
+  - **CRITICAL**: Maintain button text and icons clearly visible with high contrast during hover state
+  - **CRITICAL**: Add smooth CSS transition for the hover effect to ensure refined, professional interaction
+  - **CRITICAL**: Keep all other button properties unchanged (size, shape, layout, icon placement, active behavior)
+  - **CRITICAL**: Apply hover style uniformly across all specified buttons, matching ClearPay's design system
+- **CRITICAL**: Payments Multi-Select with Bulk Delete:
+  - Add checkbox column at the start of the Payments table for multi-row selection
+  - Include Select All checkbox in the table header
+  - Selected rows highlight subtly using ClearPay's selection color scheme
+  - Add Bulk Delete button above or near the table
+  - Delete confirmation modal: "Are you sure you want to delete X selected payments?"
+  - Disable delete button or show validation message when no rows selected: "Please select at least one payment"
+  - Success toast message confirming deletion
+  - Error feedback on failure
+  - Century Gothic font, button shadows, and rounded edges matching ClearPay's design system
+  - Password protection (3554) for bulk delete operations
+- **CRITICAL**: Payments Table Column Sorting:
+  - Add sortable column headers with A–Z / Z–A icons for: Payment Date, Project Name, Payment Amount, Payment Mode, Reference
+  - Sorting behavior cycles through Ascending → Descending → Default on consecutive clicks
+  - Active sorted column visually highlights with bold header text and highlighted sorting indicator
+  - Ensure sorting works seamlessly with existing filters and pagination
+  - Client-side sorting preferred for responsiveness (no page reload)
+  - Smooth transition for icon highlighting or color change when sorting
+  - Backend support for sorting operations when needed
+- **CRITICAL**: Payments Table Negative Payment Amount Highlighting:
+  - When Payment Amount value is less than 0, display the amount text in red color (#FF0000)
+  - When Payment Amount value is less than 0, highlight the entire row background with soft light yellow color (#FFF9C4)
+  - All columns in the negative payment row (Payment Date, Project Name, Payment Amount, Payment Mode, Reference, Remarks, Actions) must adopt the light yellow background for visual consistency
+  - Ensure highlighting works correctly with sorting, filters, and pagination
+  - Light yellow background should be subtle and non-conflicting with zebra striping or hover effects
+  - Hover and selection states must remain clearly visible when applied to highlighted rows
+  - Maintain Century Gothic font throughout with bold column headers and regular weight data
+  - Positive and zero payment amounts retain default styling
+  - Conditional highlighting overrides zebra striping but maintains hover and selection styles
+  - Consistent behavior across desktop and mobile views
+- **CRITICAL**: Remarks Column Data Fix:
+  - Ensure the Remarks column in the Payments list table correctly displays the actual 'remarks' value from backend data when available
+  - If remarks are blank or null, display a dash "–"
+  - Maintain data integrity so that remarks display correctly after applying filters, sorting, editing, or refreshing the page
+  - Ensure the Remarks field is also correctly reflected in the Edit Payment modal form
+- **CRITICAL**: Payment Form Remarks Field Integration:
+  - Include remarks field in create/edit payment forms
+  - Save remarks data to backend through API integration with Payment structure including remarks field as ?Text
+  - Ensure remarks persist through create, update, and list operations
+  - Pre-fill saved remarks field when editing existing payments
+  - Integrate remarks with existing filters, sorting, and CSV/PDF exports
+  - Maintain Century Gothic font styling with bold labels/headings and regular help text
+- **CRITICAL**: All export/import buttons must function correctly with proper error handling:
+  - Export PDF: generates PDF of current filtered data using Century Gothic font and consistent table formatting
+  - Import CSV: accepts valid CSV files with exact column structure, validates all fields comprehensively, displays clear error messages for invalid data, shows toast notifications for success/failure, updates backend and refreshes table in real-time
+  - Export CSV: exports current filtered data to CSV format
+  - Download Format: generates accurate CSV template with exact column order and sample data matching Payments requirements
+- Export/import functionality must use utility methods in `frontend/src/lib/exportUtils.ts` with correct file generation
+- Table layout: Payment Date, Project Name, Payment Amount, Payment Mode (Cash/Account), Reference, Remarks, Actions
+- **CRITICAL**: Payments table zebra striping with soft light green (#E8F5E9) background for odd-numbered rows, white background for even rows
+- Dialog-style modal form for New/Edit Payment following the new form design specifications with calendar icon for Date field
+- Century Gothic font applied consistently throughout Payments page
+- Toast notifications for all import/export operations with success/error feedback
+
+#### Clients
+- **CRITICAL**: Updated Clients Page Header Layout:
+  - **CRITICAL**: Page title left, action buttons right: `[ Dynamic Page Title (Clients) ] [ New Client | Print | Import CSV | Export CSV | Download Format ]`
+  - **CRITICAL**: Remove duplicate action buttons below header
+- **CRITICAL**: Delete confirmation with masked password popup using admin password (3554)
+- Fixed-position filter panel with boxed layout
+- Actions with ClearPay button design system: New Client, Print, Import CSV, Export CSV, Download Format
+- Filters: Client Name, Company, Contact Number with Clear Filters
+- Table columns: Client Name, Company, Contact Number, Email, Address, Notes, Actions
+- Dialog-style modal form for New/Edit Client with consistent design
+
+#### Users
+- **CRITICAL**: Updated Users Page Header Layout:
+  - **CRITICAL**: Page title left, action buttons right: `[ Dynamic Page Title (Users) ] [ Add User | Import CSV | Print | Export PDF | Export CSV | Download Format ]`
+  - **CRITICAL**: Remove duplicate action buttons below header
+- **CRITICAL**: Users Page Toolbar Actions - All Must Be Fully Functional:
+  - **CRITICAL**: Import CSV: Parse uploaded CSV files with user data, validate structure and content, allow bulk user creation with default INACTIVE status unless specified, update backend and refresh table in real-time
+  - **CRITICAL**: Export CSV: Export current filtered/visible user data as downloadable .csv file with columns: Full Name, Contact, Email, Role, Access Status
+  - **CRITICAL**: Export PDF: Generate downloadable PDF with visible filtered user data using Century Gothic font and consistent table formatting
+  - **CRITICAL**: Download Format: Provide downloadable CSV template with correct headers and sample data for Users module
+  - **CRITICAL**: All export functions must operate only on currently visible (filtered) user records
+  - **CRITICAL**: All import/export operations must include Access Status field in data processing
+- **CRITICAL**: Users Page Filters Toolbar - Reactive Filtering:
+  - Fixed-position filter panel with boxed layout matching other modules
+  - **CRITICAL**: Name filter: Text search across Full Name field with instant table updates
+  - **CRITICAL**: Contact filter: Text search across Contact field with instant table updates
+  - **CRITICAL**: Email filter: Text search across Email field with instant table updates
+  - **CRITICAL**: Role filter: Dropdown selection (All Roles, Admin, User) with instant table updates
+  - **CRITICAL**: Clear Filters button: Resets all filter fields and reloads complete user list instantly
+  - **CRITICAL**: All filters must update the table and user count display in real-time
+  - **CRITICAL**: Filtering must work seamlessly with sorting and pagination
+- **CRITICAL**: Users List Actions - Edit and Delete Functionality:
+  - **CRITICAL**: Edit button: Opens user form modal with all fields pre-filled and editable except Principal ID (read-only)
+  - **CRITICAL**: Delete button: Shows confirmation dialog, then removes user from system and immediately revokes their access
+  - **CRITICAL**: Both actions must update the user list and count instantly after completion
+  - **CRITICAL**: Success/error toast notifications for all user operations
+- **CRITICAL**: Access Status Column with Checkbox UI:
+  - **CRITICAL**: New "Access Status" column in users table with checkbox in each row
+  - **CRITICAL**: Checked checkbox → user is ACTIVE (can access app)
+  - **CRITICAL**: Unchecked checkbox → user is INACTIVE (cannot access app)
+  - **CRITICAL**: Clicking checkbox toggles status and saves to backend instantly
+  - **CRITICAL**: Visual feedback during status change (loading state, success confirmation)
+  - **CRITICAL**: Access Status must be included in all export formats (CSV/PDF)
+- **CRITICAL**: Table columns: Full Name, Contact, Email, Role, Principal ID, Access Status, Actions (Edit/Delete)
+- **CRITICAL**: Users table zebra striping with soft light purple (#F3E5F5) background for odd-numbered rows, white background for even rows
+- Dialog-style modal form for New/Edit User following the enhanced form design specifications with Access Status field
+- Century Gothic font applied consistently throughout Users page
+
+#### Reports
+- **CRITICAL**: Updated Reports Page Header Layout:
+  - **CRITICAL**: Page title left, action buttons right: `[ Dynamic Page Title (Reports) ] [ Print | PDF | CSV ]`
+  - **CRITICAL**: Remove duplicate action buttons below header
+- **CRITICAL**: Delete confirmation with masked password popup using admin password (3554)
+- Fixed-position filters with boxed layout: Projects (multi-select mandatory), Date Range (with calendar icons)
+- **CRITICAL**: Calendar icons positioned inside or adjacent to Start Date and End Date fields
+- Summary cards: Bills, Payments, Outstanding, GST (18%) with pastel colors
+- Reports table with bills and payments summaries, project-wise totals
+- Export options with ClearPay button design system: Print, PDF, CSV
+- Dialog-style modal for report configuration with consistent design
+
+#### Seri AI
+- **CRITICAL**: Updated Seri AI Page Header Layout:
+  - **CRITICAL**: Page title left, any relevant controls right: `[ Dynamic Page Title (Seri AI) ] [ Controls if applicable ]`
+  - **CRITICAL**: Remove duplicate elements below header
+- **CRITICAL**: Smart Project-wise Responses Feature Implementation:
+  - **Trigger Keyword Detection**: Detect keywords in user messages: "Projects", "Bills", "Payments", "Outstanding", "With GST Outstanding", or any project name
+  - When detected, respond with: "Please select a project from the list below 👇" followed by clickable project names fetched from the backend
+  - **Project Selection Handling**: On user click/tap of a project name, display a formatted Project Summary with:
+    - Total Bills: count + formatted total amount (₹ symbol)
+    - Total Payments: count + total amount
+    - Payment Split (Account vs Cash)
+    - Outstanding amount (ignore negatives)
+    - GST Outstanding = Outstanding × 18%
+  - All values use ₹ currency formatting and commas
+  - **Keyword-Based Detail Replies**: Support targeted queries like:
+    - `{project-name} – bills`
+    - `{project-name} – payments`
+    - `{project-name} – outstanding`
+    - `{project-name} – with gst`
+    - `{project-name} – account`
+    - `{project-name} – cash`
+    - `{project-name} – client`
+    - `{project-name} – unit price`
+    - `{project-name} – est qty`
+    - `{project-name} – est amount`
+  - Return clearly labeled summaries per section with bold titles and consistent ₹ formatting
+  - **Client Information Display**: For "{project name – client}" queries, include Client Name, Contact, and Address fields
+  - **Error Handling**: If no matching data found, display: "ℹ️ Sorry, the requested information is not available in the system." "📞 +91 7575 94 4949 for more details."
+  - **UI/UX Requirements**: Project list displays clickable project-name buttons, Century Gothic font with bold for titles and normal for body text, consistent chat design with existing Seri AI bubbles, icons, and colors
+  - **Data Source Integration**: Use Analytics + Project modules as data sources, fetch, aggregate, and display data in real time
+  - Negative outstanding values are ignored in totals and GST calculations
+- Integrated chatbot with access to real-time project, bill, and payment data
+- Context-aware responses for queries about Bills, Payments, Outstanding, Projects, GST
+- Time-sensitive greetings based on user's name and time of day
+- Project-wise summaries and clickable project lists
+- Session-based chat that resets on close
+- Read-only data access through backend APIs
+- Century Gothic font family applied consistently throughout chat interface
+
+## Export & Import Features
+- **CRITICAL**: CSV/XLSX import and export for Bills, Payments, and Users modules with proper backend integration and comprehensive error handling
+- **CRITICAL**: Bills CSV Export must export only filtered/visible bills data with exact column order: Date, Project, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount, Remarks
+- **CRITICAL**: Bills Download Format must generate CSV with exact column order: `Date, Project, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount, Remarks` and sample row: `01-01-2026, Sample Project, Block A, 1001, Construction, 100, Sft, 500, 50000, First floor work`
+- **CRITICAL**: Payments Download Format must generate CSV with exact column order: `Project, Date, Amount Paid, Payment Mode, Reference, Remarks` and sample row: `Sample Project, 31-12-2025, 10000, Account, Harsha, Payment for first phase`
+- **CRITICAL**: Users Download Format must generate CSV with exact column order: `Full Name, Contact, Email, Role, Access Status` and sample row: `John Doe, +91 9876543210, john.doe@example.com, User, ACTIVE`
+- **CRITICAL**: Import CSV validation must enforce exact column structure, validate all data types, check existing project names, and provide clear error messages
+- **CRITICAL**: Bills Import CSV validation with optional Block ID and Remarks fields:
+  - Block ID and Remarks fields are OPTIONAL - import should proceed successfully when these columns are blank, empty, or missing
+  - **CRITICAL**: Block ID field allows duplicate values - no uniqueness validation or error checking for repeated Block ID values within the same project or across different projects
+  - **CRITICAL**: Apply enhanced duplicate validation during Bills import for (Project + Bill No) combination using the new unique identification system. Skip duplicates, show clear error notifications for skipped rows with exact message "This bill number already entered in this project.", import valid rows
+  - When Block ID or Remarks are blank/empty in CSV, store as null or empty string in backend
+  - In Bills table display, show "–" for Block ID and Remarks only when values are truly null/undefined/empty
+  - Maintain mandatory validation for other core fields (Date, Project, Bill No, Description, Quantity, Unit, Unit Price, Total Amount)
+- **CRITICAL**: Users Import CSV validation requirements:
+  - Exact column count (5 columns) and order validation
+  - Mandatory field validation: Full Name, Contact, Email, Role
+  - Access Status field validation (must be "ACTIVE" or "INACTIVE", defaults to "INACTIVE" if blank)
+  - Email format validation and uniqueness checking
+  - Role validation (must be "Admin" or "User")
+  - Contact format validation (+91 format preferred)
+  - Clear error messages for invalid data or format mismatches
+  - Toast notifications for successful imports and validation errors
+  - Default INACTIVE status for new users unless specified as ACTIVE in CSV
+- PDF export and print functionality for reports and filtered data using Century Gothic font
+- Filter-respecting exports showing only visible/filtered data
+- Professional formatting with consistent styling
+- **CRITICAL**: CSV Import functionality must accept valid files, parse data correctly, validate entries comprehensively, skip invalid rows gracefully, and update backend storage with real-time table refresh
+- **CRITICAL**: All export/import buttons must function correctly across Bills, Payments, and Users pages without dependency or syntax errors
+- Export/import utility methods must be properly implemented in `frontend/src/lib/exportUtils.ts`
+- Toast notifications for all import/export operations with success/error feedback using Century Gothic font
+
+## Backend Data Storage
+- **Internet Identity Authentication System**:
+  - Integrate with Internet Computer's Internet Identity for secure authentication
+  - Store user sessions and authentication state based on Internet Identity principals
+  - Backend authentication functions for Internet Identity integration
+  - Remove all email/password and OTP-related data storage and validation functions
+  - Session management based on Internet Identity authentication
+  - **CRITICAL**: Fix backend `hasActiveProfile` and `validateActiveUser` functions to properly recognize users whose profiles exist and are marked as ACTIVE, avoiding false negatives like "no active user exist"
+  - **CRITICAL**: Backend validation must correctly identify first created users after migration as valid active users
+  - **CRITICAL**: Login access validation - check user email existence and ACTIVE status before allowing authentication
+- **CRITICAL**: Enhanced User Management Backend Support:
+  - **CRITICAL**: User data structure must include Access Status field as boolean (ACTIVE/INACTIVE)
+  - **CRITICAL**: Backend User CRUD operations must correctly save and retrieve Access Status field
+  - **CRITICAL**: Backend User API endpoints must return complete user data including Access Status field
+  - **CRITICAL**: Database schema must store user Access Status field with correct data type
+  - **CRITICAL**: User creation operations must set default INACTIVE status unless specified
+  - **CRITICAL**: Access Status validation during login - only ACTIVE users can authenticate
+  - **CRITICAL**: Backend support for Users filtering by Name, Contact, Email, and Role fields
+  - **CRITICAL**: Backend support for Users CSV import/export with Access Status field processing
+- User profiles and authentication sessions based on Internet Identity
+- **CRITICAL**: Remove company name from user data storage and display entirely
+- Projects with calculated estimated amounts, unit prices, quantities, contact numbers, locations, project notes, addresses, attachment links
+- **CRITICAL**: Bills with enhanced unique identification system:
+  - **CRITICAL**: Backend Bill type must include: id, date, projectId, blockId (string), billNumber (string/numeric), description (string), quantity (number), unit (string), unitPrice (number), totalAmount, remarks (string)
+  - **CRITICAL**: Backend Bills CRUD operations must correctly save and retrieve all fields with proper data types
+  - **CRITICAL**: Backend Bills API endpoints must return complete bill data without omitting any fields
+  - **CRITICAL**: Database schema must store all bill fields with correct data types (string for text fields, number for numeric fields)
+  - **CRITICAL**: Bills creation/update operations must properly save Block ID, Bill Number, Description, Quantity, Unit, Unit Price, and Remarks fields
+  - **CRITICAL**: Block ID field allows duplicate values - no uniqueness constraints or validation for repeated Block ID values within the same project or across different projects
+  - **CRITICAL**: Block ID and Remarks fields can be stored as null or empty string when not provided in CSV import
+  - **CRITICAL**: Bill Number field is mandatory and must be validated during creation/update operations
+  - **CRITICAL**: Implement enhanced unique identification system with database constraints enforcing uniqueness on the combination of (projectId + billNumber) rather than billNumber alone
+  - **CRITICAL**: Backend validation must prevent overwriting or deletion of existing bills when a new bill has the same Bill Number but belongs to a different project
+  - **CRITICAL**: Backend must reject save attempts (manual entry or CSV import) when both Project and Bill Number match an existing entry, returning exact error message "This bill number already entered in this project."
+  - **CRITICAL**: Bills from different projects but with the same bill number must be saved successfully, remain visible in the list, and never overwrite other bills
+  - **CRITICAL**: CSV import logic must follow the same combination-based validation, skipping exact duplicates but importing valid unique combinations
+- **CRITICAL**: Enhanced Bills filtering backend support for Projects, Client, Block ID, Bill No, Year, Financial Year, Start Date, End Date filters
+- **CRITICAL**: Backend Bills data validation and storage:
+  - Ensure all bill fields are properly validated during creation/update
+  - Maintain data integrity for all fields without null/undefined values for required fields
+  - Proper serialization/deserialization of bill data in API responses
+  - Allow Block ID and Remarks to be optional/nullable fields
+  - **CRITICAL**: Remove any uniqueness validation for Block ID field - allow duplicate Block ID values across all bills
+  - **CRITICAL**: Enforce Bill Number as mandatory field with proper validation
+  - **CRITICAL**: Implement enhanced Project + Bill Number uniqueness validation using the new unique identification system - show exact error "This bill number already entered in this project." when duplicate combination is attempted
+- **CRITICAL**: Backend Bills sorting support:
+  - Implement sorting functionality for Bills table columns: Date, Project Name, Client, Block ID, Bill No, Description, Quantity, Unit, Unit Price, Total Amount
+  - Support ascending, descending, and default (original) sort orders
+  - Maintain sorting compatibility with existing filters and pagination
+  - Optimize sorting performance for large datasets
+- **CRITICAL**: Payments with project links, payment mode tracking, references, remarks:
+  - **CRITICAL**: Backend Payment data structure must include remarks field as optional Text type (?Text)
+  - **CRITICAL**: Backend Payment CRUD operations must correctly save and retrieve remarks field
+  - **CRITICAL**: Backend Payment API endpoints must return complete payment data including remarks field
+  - **CRITICAL**: Database schema must store payment remarks field with correct data type
+  - **CRITICAL**: Payment creation/update operations must properly save remarks field values
+- **CRITICAL**: Enhanced Payments filtering backend support including Reference field filtering
+- **CRITICAL**: Payments bulk delete functionality with backend support for deleting multiple payment records
+- **CRITICAL**: Backend Payments sorting support:
+  - Implement sorting functionality for Payments table columns: Payment Date, Project Name, Payment Amount, Payment Mode, Reference
+  - Support ascending, descending, and default (original) sort orders
+  - Maintain sorting compatibility with existing filters and pagination
+  - Optimize sorting performance for large datasets
+- **CRITICAL**: Seri AI Smart Project-wise Responses Backend Support:
+  - Backend API endpoints to fetch project data for Seri AI keyword detection and project selection
+  - Real-time data aggregation for project summaries including bills count, payments count, outstanding calculations, GST calculations
+  - Backend support for project-specific queries (bills, payments, outstanding, GST, account/cash splits, client information, unit price, estimated quantity, estimated amount)
+  - Data formatting and calculation logic for ₹ currency formatting with commas
+  - Error handling for missing or unavailable project data
+  - Integration with existing Analytics and Projects modules for data consistency
+  - Backend validation to ignore negative outstanding values in totals and GST calculations
+- Client information with company details, addresses, notes
+- User management with role-based permissions and access control
+- Real-time data synchronization across all modules
+- Search indexing for project name, client name, location, and contact number fields
+- Advanced filtering capabilities for projects by name, client, date range, and unit price range
+- **CRITICAL**: CSV import/export processing with comprehensive data validation, error handling, and backend updates for Bills, Payments, and Users modules
+- **CRITICAL**: Backend validation for exact CSV column structure and data types for Bills, Payments, and Users imports with optional Block ID and Remarks for Bills
+- **CRITICAL**: Backend Bills CSV import validation must allow duplicate Block ID values without throwing errors or validation failures
+- **CRITICAL**: Backend Bills CSV import validation must implement enhanced Project + Bill Number duplicate checking using the new unique identification system and return exact error message "This bill number already entered in this project." for duplicate combinations
+- **CRITICAL**: Backend Users CSV import validation must handle Access Status field with default INACTIVE status
+- Backend endpoints for export/import operations with proper data formatting, validation, and error response handling
+- **CRITICAL**: Backend support for Bills filtering by Client, Block ID, Bill No, Year, and Financial Year
+- **CRITICAL**: Backend support for Payments filtering by Reference field
+- **CRITICAL**: Backend support for Users filtering by Name, Contact, Email, and Role fields
+
+## Design System
+- Primary color scheme: Blue (#0078D7), Grey (#555555), Green (#28A745), Orange (#FFA500), Red (#D32F2F)
+- **CRITICAL**: Century Gothic font family (400, 600, 700 weights) applied consistently across all components including export documents, CSV templates, toast notifications, chart zoom modals, and Internet Identity login screen
+- **CRITICAL**: Century Gothic font files must be locally embedded or imported via CSS `@font-face` declarations in `index.css` to guarantee font rendering in all browsers and devices
+- **CRITICAL**: Global font application through `index.css` and `tailwind.config.js` must use `"Century Gothic"` for all UI components, dialogs, tables, forms, and exports (CSV/PDF)
+- **CRITICAL**: Font weights reinforced - headlines (h1-h6, table headers, card titles, button labels) use `font-weight: 700`, body text (labels, inputs, table cells, content) use `font-weight: 400`
+- **CRITICAL**: Confirm consistent visual rendering in all responsive layouts and exported files
+- **CRITICAL**: Bold headings (h1-h6) and titles, regular weight for labels, fields, and table text
+- **CRITICAL**: App branding display restrictions:
+  - **CRITICAL**: Display "ClearPay" app name and "Billing Management System" tagline ONLY in:
+    - Login page
+    - Sidebar/navigation panel (if visible)
+    - Splash/landing screen (if applicable)
+  - **CRITICAL**: Remove app name and tagline entirely from all internal page headers
+  - **CRITICAL**: Internal page headers must display only the current page title dynamically
+  - **CRITICAL**: Remove company name display from user info section or sidebar entirely
+- **CRITICAL**: Browser Tab Header Update:
+  - **CRITICAL**: Update browser tab header to show only the provided logo (`logo mkt-1.png`) and the app name "ClearPay"
+  - **CRITICAL**: Remove any tagline text from the browser tab
+  - **CRITICAL**: Ensure consistent branding across all pages with logo and "ClearPay" name only
+- **CRITICAL**: Standardized Amount Text Formatting System:
+  - **CRITICAL**: Create and implement `.amount-text` CSS class globally for uniform amount text styling
+  - **CRITICAL**: All numeric values and currency symbol (₹) in Dashboard and Analytics summary cards must use the same font size (28–32px) and bold weight (700)
+  - **CRITICAL**: Apply Century Gothic font family for all amount text
+  - **CRITICAL**: Align amount text centrally with no superscript/subscript or smaller decimals
+  - **CRITICAL**: Set card titles to normal weight (400) and maintain consistent padding and height across all cards
+  - **CRITICAL**: Maintain equal font sizes across all cards to ensure balance on both desktop and mobile displays
+  - **CRITICAL**: If an amount is negative, render the text in red but keep the same size and weight
+  - **CRITICAL**: Ensure visual consistency between Dashboard cards ("Total Bills", "Received Payments", "Outstanding") and Analytics cards ("Total Bills", "Total Payments", "Outstanding", "With GST Outstanding")
+- Soft pastel backgrounds for summary cards with light shadows
+- Consistent hover effects, rounded corners, and shadow styling
+- Responsive layout with sidebar navigation and header
+- Footer: "© 2025 ClearPay. Powered by Seri AI."
+- White cards with rounded inputs, soft shadows throughout
+- Indian Rupee (₹) currency formatting
+- Collapsible filter panels with light cream backgrounds, rounded corners, and consistent spacing
+- **CRITICAL**: Projects filter panel with background color (#FFF8E1) matching Bills filters panel
+- **CRITICAL**: Payments filter panel with light pastel green background matching ClearPay design system
+- Global ClearPay button design system with rounded white boxes, soft grey borders, black Century Gothic text, left-aligned icons, and light hover effects
+- **CRITICAL**: Projects Page Action Button Hover Enhancement with #88CDF6 background color for Print, Export PDF, Import CSV, Export CSV, and Download Format buttons with smooth CSS transitions
+- **CRITICAL**: Bills Page Action Button Hover Enhancement with #FFBE88 background color for Print, Export PDF, Import CSV, Export CSV, and Download Format buttons with smooth CSS transitions
+- **CRITICAL**: Payments Page Action Button Hover Enhancement with #56C596 background color for Print, Export PDF, Import CSV, Export CSV, and Download Format buttons with smooth CSS transitions
+- **CRITICAL**: Payments Page Bulk Delete Button Styling with full red background (#FF0000), white text and icon colors, and slightly darker red hover transition
+- Toast notification styling with Century Gothic font and consistent color scheme
+- **CRITICAL**: Chart zoom icons styled as blue circular buttons with hover shadow effects matching ClearPay design system
+- **CRITICAL**: Calendar icons styled consistently across all date fields with proper positioning and hover effects
+- **CRITICAL**: Uniform filter sizing across all pages with consistent width and height matching "All Financial Years" dropdown dimensions
+- **CRITICAL**: Row selection highlighting with subtle ClearPay selection color scheme for multi-select functionality
+- **CRITICAL**: Zebra striping color scheme for major list tables:
+  - Projects: Soft light blue (#E3F2FD) for odd rows, white for even rows
+  - Bills: Soft light red/pink (#FFEBEE) for odd rows, white for even rows
+  - Payments: Soft light green (#E8F5E9) for odd rows, white for even rows
+  - Users: Soft light purple (#F3E5F5) for odd rows, white for even rows
+- **CRITICAL**: Column sorting visual indicators:
+  - A–Z / Z–A icons in sortable column headers
+  - Active sorted column highlighting with bold header text and highlighted sorting indicator
+  - Smooth transition effects for sorting state changes
+  - Century Gothic font styling maintained for all sortable headers
+- **CRITICAL**: Bills Table Negative Total Amount Highlighting:
+  - Red text color for negative Total Amount values
+  - Soft light yellow row background for negative Total Amount rows
+  - Subtle highlighting that doesn't conflict with zebra striping or hover effects
+  - Clear visibility for hover and selection states on highlighted rows
+- **CRITICAL**: Payments Table Negative Payment Amount Highlighting:
+  - Red text color (#FF0000) for negative Payment Amount values
+  - Soft light yellow row background (#FFF9C4) for negative Payment Amount rows
+  - Subtle highlighting that doesn't conflict with zebra striping or hover effects
+  - Clear visibility for hover and selection states on highlighted rows
+  - Positive and zero payment amounts retain default styling
+  - Conditional highlighting overrides zebra striping but maintains hover and selection styles
+  - Consistent behavior across desktop and mobile views
+- **CRITICAL**: Access Status Checkbox Styling:
+  - Consistent checkbox design across Users table and form
+  - Clear visual distinction between ACTIVE (checked) and INACTIVE (unchecked) states
+  - Smooth transition animations for status changes
+  - Century Gothic font for labels and helper text
+  - Professional styling matching ClearPay design system
+
+## Navigation & Layout
+- Sidebar with logo and "ClearPay" branding
+- **CRITICAL**: Sidebar branding with app name "ClearPay" in **bold** Century Gothic font and tagline "Billing Management System" in **normal-weight (400)** Century Gothic with **grey** color
+- **CRITICAL**: Remove company name display from user info section or sidebar entirely
+- Navigation items: Dashboard, Analytics, Projects, Bills, Payments, Clients, Users, Reports, Seri AI
+- **CRITICAL**: Dynamic page header title system across all primary modules:
+  - **CRITICAL**: Page header must dynamically display the current page/module name based on the active route
+  - **CRITICAL**: Titles must update automatically when navigating via menu clicks, page refresh, or direct URL access
+  - **CRITICAL**: No static or hardcoded header titles - all titles must be route-based and dynamic
+  - **CRITICAL**: Page title mapping:
+    - Dashboard → "Dashboard"
+    - Analytics → "Analytics"
+    - Projects → "Projects"
+    - Bills → "Bills"
+    - Payments → "Payments"
+    - Reports → "Reports"
+    - Users → "Users"
+    - Seri AI → "Seri AI"
+  - **CRITICAL**: Font: Century Gothic, Font weight: Bold, Position: Left side of the header
+  - **CRITICAL**: Remove any duplicate titles displayed below headers
+- **CRITICAL**: Unified page header layout across all primary modules:
+  - **CRITICAL**: Dashboard: `[ Dynamic Page Title (Dashboard) ] [ Filters (Show/Hide Toggle) ]`
+  - **CRITICAL**: Analytics: `[ Dynamic Page Title (Analytics) ] [ Filters (Show/Hide Toggle) ]`
+  - **CRITICAL**: Projects: `[ Dynamic Page Title (Projects) ] [ Print | Export PDF | Import CSV | Export CSV | Download Format | + New Project ]`
+  - **CRITICAL**: Bills: `[ Dynamic Page Title (Bills) ] [ Print | Export PDF | Import CSV | Export CSV | Download Format | + New Bill ]`
+  - **CRITICAL**: Payments: `[ Dynamic Page Title (Payments) ] [ Action Toolbar Below ] [ Show/Hide Filters Toggle Below Toolbar ]`
+  - **CRITICAL**: Users: `[ Dynamic Page Title (Users) ] [ Add User | Import CSV | Print | Export PDF | Export CSV | Download Format ]`
+  - **CRITICAL**: Other pages (Clients, Reports, Seri AI): `[ Dynamic Page Title ] [ Action Buttons or Filters ]`
+- **CRITICAL**: Remove all duplicate action buttons below page headers - all actions must be consolidated into the header or positioned as specified
+- **CRITICAL**: Remove the left-side "✕" close icon from page headers on all normal (non-popup) pages
+- **CRITICAL**: App branding display restrictions:
+  - **CRITICAL**: Display "ClearPay" app name and "Billing Management System" tagline ONLY in:
+    - Login page
+    - Sidebar/navigation panel (if visible)
+    - Splash/landing screen (if applicable)
+  - **CRITICAL**: Remove app name and tagline entirely from all internal page headers
+  - **CRITICAL**: Internal page headers must display only the current page title dynamically
+  - **CRITICAL**: Remove company name display from user info section or sidebar entirely
+- **CRITICAL**: Browser Tab Header Update:
+  - **CRITICAL**: Update browser tab header to show only the provided logo (`logo mkt-1.png`) and the app name "ClearPay"
+  - **CRITICAL**: Remove any tagline text from the browser tab
+  - **CRITICAL**: Ensure consistent branding across all pages with logo and "ClearPay" name only
+- Active link highlighting with blue background and white text
+- Role-based menu item visibility
+- Responsive design for desktop and tablet views
+- Century Gothic font family applied consistently throughout navigation
+
+## Security & Validation
+- Role-based access control throughout the application
+- **Internet Identity Authentication Security**:
+  - Secure authentication through Internet Computer's Internet Identity
+  - Session management for authenticated users
+  - Principal-based user identification and authorization
+  - **CRITICAL**: Login access validation - only users whose email is listed and marked as ACTIVE can access the app
+  - **CRITICAL**: If email not found or inactive → show exact error message: "Your email ID is not activated." on login attempt before loading any page
+- **CRITICAL**: Password-protected delete operations with masked password confirmation popup using admin password (3554) for all modules: Projects, Bills, Payments, Users, Reports
+- Form validation for all data entry
+- Real-time validation for unique constraints
+- **CRITICAL**: Enhanced duplicate validation for Bills using the new unique identification system - Project + Bill Number combination must be unique, show exact error "This bill number already entered in this project." when duplicate attempted during manual entry or CSV import
+- Session management for authenticated users
+- **CRITICAL**: Comprehensive CSV import validation with graceful error handling for invalid data rows, column structure validation, and data type checking
+- **CRITICAL**: Bills CSV import validation treats Block ID and Remarks as optional fields - import proceeds successfully when these are blank/empty
+- **CRITICAL**: Bills CSV import validation allows duplicate Block ID values without throwing errors or validation failures
+- **CRITICAL**: Bills CSV import validation enforces Bill Number as mandatory field with proper validation
+- **CRITICAL**: Bills CSV import validation implements enhanced Project + Bill Number duplicate checking using the new unique identification system and shows exact error message "This bill number already entered in this project." for duplicate combinations
+- **CRITICAL**: Users CSV import validation with Access Status field handling and default INACTIVE status for new users
+
+## Technical Requirements
+- **CRITICAL**: Replace email/password authentication with Internet Identity authentication system:
+  - Remove all email/password and OTP-related code from `frontend/src/pages/LoginPage.tsx`
+  - Implement Internet Identity login with single "Login with Internet Identity" button
+  - Add professional ClearPay styling with logo, app name, subtitle, and supporting text
+  - Use green, full-width button with rounded corners matching ClearPay design system
+  - Include helper text below button: "Click above to authenticate securely"
+  - Maintain consistent Century Gothic font styling throughout login screen
+  - **CRITICAL**: Login access validation - check user email existence and ACTIVE status before allowing authentication
+  - **CRITICAL**: If email not found or inactive → show exact error message: "Your email ID is not activated." on login attempt before loading any page
+  - After successful authentication, redirect directly to Dashboard page
+  - Remove all mobile number, email, password, and OTP references from authentication system
+  - Implement backend Internet Identity integration for secure authentication
+  - Update session management to work with Internet Identity principals
+- **CRITICAL**: Century Gothic Font Implementation:
+  - **CRITICAL**: Century Gothic font files must be locally embedded or imported via CSS `@font-face` declarations in `index.css` to guarantee font rendering in all browsers and devices
+  - **CRITICAL**: Global font application through `index.css` and `tailwind.config.js` must use `"Century Gothic"` for all UI components, dialogs, tables, forms, and exports (CSV/PDF)
+  - **CRITICAL**: Font weights reinforced - headlines (h1-h6, table headers, card titles, button labels) use `font-weight: 700`, body text (labels, inputs, table cells, content) use `font-weight: 400`
+  - **CRITICAL**: Confirm consistent visual rendering in all responsive layouts and exported files
+  - **CRITICAL**: Apply Century Gothic font consistently across all UI components, generated documents, CSV templates, chart zoom modals, and Internet Identity authentication screens
+  - **CRITICAL**: Ensure consistent typography across Dashboard, Analytics, Projects, Bills, Payments, Clients, Users, Reports, and Seri AI pages
+- **CRITICAL**: App Branding Implementation:
+  - **CRITICAL**: Display "ClearPay" app name and "Billing Management System" tagline ONLY in:
+    - Login page
+    - Sidebar/navigation panel (if visible)
+    - Splash/landing screen (if applicable)
+  - **CRITICAL**: Remove app name and tagline entirely from all internal page headers
+  - **CRITICAL**: Internal page headers must display only the current page title dynamically
+  - **CRITICAL**: App name "ClearPay" in **bold** Century Gothic font with existing brand color
+  - **CRITICAL**: Tagline "Billing Management System" in **normal-weight (400)** Century Gothic with **grey** color, positioned 8-12px below app name
+  - **CRITICAL**: Maintain proper visual hierarchy with app name visually dominant and tagline subtle and supportive (not bold)
+  - **CRITICAL**: Integrate branding elements seamlessly into the app's existing responsive header layout
+  - **CRITICAL**: Remove company name display from user info section or sidebar entirely
+- **CRITICAL**: Browser Tab Header Implementation:
+  - **CRITICAL**: Update browser tab header to show only the provided logo (`logo mkt-1.png`) and the app name "ClearPay"
+  - **CRITICAL**: Remove any tagline text from the browser tab
+  - **CRITICAL**: Ensure consistent branding across all pages with logo and "ClearPay" name only
+  - **CRITICAL**: Implement proper favicon integration using the provided logo
+  - **CRITICAL**: Maintain consistent tab title across all application pages
+- **CRITICAL**: Dynamic Page Header Title System Implementation:
+  - **CRITICAL**: Implement dynamic page header title system that displays the current page/module name based on the active route
+  - **CRITICAL**: Titles must update automatically when navigating via menu clicks, page refresh, or direct URL access
+  - **CRITICAL**: No static or hardcoded header titles - all titles must be route-based and dynamic
+  - **CRITICAL**: Page title mapping: Dashboard → "Dashboard", Analytics → "Analytics", Projects → "Projects", Bills → "Bills", Payments → "Payments", Reports → "Reports", Users → "Users", Seri AI → "Seri AI"
+  - **CRITICAL**: Font: Century Gothic, Font weight: Bold, Position: Left side of the header
+  - **CRITICAL**: Remove any duplicate titles displayed below headers
+  - **CRITICAL**: Ensure dynamic titles work correctly across all primary modules and update consistently with navigation
+- **CRITICAL**: Users Page Functionality Implementation:
+  - **CRITICAL**: Users Page Toolbar Actions - All Must Be Fully Functional:
+    - **CRITICAL**: Import CSV: Parse uploaded CSV files with user data, validate structure and content, allow bulk user creation with default INACTIVE status unless specified, update backend and refresh table in real-time
+    - **CRITICAL**: Export CSV: Export current filtered/visible user data as downloadable .csv file with columns: Full Name, Contact, Email, Role, Access Status
+    - **CRITICAL**: Export PDF: Generate downloadable PDF with visible filtered user data using Century Gothic font and consistent table formatting
+    - **CRITICAL**: Download Format: Provide downloadable CSV template with correct headers and sample data for Users module
+    - **CRITICAL**: All export functions must operate only on currently visible (filtered) user records
+    - **CRITICAL**: All import/export operations must include Access Status field in data processing
+  - **CRITICAL**: Users Page Filters Toolbar - Reactive Filtering:
+    - **CRITICAL**: Name filter: Text search across Full Name field with instant table updates
+    - **CRITICAL**: Contact filter: Text search across Contact field with instant table updates
+    - **CRITICAL**: Email filter: Text search across Email field with instant table updates
+    - **CRITICAL**: Role filter: Dropdown selection (All Roles, Admin, User) with instant table updates
+    - **CRITICAL**: Clear Filters button: Resets all filter fields and reloads complete user list instantly
+    - **CRITICAL**: All filters must update the table and user count display in real-time
+    - **CRITICAL**: Filtering must work seamlessly with sorting and pagination
+  - **CRITICAL**: Users List Actions - Edit and Delete Functionality:
+    - **CRITICAL**: Edit button: Opens user form modal with all fields pre-filled and editable except Principal ID (read-only)
+    - **CRITICAL**: Delete button: Shows confirmation dialog, then removes user from system and immediately revokes their access
+    - **CRITICAL**: Both actions must update the user list and count instantly after completion
+    - **CRITICAL**: Success/error toast notifications for all user operations
+  - **CRITICAL**: Access Status Column with Checkbox UI:
+    - **CRITICAL**: New "Access Status" column in users table with checkbox in each row
+    - **CRITICAL**: Checked checkbox → user is ACTIVE (can access app)
+    - **CRITICAL**: Unchecked checkbox → user is INACTIVE (cannot access app)
+    - **CRITICAL**: Clicking checkbox toggles status and saves to backend instantly
+    - **CRITICAL**: Visual feedback during status change (loading state, success confirmation)
+    - **CRITICAL**: Access Status must be included in all export formats (CSV/PDF)
+- **CRITICAL**: New Bill Form Updates:
+  - **CRITICAL**: Add Bill No field as mandatory numeric/alphanumeric input positioned after Block ID field
+  - **CRITICAL**: Bill No field must save to backend billNumber field and appear in Bills list table
+  - **CRITICAL**: Update Unit dropdown to show only short codes: Rft, Sft, Cuft, Rmt, Smt, Cumt (remove all full-form units)
+  - **CRITICAL**: Ensure Date field includes visible calendar icon that opens date picker on click
+  - **CRITICAL**: Maintain proper field validation with Bill No as required field
+  - **CRITICAL**: Update form layout to accommodate new Bill No field while maintaining compact design
+  - **CRITICAL**: Ensure all form fields save correctly to backend with proper data types
+  - **CRITICAL**: Implement enhanced duplicate validation for Project + Bill No combination using the new unique identification system with exact error message "This bill number already entered in this project."
+- **CRITICAL**: Bills Filters Panel Updates:
+  - **CRITICAL**: Add Bill No filter field positioned consistently with existing filters in the compact two-row layout
+  - **CRITICAL**: Bill No filter should be text search by bill number, styled consistently with other filter boxes
+  - **CRITICAL**: Maintain light cream/yellow background theme and uniform filter input sizing
+  - **CRITICAL**: Ensure Bill No filter integrates with existing filtering logic and backend support
+  - **CRITICAL**: Keep Show/Hide Filters collapsible behavior intact below the toolbar
+  - **CRITICAL**: All filter inputs must have uniform width and height matching "All Financial Years" dropdown dimensions
+- **CRITICAL**: Bills Table Data Display Fixes:
+  - **CRITICAL**: Fix data display so Block ID, Description, Quantity, Unit, Unit Price, and Remarks columns always show actual saved values
+  - **CRITICAL**: Remove unnecessary "–" placeholders when actual data exists in backend
+  - **CRITICAL**: Show "–" only when field values are truly null/undefined/empty
+  - **CRITICAL**: Ensure Bill No column displays actual billNumber field value from backend
+  - **CRITICAL**: Maintain proper data type formatting (numeric for quantities/prices, string for text fields)
+  - **CRITICAL**: Verify end-to-end data flow from form submission to backend storage to table display
+- **CRITICAL**: Bills Table Negative Total Amount Highlighting Implementation:
+  - **CRITICAL**: When Total Amount value is less than 0, display the amount text in red color
+  - **CRITICAL**: When Total Amount value is less than 0, highlight the entire row background with soft light yellow color
+  - **CRITICAL**: Ensure highlighting works correctly with sorting, filters, and pagination
+  - **CRITICAL**: Light yellow background should be subtle and non-conflicting with zebra striping or hover effects
+  - **CRITICAL**: Hover and selection states must remain clearly visible when applied to highlighted rows
+  - **CRITICAL**: Maintain Century Gothic font throughout with bold column headers and regular weight data
+- **CRITICAL**: Global Date Format Standardization:
+  - **CRITICAL**: Standardize all date inputs, filters, table displays, and exports to DD-MM-YYYY format across Projects, Bills, Payments, Reports, CSV/PDF exports
+  - **CRITICAL**: Update all date picker components to use DD-MM-YYYY format consistently
+  - **CRITICAL**: Ensure date validation and parsing works correctly with DD-MM-YYYY format
+  - **CRITICAL**: Update all CSV import/export templates to use DD-MM-YYYY date format
+- **CRITICAL**: Form Auto-Close Implementation:
+  - **CRITICAL**: New Bill form should automatically close after successful save and redirect to Bills list
+  - **CRITICAL**: All forms should auto-close post-save and redirect to respective list pages
+  - **CRITICAL**: Maintain smooth transition animations during form close and redirect
+- **CRITICAL**: Default Sorting Implementation:
+  - **CRITICAL**: Bills Module: Default sort by latest Date (DESC) - show most recent bills at top
+  - **CRITICAL**: Payments Module: Sort by latest Date first (DESC) - show most recent payments at top
+  - **CRITICAL**: Projects Module: Sort by project Date (latest first, DESC) - show most recent projects at top
+  - **CRITICAL**: Ensure default sorting is applied on page load and maintained during filtering
+- **CRITICAL**: Enhanced Bills Unique Identification System Implementation:
+  - **CRITICAL**: Update backend Bills module logic to ensure each bill entry is uniquely identified by the combination of **Project Name + Bill Number** instead of Bill Number alone
+  - **CRITICAL**: Implement database constraints enforcing uniqueness on the combination of (projectId + billNumber) rather than billNumber alone
+  - **CRITICAL**: Backend validation must prevent overwriting or deletion of existing bills when a new bill has the same Bill Number but belongs to a different project
+  - **CRITICAL**: Backend must reject save attempts (manual entry or CSV import) when both Project and Bill Number match an existing entry, displaying the exact error message: "This bill number already entered in this project."
+  - **CRITICAL**: Bills from different projects but with the same bill number must be saved successfully, remain visible in the list, and never overwrite other bills
+  - **CRITICAL**: CSV import logic must follow the same combination-based validation, skipping exact duplicates but importing valid unique combinations
+  - **CRITICAL**: Frontend validation must check for Project + Bill Number combination duplicates before form submission
+  - **CRITICAL**: All duplicate validation error messages must display the exact text: "This bill number already entered in this project."
+- **CRITICAL**: Password Confirmation Implementation:
+  - **CRITICAL**: Apply masked password confirmation popup with consistent style and admin password (3554) for all modules: Projects, Bills, Payments, Users, Reports
+  - **CRITICAL**: Bills Bulk Delete: Mask password input (type="password") with no prefill, text "Please enter your password to confirm bulk deletion."
+  - **CRITICAL**: Ensure password masking works correctly across all delete confirmation modals
+- **CRITICAL**: Dashboard Outstanding with GST Chart Update:
+  - **CRITICAL**: Change chart type from Donut Chart to full Pie Chart (no hollow center)
+  - **CRITICAL**: Maintain existing GST-inclusive calculation logic:
+    - Outstanding (Base) = Total Bills − Total Payments
+    - GST @18% = Outstanding × 18 / 100
+    - Outstanding with GST = Outstanding + GST
+  - **CRITICAL**: Display project-wise values in the pie chart with clear color separation for each project
+  - **CRITICAL**: Show amount labels in ₹ formatted with "L / Cr" units
+  - **CRITICAL**: Apply updated logic to both chart slices and corresponding tooltips and labels
+  - **CRITICAL**: Ensure chart maintains all existing zoom functionality and modal overlay capability
+  - **CRITICAL**: Only chart type change implemented (Donut → Pie) with no other Dashboard modifications
+- All functionality must be tested and working without errors

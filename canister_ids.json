@@ -1,0 +1,8 @@
+{
+  "backend": {
+    "local": "PLACEHOLDER_BACKEND_CANISTER_ID"
+  },
+  "frontend": {
+    "local": "PLACEHOLDER_FRONTEND_CANISTER_ID"
+  }
+}

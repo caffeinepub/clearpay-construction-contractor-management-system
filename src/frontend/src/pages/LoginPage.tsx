@@ -1,24 +1,32 @@
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useInternetIdentity } from '../hooks/useInternetIdentity';
-import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
 export default function LoginPage() {
   const { login, loginStatus } = useInternetIdentity();
 
-  const isLoggingIn = loginStatus === 'logging-in';
+  const isLoggingIn = loginStatus === "logging-in";
 
   const handleLogin = async () => {
     try {
       await login();
-      toast.success('Authentication successful!');
+      toast.success("Authentication successful!");
     } catch (error: any) {
-      console.error('Login error:', error);
-      if (error.message === 'User is already authenticated') {
-        toast.error('Already authenticated. Please refresh the page.');
+      console.error("Login error:", error);
+      if (error.message === "User is already authenticated") {
+        toast.error("Already authenticated. Please refresh the page.");
       } else {
-        toast.error(error.message || 'Authentication failed. Please try again.');
+        toast.error(
+          error.message || "Authentication failed. Please try again.",
+        );
       }
     }
   };
@@ -28,17 +36,27 @@ export default function LoginPage() {
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <img src="/assets/logo mkt.png" alt="ClearPay Logo" className="h-20 w-20" />
+            <img
+              src="/assets/logo mkt.png"
+              alt="ClearPay Logo"
+              className="h-20 w-20"
+            />
           </div>
           <div>
             <CardTitle className="text-3xl" style={{ fontWeight: 700 }}>
               <span className="text-[#0078D7]">Clear</span>
               <span className="text-[#555555]">Pay</span>
             </CardTitle>
-            <div className="text-base text-gray-500 mt-3" style={{ fontWeight: 400 }}>
+            <div
+              className="text-base text-gray-500 mt-3"
+              style={{ fontWeight: 400 }}
+            >
               Billing Management System
             </div>
-            <p className="text-sm text-gray-600 mt-3" style={{ fontWeight: 400 }}>
+            <p
+              className="text-sm text-gray-600 mt-3"
+              style={{ fontWeight: 400 }}
+            >
               Secure authentication for construction contractors
             </p>
           </div>
@@ -55,11 +73,14 @@ export default function LoginPage() {
                 Authenticating...
               </>
             ) : (
-              'Login with Internet Identity'
+              "Login with Internet Identity"
             )}
           </Button>
 
-          <p className="text-center text-sm text-gray-600" style={{ fontWeight: 400 }}>
+          <p
+            className="text-center text-sm text-gray-600"
+            style={{ fontWeight: 400 }}
+          >
             Click above to authenticate securely
           </p>
         </CardContent>

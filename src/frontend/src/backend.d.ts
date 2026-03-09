@@ -7,12 +7,6 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
-export interface UserFilters {
-    contact?: string;
-    name?: string;
-    role?: UserRole;
-    email?: string;
-}
 export interface BillKey {
     projectId: string;
     billNumber: string;
@@ -21,6 +15,13 @@ export interface TransformationOutput {
     status: bigint;
     body: Uint8Array;
     headers: Array<http_header>;
+}
+export interface ImportRequest {
+    projectsData: Array<Project>;
+    billsData: Array<Bill>;
+    usersData: Array<[Principal, UserProfile]>;
+    paymentsData: Array<Payment>;
+    clientsData: Array<Client>;
 }
 export interface PaymentFilters {
     maxAmount?: number;
@@ -124,6 +125,7 @@ export interface Client {
 export interface UserProfile {
     active: boolean;
     contact: string;
+    accessProjects: Array<string>;
     role: UserRole;
     fullName: string;
     email: string;
@@ -142,33 +144,35 @@ export interface backendInterface {
     addClient(client: Client): Promise<void>;
     addPayment(payment: Payment): Promise<void>;
     addProject(project: Project): Promise<void>;
-    addUser(user: Principal, profile: UserProfile): Promise<void>;
+    addUser(profile: UserProfile): Promise<Principal>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     bulkDeleteBillsWithPassword(password: string, billKeys: Array<BillKey>): Promise<void>;
-    bulkDeleteClients(password: string): Promise<void>;
     bulkDeletePayments(password: string, ids: Array<string>): Promise<void>;
-    bulkDeleteProjects(password: string): Promise<void>;
-    deleteBill(projectId: string, billNumber: string): Promise<void>;
-    deleteClient(id: string): Promise<void>;
-    deletePayment(id: string): Promise<void>;
-    deleteProject(id: string): Promise<void>;
-    deleteUser(user: Principal, password: string): Promise<void>;
+    changeAdminPassword(adminEmail: string, oldPwd: string, newPwd: string, confirmPwd: string, newQuestion: string, newAnswer: string): Promise<boolean>;
+    deleteBill(projectId: string, billNumber: string, password: string): Promise<void>;
+    deleteClient(id: string, password: string): Promise<void>;
+    deletePayment(id: string, password: string): Promise<void>;
+    deleteProject(id: string, password: string): Promise<void>;
+    deleteUsers(password: string, principalIds: Array<string>): Promise<void>;
     filterBills(billFilters: BillFilters): Promise<Array<Bill>>;
     filterBillsByProject(projectId: string): Promise<Array<Bill>>;
     filterPayments(filters: PaymentFilters): Promise<Array<Payment>>;
     filterProjects(filters: ProjectFilters): Promise<Array<Project>>;
-    filterUsers(filters: UserFilters): Promise<Array<[Principal, UserProfile]>>;
+    getAdminPasswordQuestion(): Promise<string | null>;
     getAllBills(): Promise<Array<Bill>>;
     getAllClients(): Promise<Array<Client>>;
     getAllPayments(): Promise<Array<Payment>>;
     getAllProjectNames(): Promise<Array<string>>;
     getAllProjects(): Promise<Array<Project>>;
-    getAllUsers(): Promise<Array<[Principal, UserProfile]>>;
+    getBillDetails(projectId: string, billNumber: string): Promise<Bill | null>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getDashboardMetrics(): Promise<DashboardMetrics>;
+    getDefaultAdminProfile(): Promise<UserProfile | null>;
     getGreetingMessage(arg0: null): Promise<string>;
+    getHintQuestion(): Promise<string | null>;
     getOutstandingAmount(): Promise<number>;
+    getPaymentDetails(paymentId: string): Promise<Payment | null>;
     getProjectSummary(projectId: string): Promise<{
         outstanding: number;
         accountPayments: number;
@@ -181,24 +185,25 @@ export interface backendInterface {
     getProjectWiseAnalyticsData(sortBy: string): Promise<Array<ProjectAnalyticsData>>;
     getSortedBills(sortBy: string | null, ascending: boolean): Promise<Array<Bill>>;
     getTotalGst(): Promise<number>;
+    getUserAccess(email: string): Promise<Array<string>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     hasActiveProfile(email: string): Promise<boolean>;
     hasProfileSetup(): Promise<boolean>;
-    importActiveUsers(userProfilesData: Array<[Principal, UserProfile]>): Promise<void>;
-    importBills(billsData: Array<Bill>): Promise<void>;
-    importClients(clientsData: Array<Client>): Promise<void>;
-    importPayments(paymentsData: Array<Payment>): Promise<void>;
-    importProjects(projectsData: Array<Project>): Promise<void>;
-    importUsers(usersData: Array<[Principal, UserProfile]>): Promise<void>;
+    importData(request: ImportRequest, password: string): Promise<void>;
     initializeAccessControl(): Promise<void>;
+    isAdminPasswordSet(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
+    linkMasterAdminPrincipal(): Promise<boolean>;
+    listUsers(): Promise<Array<[Principal, UserProfile]>>;
+    revealAdminPassword(answer: string): Promise<string | null>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    toggleUserActiveStatus(user: Principal, active: boolean): Promise<void>;
+    setHintQuestionAndAnswer(question: string, answer: string): Promise<void>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
-    updateBill(bill: Bill): Promise<void>;
-    updateClient(client: Client): Promise<void>;
-    updatePayment(payment: Payment): Promise<void>;
-    updateProject(project: Project): Promise<void>;
-    updateUser(user: Principal, profile: UserProfile): Promise<void>;
+    updateBill(bill: Bill, password: string): Promise<void>;
+    updateClient(client: Client, password: string): Promise<void>;
+    updatePayment(payment: Payment, password: string): Promise<void>;
+    updateProject(project: Project, password: string): Promise<void>;
+    updateUser(userPrincipal: Principal, profile: UserProfile): Promise<void>;
     validateActiveUser(email: string): Promise<void>;
+    verifyHintAnswer(answer: string): Promise<string>;
 }

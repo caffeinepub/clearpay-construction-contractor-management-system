@@ -1,19 +1,37 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useActor } from './useActor';
-import type { Project, Bill, Payment, Client, UserProfile, UserRole, DashboardMetrics, ProjectFilters, BillKey } from '../backend';
-import { Principal } from '@icp-sdk/core/principal';
+import type { Principal } from "@icp-sdk/core/principal";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  Bill,
+  BillKey,
+  Client,
+  DashboardMetrics,
+  ImportRequest,
+  Payment,
+  Project,
+  ProjectAnalyticsData,
+  UserProfile,
+  UserRole,
+} from "../backend";
+import { useActor } from "./useActor";
 
-// Projects
+// Optimized stale times for better performance and reduced backend calls
+const STALE_TIME_FREQUENT = 30000; // 30 seconds for frequently changing data
+const STALE_TIME_STABLE = 120000; // 2 minutes for stable data
+const STALE_TIME_VERY_STABLE = 300000; // 5 minutes for very stable data
+
+// Projects Queries
 export function useGetAllProjects() {
   const { actor, isFetching } = useActor();
 
   return useQuery<Project[]>({
-    queryKey: ['projects'],
+    queryKey: ["projects"],
     queryFn: async () => {
       if (!actor) return [];
       return actor.getAllProjects();
     },
     enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_STABLE,
+    retry: 2,
   });
 }
 
@@ -23,11 +41,13 @@ export function useAddProject() {
 
   return useMutation({
     mutationFn: async (project: Project) => {
-      if (!actor) throw new Error('Actor not available');
+      if (!actor) throw new Error("Actor not available");
       return actor.addProject(project);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
@@ -37,12 +57,17 @@ export function useUpdateProject() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (project: Project) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.updateProject(project);
+    mutationFn: async ({
+      project,
+      password,
+    }: { project: Project; password: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.updateProject(project, password);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
@@ -52,42 +77,31 @@ export function useDeleteProject() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.deleteProject(id);
+    mutationFn: async ({ id, password }: { id: string; password: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.deleteProject(id, password);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
 
-export function useImportProjects() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (projects: Project[]) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.importProjects(projects);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-    },
-  });
-}
-
-// Bills
+// Bills Queries
 export function useGetAllBills() {
   const { actor, isFetching } = useActor();
 
   return useQuery<Bill[]>({
-    queryKey: ['bills'],
+    queryKey: ["bills"],
     queryFn: async () => {
       if (!actor) return [];
       return actor.getAllBills();
     },
     enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_FREQUENT,
+    retry: 2,
   });
 }
 
@@ -97,12 +111,13 @@ export function useAddBill() {
 
   return useMutation({
     mutationFn: async (bill: Bill) => {
-      if (!actor) throw new Error('Actor not available');
+      if (!actor) throw new Error("Actor not available");
       return actor.addBill(bill);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bills'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
@@ -112,13 +127,17 @@ export function useUpdateBill() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (bill: Bill) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.updateBill(bill);
+    mutationFn: async ({
+      bill,
+      password,
+    }: { bill: Bill; password: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.updateBill(bill, password);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bills'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
@@ -128,60 +147,59 @@ export function useDeleteBill() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (billKey: BillKey) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.deleteBill(billKey.projectId, billKey.billNumber);
+    mutationFn: async ({
+      projectId,
+      billNumber,
+      password,
+    }: {
+      projectId: string;
+      billNumber: string;
+      password: string;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.deleteBill(projectId, billNumber, password);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bills'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
 
-export function useImportBills() {
+export function useBulkDeleteBills() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (bills: Bill[]) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.importBills(bills);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bills'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
-    },
-  });
-}
-
-export function useBulkDeleteBillsWithPassword() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ password, billKeys }: { password: string; billKeys: BillKey[] }) => {
-      if (!actor) throw new Error('Actor not available');
+    mutationFn: async ({
+      password,
+      billKeys,
+    }: { password: string; billKeys: BillKey[] }) => {
+      if (!actor) throw new Error("Actor not available");
       return actor.bulkDeleteBillsWithPassword(password, billKeys);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bills'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
 
-// Payments
+// Payments Queries
 export function useGetAllPayments() {
   const { actor, isFetching } = useActor();
 
   return useQuery<Payment[]>({
-    queryKey: ['payments'],
+    queryKey: ["payments"],
     queryFn: async () => {
       if (!actor) return [];
       return actor.getAllPayments();
     },
     enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_FREQUENT,
+    retry: 2,
   });
 }
 
@@ -191,12 +209,13 @@ export function useAddPayment() {
 
   return useMutation({
     mutationFn: async (payment: Payment) => {
-      if (!actor) throw new Error('Actor not available');
+      if (!actor) throw new Error("Actor not available");
       return actor.addPayment(payment);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
@@ -206,13 +225,17 @@ export function useUpdatePayment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payment: Payment) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.updatePayment(payment);
+    mutationFn: async ({
+      payment,
+      password,
+    }: { payment: Payment; password: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.updatePayment(payment, password);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
@@ -222,29 +245,14 @@ export function useDeletePayment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.deletePayment(id);
+    mutationFn: async ({ id, password }: { id: string; password: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.deletePayment(id, password);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
-    },
-  });
-}
-
-export function useImportPayments() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (payments: Payment[]) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.importPayments(payments);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
@@ -254,28 +262,34 @@ export function useBulkDeletePayments() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ password, ids }: { password: string; ids: string[] }) => {
-      if (!actor) throw new Error('Actor not available');
+    mutationFn: async ({
+      password,
+      ids,
+    }: { password: string; ids: string[] }) => {
+      if (!actor) throw new Error("Actor not available");
       return actor.bulkDeletePayments(password, ids);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payments'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardMetrics'] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
     },
   });
 }
 
-// Clients
+// Clients Queries
 export function useGetAllClients() {
   const { actor, isFetching } = useActor();
 
   return useQuery<Client[]>({
-    queryKey: ['clients'],
+    queryKey: ["clients"],
     queryFn: async () => {
       if (!actor) return [];
       return actor.getAllClients();
     },
     enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_VERY_STABLE,
+    retry: 2,
   });
 }
 
@@ -285,11 +299,11 @@ export function useAddClient() {
 
   return useMutation({
     mutationFn: async (client: Client) => {
-      if (!actor) throw new Error('Actor not available');
+      if (!actor) throw new Error("Actor not available");
       return actor.addClient(client);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }
@@ -299,12 +313,15 @@ export function useUpdateClient() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (client: Client) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.updateClient(client);
+    mutationFn: async ({
+      client,
+      password,
+    }: { client: Client; password: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.updateClient(client, password);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }
@@ -314,43 +331,67 @@ export function useDeleteClient() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.deleteClient(id);
+    mutationFn: async ({ id, password }: { id: string; password: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.deleteClient(id, password);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }
 
-export function useImportClients() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
+// Dashboard Queries
+export function useGetDashboardMetrics() {
+  const { actor, isFetching } = useActor();
 
-  return useMutation({
-    mutationFn: async (clients: Client[]) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.importClients(clients);
+  return useQuery<DashboardMetrics>({
+    queryKey: ["dashboardMetrics"],
+    queryFn: async () => {
+      if (!actor)
+        return {
+          totalBills: 0,
+          totalPayments: 0,
+          outstanding: 0,
+          totalGst: 0,
+        };
+      return actor.getDashboardMetrics();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-    },
+    enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_FREQUENT,
+    retry: 2,
   });
 }
 
-// User Profile
+// Analytics Queries
+export function useGetProjectWiseAnalyticsData(sortBy = "outstanding") {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<ProjectAnalyticsData[]>({
+    queryKey: ["analyticsData", sortBy],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getProjectWiseAnalyticsData(sortBy);
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_STABLE,
+    retry: 2,
+  });
+}
+
+// User Profile Queries
 export function useGetCallerUserProfile() {
   const { actor, isFetching: actorFetching } = useActor();
 
   const query = useQuery<UserProfile | null>({
-    queryKey: ['currentUserProfile'],
+    queryKey: ["currentUserProfile"],
     queryFn: async () => {
-      if (!actor) throw new Error('Actor not available');
+      if (!actor) throw new Error("Actor not available");
       return actor.getCallerUserProfile();
     },
     enabled: !!actor && !actorFetching,
     retry: false,
+    staleTime: STALE_TIME_VERY_STABLE,
   });
 
   return {
@@ -360,46 +401,49 @@ export function useGetCallerUserProfile() {
   };
 }
 
+export function useGetCallerUserRole() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<UserRole>({
+    queryKey: ["currentUserRole"],
+    queryFn: async () => {
+      if (!actor) return "guest" as UserRole;
+      return actor.getCallerUserRole();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_VERY_STABLE,
+    retry: 2,
+  });
+}
+
 export function useSaveCallerUserProfile() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (profile: UserProfile) => {
-      if (!actor) throw new Error('Actor not available');
+      if (!actor) throw new Error("Actor not available");
       return actor.saveCallerUserProfile(profile);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['currentUserProfile'] });
+      queryClient.invalidateQueries({ queryKey: ["currentUserProfile"] });
     },
   });
 }
 
-export function useGetCallerUserRole() {
+// Users Management Queries
+export function useListUsers() {
   const { actor, isFetching } = useActor();
 
-  return useQuery<UserRole>({
-    queryKey: ['userRole'],
-    queryFn: async () => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.getCallerUserRole();
-    },
-    enabled: !!actor && !isFetching,
-  });
-}
-
-// User Management (Admin-only)
-export function useGetAllUsers() {
-  const { actor, isFetching } = useActor();
-
-  return useQuery<Array<[Principal, UserProfile]>>({
-    queryKey: ['users'],
+  return useQuery<[Principal, UserProfile][]>({
+    queryKey: ["users"],
     queryFn: async () => {
       if (!actor) return [];
-      const users = await actor.getAllUsers();
-      return users.map(([principal, profile]) => [principal, profile]);
+      return actor.listUsers();
     },
     enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_STABLE,
+    retry: 2,
   });
 }
 
@@ -408,12 +452,12 @@ export function useAddUser() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ user, profile }: { user: Principal; profile: UserProfile }) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.addUser(user, profile);
+    mutationFn: async (profile: UserProfile) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.addUser(profile);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     },
   });
 }
@@ -423,83 +467,107 @@ export function useUpdateUser() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ user, profile }: { user: Principal; profile: UserProfile }) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.updateUser(user, profile);
+    mutationFn: async ({
+      userPrincipal,
+      profile,
+    }: {
+      userPrincipal: Principal;
+      profile: UserProfile;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.updateUser(userPrincipal, profile);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     },
   });
 }
 
-export function useDeleteUser() {
+export function useDeleteUsers() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ user, password }: { user: Principal; password: string }) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.deleteUser(user, password);
+    mutationFn: async ({
+      password,
+      principalIds,
+    }: { password: string; principalIds: string[] }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.deleteUsers(password, principalIds);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     },
   });
 }
 
-export function useToggleUserActiveStatus() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ user, active }: { user: Principal; active: boolean }) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.toggleUserActiveStatus(user, active);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-    },
-  });
-}
-
-export function useImportUsers() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (users: Array<[Principal, UserProfile]>) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.importUsers(users);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-    },
-  });
-}
-
-// Validate Active User (for login)
-export function useValidateActiveUser() {
-  const { actor } = useActor();
-
-  return useMutation({
-    mutationFn: async (email: string) => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.validateActiveUser(email);
-    },
-  });
-}
-
-// Dashboard Metrics
-export function useGetDashboardMetrics() {
+// Seri AI Queries
+export function useGetGreetingMessage() {
   const { actor, isFetching } = useActor();
 
-  return useQuery<DashboardMetrics>({
-    queryKey: ['dashboardMetrics'],
+  return useQuery<string>({
+    queryKey: ["greetingMessage"],
     queryFn: async () => {
-      if (!actor) throw new Error('Actor not available');
-      return actor.getDashboardMetrics();
+      if (!actor) return "";
+      return actor.getGreetingMessage(null);
     },
     enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_VERY_STABLE,
+    retry: 2,
+  });
+}
+
+export function useGetAllProjectNames() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<string[]>({
+    queryKey: ["projectNames"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAllProjectNames();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_STABLE,
+    retry: 2,
+  });
+}
+
+export function useGetProjectSummary(projectId: string | null) {
+  const { actor, isFetching } = useActor();
+
+  return useQuery({
+    queryKey: ["projectSummary", projectId],
+    queryFn: async () => {
+      if (!actor || !projectId) return null;
+      return actor.getProjectSummary(projectId);
+    },
+    enabled: !!actor && !isFetching && !!projectId,
+    staleTime: STALE_TIME_FREQUENT,
+    retry: 2,
+  });
+}
+
+// Import Data
+export function useImportData() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      request,
+      password,
+    }: { request: ImportRequest; password: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.importData(request, password);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
+    },
   });
 }

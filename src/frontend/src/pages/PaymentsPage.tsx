@@ -1,79 +1,137 @@
-import { useState, useRef, useMemo } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
-import { Plus, Pencil, Trash2, Printer, FileDown, FileUp, ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import { useGetAllPayments, useGetAllProjects, useAddPayment, useUpdatePayment, useDeletePayment, useGetCallerUserRole, useImportPayments } from '../hooks/useQueries';
-import { toast } from 'sonner';
-import { Payment, PaymentMode, UserRole } from '../backend';
-import { Badge } from '@/components/ui/badge';
-import { MultiSelectFilter } from '../components/MultiSelectFilter';
-import { ActionButton } from '../components/ActionButton';
-import { Button } from '@/components/ui/button';
-import { DateInput } from '../components/DateInput';
-import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  exportToCSV, 
-  exportPaymentsToPDF, 
-  downloadPaymentsTemplate, 
-  parseCSV, 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { canManageData } from "@/lib/authAdmin";
+import { formatINR } from "@/utils/money";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Eye,
+  FileDown,
+  FileUp,
+  Filter,
+  Pencil,
+  Plus,
+  Printer,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { type Payment, PaymentMode } from "../backend";
+import { ActionButton } from "../components/ActionButton";
+import { BulkDeleteButton } from "../components/BulkDeleteButton";
+import { DateInput } from "../components/DateInput";
+import { MultiSelectFilter } from "../components/MultiSelectFilter";
+import { PasswordConfirmModal } from "../components/PasswordConfirmModal";
+import {
+  useAddPayment,
+  useBulkDeletePayments,
+  useDeletePayment,
+  useGetAllPayments,
+  useGetAllProjects,
+  useGetCallerUserProfile,
+  useUpdatePayment,
+} from "../hooks/useQueries";
+import {
+  downloadPaymentsTemplate,
+  exportPaymentsToPDF,
+  exportToCSV,
+  formatPaymentsForExport,
+  parseCSV,
   validatePaymentCSVData,
-  formatPaymentsForExport 
-} from '../lib/exportUtils';
+} from "../lib/exportUtils";
 
-type SortField = 'date' | 'project' | 'amount' | 'paymentMode' | 'reference' | null;
-type SortDirection = 'asc' | 'desc' | null;
+type SortField =
+  | "date"
+  | "project"
+  | "paymentAmount"
+  | "paymentMode"
+  | "reference";
+type SortDirection = "asc" | "desc" | null;
 
 export default function PaymentsPage() {
+  const _navigate = useNavigate();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-  const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>('all');
-  const [referenceFilter, setReferenceFilter] = useState('');
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
-  const [isImporting, setIsImporting] = useState(false);
+  const [paymentModeFilter, setPaymentModeFilter] = useState<string>("all");
+  const [referenceFilter, setReferenceFilter] = useState("");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
+  const [yearFilter, setYearFilter] = useState("all");
+  const [financialYearFilter, setFinancialYearFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedPaymentIds, setSelectedPaymentIds] = useState<Set<string>>(new Set());
-  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
-  const [bulkDeletePassword, setBulkDeletePassword] = useState('');
-  const [sortField, setSortField] = useState<SortField>('date');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [deleteConfirmPayment, setDeleteConfirmPayment] = useState<
+    string | null
+  >(null);
+  const [showEditPasswordDialog, setShowEditPasswordDialog] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [viewPayment, setViewPayment] = useState<Payment | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
-    paymentDate: '',
-    projectId: '',
+    paymentDate: "",
+    projectId: "",
     paymentAmount: 0,
     paymentMode: PaymentMode.account,
-    reference: '',
-    remarks: '',
+    reference: "",
+    remarks: "",
   });
 
   const { data: payments = [] } = useGetAllPayments();
   const { data: projects = [] } = useGetAllProjects();
-  const { data: userRole } = useGetCallerUserRole();
+  const { data: currentUser } = useGetCallerUserProfile();
   const addPayment = useAddPayment();
   const updatePayment = useUpdatePayment();
   const deletePayment = useDeletePayment();
-  const importPayments = useImportPayments();
+  const bulkDeletePayments = useBulkDeletePayments();
 
-  const isAdmin = userRole === UserRole.admin;
+  // CRITICAL: Check if user can manage data (Master Admin or Admin role)
+  const canManage = canManageData(currentUser?.email, currentUser?.role);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      if (sortDirection === 'asc') {
-        setSortDirection('desc');
-      } else if (sortDirection === 'desc') {
+      // Cycle through: asc -> desc -> null
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else if (sortDirection === "desc") {
         setSortField(null);
         setSortDirection(null);
       }
     } else {
       setSortField(field);
-      setSortDirection('asc');
+      setSortDirection("asc");
     }
   };
 
@@ -81,47 +139,111 @@ export default function PaymentsPage() {
     if (sortField !== field) {
       return <ArrowUpDown className="h-4 w-4 ml-1 inline opacity-40" />;
     }
-    if (sortDirection === 'asc') {
+    if (sortDirection === "asc") {
       return <ArrowUp className="h-4 w-4 ml-1 inline text-[#0078D7]" />;
     }
     return <ArrowDown className="h-4 w-4 ml-1 inline text-[#0078D7]" />;
   };
 
   const filteredPayments = useMemo(() => {
-    let filtered = payments.filter(payment => {
-      if (selectedProjects.length > 0 && !selectedProjects.includes(payment.projectId)) return false;
-      if (selectedPaymentMode !== 'all' && payment.paymentMode !== selectedPaymentMode) return false;
-      if (referenceFilter && payment.reference !== referenceFilter) return false;
-      if (fromDate && payment.date < fromDate) return false;
-      if (toDate && payment.date > toDate) return false;
+    let filtered = payments.filter((payment) => {
+      if (
+        selectedProjects.length > 0 &&
+        !selectedProjects.includes(payment.projectId)
+      )
+        return false;
+
+      if (paymentModeFilter !== "all") {
+        if (
+          paymentModeFilter === "account" &&
+          payment.paymentMode !== PaymentMode.account
+        )
+          return false;
+        if (
+          paymentModeFilter === "cash" &&
+          payment.paymentMode !== PaymentMode.cash
+        )
+          return false;
+      }
+
+      if (referenceFilter) {
+        if (
+          !payment.reference
+            .toLowerCase()
+            .includes(referenceFilter.toLowerCase())
+        )
+          return false;
+      }
+
+      if (yearFilter !== "all") {
+        const paymentYear = payment.date.split("-")[2];
+        if (paymentYear !== yearFilter) return false;
+      }
+
+      if (financialYearFilter !== "all") {
+        const [day, month, year] = payment.date.split("-").map(Number);
+        const paymentDate = new Date(year, month - 1, day);
+        const fyStart = Number.parseInt(financialYearFilter);
+        const fyEnd = fyStart + 1;
+        const fyStartDate = new Date(fyStart, 3, 1);
+        const fyEndDate = new Date(fyEnd, 2, 31);
+        if (paymentDate < fyStartDate || paymentDate > fyEndDate) return false;
+      }
+
+      if (startDateFilter) {
+        const [startDay, startMonth, startYear] = startDateFilter
+          .split("-")
+          .map(Number);
+        const [paymentDay, paymentMonth, paymentYear] = payment.date
+          .split("-")
+          .map(Number);
+        const startDate = new Date(startYear, startMonth - 1, startDay);
+        const paymentDate = new Date(paymentYear, paymentMonth - 1, paymentDay);
+        if (paymentDate < startDate) return false;
+      }
+
+      if (endDateFilter) {
+        const [endDay, endMonth, endYear] = endDateFilter
+          .split("-")
+          .map(Number);
+        const [paymentDay, paymentMonth, paymentYear] = payment.date
+          .split("-")
+          .map(Number);
+        const endDate = new Date(endYear, endMonth - 1, endDay);
+        const paymentDate = new Date(paymentYear, paymentMonth - 1, paymentDay);
+        if (paymentDate > endDate) return false;
+      }
+
       return true;
     });
 
+    // Apply sorting
     if (sortField && sortDirection) {
       filtered = [...filtered].sort((a, b) => {
         let aValue: any;
         let bValue: any;
 
         switch (sortField) {
-          case 'date':
-            const [aDay, aMonth, aYear] = a.date.split('-').map(Number);
-            const [bDay, bMonth, bYear] = b.date.split('-').map(Number);
+          case "date": {
+            const [aDay, aMonth, aYear] = a.date.split("-").map(Number);
+            const [bDay, bMonth, bYear] = b.date.split("-").map(Number);
             aValue = new Date(aYear, aMonth - 1, aDay).getTime();
             bValue = new Date(bYear, bMonth - 1, bDay).getTime();
             break;
-          case 'project':
+          }
+          case "project":
             aValue = getProjectName(a.projectId).toLowerCase();
             bValue = getProjectName(b.projectId).toLowerCase();
             break;
-          case 'amount':
+          case "paymentAmount":
             aValue = a.amount;
             bValue = b.amount;
             break;
-          case 'paymentMode':
-            aValue = a.paymentMode;
-            bValue = b.paymentMode;
+          case "paymentMode":
+            aValue = a.paymentMode === PaymentMode.account ? "account" : "cash";
+            bValue = b.paymentMode === PaymentMode.account ? "account" : "cash";
             break;
-          case 'reference':
+          case "reference":
             aValue = a.reference.toLowerCase();
             bValue = b.reference.toLowerCase();
             break;
@@ -129,26 +251,102 @@ export default function PaymentsPage() {
             return 0;
         }
 
-        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+        if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+        if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
         return 0;
+      });
+    } else {
+      // Default sort by date DESC (latest first)
+      filtered = [...filtered].sort((a, b) => {
+        const [aDay, aMonth, aYear] = a.date.split("-").map(Number);
+        const [bDay, bMonth, bYear] = b.date.split("-").map(Number);
+        const aDate = new Date(aYear, aMonth - 1, aDay).getTime();
+        const bDate = new Date(bYear, bMonth - 1, bDay).getTime();
+        return bDate - aDate;
       });
     }
 
     return filtered;
-  }, [payments, selectedProjects, selectedPaymentMode, referenceFilter, fromDate, toDate, sortField, sortDirection]);
+  }, [
+    payments,
+    selectedProjects,
+    paymentModeFilter,
+    referenceFilter,
+    yearFilter,
+    financialYearFilter,
+    startDateFilter,
+    endDateFilter,
+    sortField,
+    sortDirection,
+  ]);
+
+  const totalPaymentsAmount = useMemo(() => {
+    return filteredPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  }, [filteredPayments]);
+
+  const formatFullDigitAmount = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.projectId || !formData.paymentAmount || !formData.paymentDate) {
-      toast.error('Please fill in all required fields');
+    if (
+      !formData.projectId ||
+      !formData.paymentAmount ||
+      !formData.paymentDate
+    ) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const paymentData: Payment = {
+      id: editingPayment?.id || `payment_${Date.now()}`,
+      projectId: formData.projectId,
+      amount: formData.paymentAmount,
+      date: formData.paymentDate,
+      paymentMode: formData.paymentMode,
+      reference: formData.reference,
+      remarks: formData.remarks || undefined,
+    };
+
+    if (editingPayment) {
+      if (!canManage) {
+        toast.error("Unauthorized: Only admins can update payments");
+        return;
+      }
+      setShowEditPasswordDialog(true);
+    } else {
+      try {
+        await addPayment.mutateAsync(paymentData);
+        toast.success("Payment added successfully");
+        setIsFormOpen(false);
+        resetForm();
+      } catch (error: any) {
+        toast.error(error.message || "Operation failed");
+      }
+    }
+  };
+
+  const confirmEdit = async (password: string) => {
+    if (!canManage) {
+      toast.error("Unauthorized: Only admins can update payments");
+      return;
+    }
+
+    if (!password.trim()) {
+      toast.error("Please enter the admin password");
       return;
     }
 
     try {
       const paymentData: Payment = {
-        id: editingPayment?.id || `payment_${Date.now()}`,
+        id: editingPayment!.id,
         projectId: formData.projectId,
         amount: formData.paymentAmount,
         date: formData.paymentDate,
@@ -157,22 +355,25 @@ export default function PaymentsPage() {
         remarks: formData.remarks || undefined,
       };
 
-      if (editingPayment) {
-        await updatePayment.mutateAsync(paymentData);
-        toast.success('Payment updated successfully');
-      } else {
-        await addPayment.mutateAsync(paymentData);
-        toast.success('Payment added successfully');
-      }
-
+      await updatePayment.mutateAsync({ payment: paymentData, password });
+      toast.success("Payment updated successfully");
       setIsFormOpen(false);
+      setShowEditPasswordDialog(false);
       resetForm();
     } catch (error: any) {
-      toast.error(error.message || 'Operation failed');
+      if (error.message?.includes("Invalid password")) {
+        toast.error("Invalid password. Update not allowed.");
+      } else {
+        toast.error(error.message || "Operation failed");
+      }
     }
   };
 
   const handleEdit = (payment: Payment) => {
+    if (!canManage) {
+      toast.error("Unauthorized: Only admins can edit payments");
+      return;
+    }
     setEditingPayment(payment);
     setFormData({
       paymentDate: payment.date,
@@ -180,97 +381,352 @@ export default function PaymentsPage() {
       paymentAmount: payment.amount,
       paymentMode: payment.paymentMode,
       reference: payment.reference,
-      remarks: payment.remarks || '',
+      remarks: payment.remarks || "",
     });
     setIsFormOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this payment?')) {
-      try {
-        await deletePayment.mutateAsync(id);
-        toast.success('Payment deleted successfully');
-      } catch (error: any) {
-        toast.error(error.message || 'Delete failed');
+  const handleView = (payment: Payment) => {
+    setViewPayment(payment);
+  };
+
+  const handleDeleteClick = (paymentId: string) => {
+    if (!canManage) {
+      toast.error("Unauthorized: Only admins can delete payments");
+      return;
+    }
+    setDeleteConfirmPayment(paymentId);
+  };
+
+  const confirmDelete = async (password: string) => {
+    if (!deleteConfirmPayment) return;
+
+    if (!canManage) {
+      toast.error("Unauthorized: Only admins can delete payments");
+      return;
+    }
+
+    if (!password.trim()) {
+      toast.error("Please enter the admin password");
+      return;
+    }
+
+    try {
+      await deletePayment.mutateAsync({ id: deleteConfirmPayment, password });
+      toast.success("Payment deleted successfully");
+      setDeleteConfirmPayment(null);
+    } catch (error: any) {
+      if (error.message?.includes("Invalid password")) {
+        toast.error("Invalid password. Delete not allowed.");
+      } else {
+        toast.error(error.message || "Delete failed");
       }
     }
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedPaymentIds(new Set(filteredPayments.map(p => p.id)));
-    } else {
-      setSelectedPaymentIds(new Set());
-    }
-  };
-
-  const handleSelectPayment = (paymentId: string, checked: boolean) => {
-    const newSelected = new Set(selectedPaymentIds);
-    if (checked) {
-      newSelected.add(paymentId);
-    } else {
-      newSelected.delete(paymentId);
-    }
-    setSelectedPaymentIds(newSelected);
-  };
-
-  const handleBulkDelete = () => {
-    if (selectedPaymentIds.size === 0) {
-      toast.error('Please select at least one payment');
+  const handleBulkDelete = async (password: string) => {
+    if (selectedPayments.length === 0) {
+      toast.error("No payments selected");
       return;
     }
-    setIsBulkDeleteDialogOpen(true);
-  };
 
-  const confirmBulkDelete = async () => {
-    if (bulkDeletePassword !== '3554') {
-      toast.error('Incorrect password. Bulk delete failed.');
+    if (!canManage) {
+      toast.error("Unauthorized: Only admins can bulk delete payments");
+      return;
+    }
+
+    if (!password.trim()) {
+      toast.error("Please enter the admin password");
       return;
     }
 
     try {
-      const deletePromises = Array.from(selectedPaymentIds).map(id => 
-        deletePayment.mutateAsync(id)
+      await bulkDeletePayments.mutateAsync({ password, ids: selectedPayments });
+      toast.success(
+        `${selectedPayments.length} payment(s) deleted successfully`,
       );
-      await Promise.all(deletePromises);
-      toast.success(`Successfully deleted ${selectedPaymentIds.size} payments`);
-      setSelectedPaymentIds(new Set());
-      setIsBulkDeleteDialogOpen(false);
-      setBulkDeletePassword('');
+      setSelectedPayments([]);
+      setShowBulkDeleteDialog(false);
     } catch (error: any) {
-      toast.error(error.message || 'Bulk delete failed');
+      if (error.message?.includes("Invalid password")) {
+        toast.error("Invalid password. Bulk delete not allowed.");
+      } else {
+        toast.error(error.message || "Bulk delete failed");
+      }
     }
+  };
+
+  const handlePrint = () => {
+    if (filteredPayments.length === 0) {
+      toast.error("No payments to print");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Failed to open print window");
+      return;
+    }
+
+    const currentDate = new Date()
+      .toLocaleDateString("en-GB")
+      .replace(/\//g, "-");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Payments Report</title>
+          <style>
+            @page { margin: 20mm; }
+            body { 
+              font-family: 'Century Gothic', Arial, sans-serif; 
+              margin: 0; 
+              padding: 20px;
+              font-size: 12px;
+            }
+            .header {
+              margin-bottom: 20px;
+              padding-bottom: 15px;
+              border-bottom: 2px solid #333;
+            }
+            .header-row {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 8px;
+            }
+            .header-label {
+              font-weight: 700;
+              color: #333;
+            }
+            .header-value {
+              font-weight: 400;
+              color: #555;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-top: 10px;
+            }
+            th, td { 
+              border: 1px solid #ddd; 
+              padding: 8px; 
+              text-align: left;
+              font-size: 11px;
+            }
+            th { 
+              background-color: #f5f5f5; 
+              font-weight: 700;
+              color: #333;
+            }
+            td {
+              font-weight: 400;
+              color: #333;
+            }
+            .text-right { text-align: right; }
+            .negative { background-color: #FFF9C4; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="header-row">
+              <span><span class="header-label">Print Date:</span> <span class="header-value">${currentDate}</span></span>
+              <span><span class="header-label">Start Date:</span> <span class="header-value">${startDateFilter || "All"}</span></span>
+            </div>
+            <div class="header-row">
+              <span><span class="header-label">End Date:</span> <span class="header-value">${endDateFilter || "All"}</span></span>
+            </div>
+            <div class="header-row">
+              <span><span class="header-label">Total Payments Count:</span> <span class="header-value">${filteredPayments.length}</span></span>
+              <span><span class="header-label">Total Amount:</span> <span class="header-value">${formatFullDigitAmount(totalPaymentsAmount)}</span></span>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Payment Date</th>
+                <th>Project Name</th>
+                <th>Payment Mode</th>
+                <th class="text-right">Amount</th>
+                <th>Reference</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredPayments
+                .map(
+                  (payment) => `
+                <tr class="${payment.amount < 0 ? "negative" : ""}">
+                  <td>${payment.date}</td>
+                  <td>${getProjectName(payment.projectId)}</td>
+                  <td>${payment.paymentMode === PaymentMode.account ? "Account" : "Cash"}</td>
+                  <td class="text-right">${formatINR(payment.amount)}</td>
+                  <td>${payment.reference}</td>
+                  <td>${payment.remarks || "–"}</td>
+                </tr>
+              `,
+                )
+                .join("")}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
   };
 
   const handleExportPDF = () => {
     if (filteredPayments.length === 0) {
-      toast.error('No payments to export');
+      toast.error("No payments to export");
       return;
     }
-    try {
-      exportPaymentsToPDF(filteredPayments, projects, 'Payments Report');
-      toast.success('PDF export window opened');
-    } catch (error) {
-      toast.error('Failed to export PDF');
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Failed to open print window");
+      return;
     }
+
+    const currentDate = new Date()
+      .toLocaleDateString("en-GB")
+      .replace(/\//g, "-");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Payments Report</title>
+          <style>
+            @page { margin: 20mm; }
+            body { 
+              font-family: 'Century Gothic', Arial, sans-serif; 
+              margin: 0; 
+              padding: 20px;
+              font-size: 12px;
+            }
+            .header {
+              margin-bottom: 20px;
+              padding-bottom: 15px;
+              border-bottom: 2px solid #333;
+            }
+            .header-row {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 8px;
+            }
+            .header-label {
+              font-weight: 700;
+              color: #333;
+            }
+            .header-value {
+              font-weight: 400;
+              color: #555;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-top: 10px;
+            }
+            th, td { 
+              border: 1px solid #ddd; 
+              padding: 8px; 
+              text-align: left;
+              font-size: 11px;
+            }
+            th { 
+              background-color: #f5f5f5; 
+              font-weight: 700;
+              color: #333;
+            }
+            td {
+              font-weight: 400;
+              color: #333;
+            }
+            .text-right { text-align: right; }
+            .negative { background-color: #FFF9C4; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="header-row">
+              <span><span class="header-label">Print Date:</span> <span class="header-value">${currentDate}</span></span>
+              <span><span class="header-label">Start Date:</span> <span class="header-value">${startDateFilter || "All"}</span></span>
+            </div>
+            <div class="header-row">
+              <span><span class="header-label">End Date:</span> <span class="header-value">${endDateFilter || "All"}</span></span>
+            </div>
+            <div class="header-row">
+              <span><span class="header-label">Total Payments Count:</span> <span class="header-value">${filteredPayments.length}</span></span>
+              <span><span class="header-label">Total Amount:</span> <span class="header-value">${formatFullDigitAmount(totalPaymentsAmount)}</span></span>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Payment Date</th>
+                <th>Project Name</th>
+                <th>Payment Mode</th>
+                <th class="text-right">Amount</th>
+                <th>Reference</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredPayments
+                .map(
+                  (payment) => `
+                <tr class="${payment.amount < 0 ? "negative" : ""}">
+                  <td>${payment.date}</td>
+                  <td>${getProjectName(payment.projectId)}</td>
+                  <td>${payment.paymentMode === PaymentMode.account ? "Account" : "Cash"}</td>
+                  <td class="text-right">${formatINR(payment.amount)}</td>
+                  <td>${payment.reference}</td>
+                  <td>${payment.remarks || "–"}</td>
+                </tr>
+              `,
+                )
+                .join("")}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    toast.success("PDF export window opened");
   };
 
   const handleExportCSV = () => {
     if (filteredPayments.length === 0) {
-      toast.error('No payments to export');
+      toast.error("No payments to export");
       return;
     }
     const formattedData = formatPaymentsForExport(filteredPayments, projects);
-    exportToCSV(formattedData, 'payments');
-    toast.success('CSV exported successfully');
+    exportToCSV(formattedData, "payments");
+    toast.success("CSV exported successfully");
   };
 
   const handleDownloadTemplate = () => {
     downloadPaymentsTemplate();
-    toast.success('Payments template downloaded successfully');
+    toast.success("Payments template downloaded successfully");
   };
 
   const handleImportCSV = () => {
+    if (!canManage) {
+      toast.error("Unauthorized: Only admins can import payments");
+      return;
+    }
     fileInputRef.current?.click();
   };
 
@@ -278,8 +734,8 @@ export default function PaymentsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.csv')) {
-      toast.error('Please upload a CSV file');
+    if (!file.name.endsWith(".csv")) {
+      toast.error("Please upload a CSV file");
       return;
     }
 
@@ -288,9 +744,9 @@ export default function PaymentsPage() {
     try {
       const text = await file.text();
       const parsedData = parseCSV(text);
-      
+
       if (parsedData.length === 0) {
-        toast.error('No data found in CSV file');
+        toast.error("No data found in CSV file");
         setIsImporting(false);
         return;
       }
@@ -298,152 +754,225 @@ export default function PaymentsPage() {
       const { valid, invalid } = validatePaymentCSVData(parsedData, projects);
 
       if (invalid.length > 0) {
-        console.warn('Invalid rows:', invalid);
-        const errorMessages = invalid.map(inv => `Row ${inv.row}: ${inv.error}`).join('\n');
-        console.error('Validation errors:\n', errorMessages);
-        toast.error(`${invalid.length} invalid rows found. Check console for details.`, {
-          duration: 5000,
-        });
+        console.warn("Invalid rows:", invalid);
+        const errorMessages = invalid
+          .map((inv) => `Row ${inv.row}: ${inv.error}`)
+          .join("\n");
+        console.error("Validation errors:\n", errorMessages);
       }
 
       if (valid.length === 0) {
-        toast.error('No valid payments found in CSV file. Please check the format and data.');
+        toast.error(
+          "No valid payments found in CSV file. Please check the format and data.",
+        );
         setIsImporting(false);
         return;
       }
 
-      await importPayments.mutateAsync(valid);
-      
-      if (invalid.length > 0) {
-        toast.success(`Successfully imported ${valid.length} payments. ${invalid.length} rows skipped due to errors.`, {
-          duration: 5000,
-        });
-      } else {
-        toast.success(`Successfully imported ${valid.length} payments`);
+      let successCount = 0;
+      for (const payment of valid) {
+        try {
+          await addPayment.mutateAsync(payment);
+          successCount++;
+        } catch (error) {
+          console.error("Failed to import payment:", error);
+        }
       }
-      
+
+      if (invalid.length > 0) {
+        toast.success(
+          `Successfully imported ${successCount} payments. ${invalid.length} rows skipped due to errors.`,
+          {
+            duration: 5000,
+          },
+        );
+      } else {
+        toast.success(`Successfully imported ${successCount} payments`);
+      }
+
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
     } catch (error: any) {
-      console.error('Import error:', error);
-      toast.error(error.message || 'Failed to import CSV. Please check the file format.');
+      console.error("Import error:", error);
+      toast.error(
+        error.message || "Failed to import CSV. Please check the file format.",
+      );
     } finally {
       setIsImporting(false);
     }
   };
 
+  const handleClearFilters = () => {
+    setSelectedProjects([]);
+    setPaymentModeFilter("all");
+    setReferenceFilter("");
+    setYearFilter("all");
+    setFinancialYearFilter("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
+  };
+
   const resetForm = () => {
     setFormData({
-      paymentDate: '',
-      projectId: '',
+      paymentDate: "",
+      projectId: "",
       paymentAmount: 0,
       paymentMode: PaymentMode.account,
-      reference: '',
-      remarks: '',
+      reference: "",
+      remarks: "",
     });
     setEditingPayment(null);
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
   const getProjectName = (projectId: string) => {
-    return projects.find(p => p.id === projectId)?.name || 'Unknown';
+    return projects.find((p) => p.id === projectId)?.name || "Unknown";
   };
 
-  const clearFilters = () => {
-    setSelectedProjects([]);
-    setSelectedPaymentMode('all');
-    setReferenceFilter('');
-    setFromDate('');
-    setToDate('');
+  const projectOptions = projects.map((p) => ({ id: p.id, label: p.name }));
+
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from(
+    { length: 13 },
+    (_, i) => currentYear - 10 + i,
+  );
+  const financialYearOptions = Array.from(
+    { length: 13 },
+    (_, i) => currentYear - 10 + i,
+  );
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedPayments(filteredPayments.map((p) => p.id));
+    } else {
+      setSelectedPayments([]);
+    }
   };
 
-  const projectOptions = projects.map(p => ({ id: p.id, label: p.name }));
+  const handleSelectPayment = (paymentId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedPayments([...selectedPayments, paymentId]);
+    } else {
+      setSelectedPayments(selectedPayments.filter((id) => id !== paymentId));
+    }
+  };
 
-  const allSelected = filteredPayments.length > 0 && selectedPaymentIds.size === filteredPayments.length;
-  const someSelected = selectedPaymentIds.size > 0 && selectedPaymentIds.size < filteredPayments.length;
+  const isPaymentSelected = (paymentId: string) => {
+    return selectedPayments.includes(paymentId);
+  };
+
+  const allSelected =
+    filteredPayments.length > 0 &&
+    filteredPayments.every((payment) => isPaymentSelected(payment.id));
 
   return (
-    <div className="p-6 space-y-6 bg-[#F5F5F5] min-h-screen">
+    <div className="min-h-screen bg-[#F5F5F5]">
       <input
         ref={fileInputRef}
         type="file"
         accept=".csv"
         onChange={handleFileChange}
-        style={{ display: 'none' }}
+        style={{ display: "none" }}
       />
 
-      <div className="flex flex-wrap items-center gap-2 bg-white p-4 rounded-lg shadow-sm">
-        <ActionButton icon={Printer} label="Print" onClick={() => window.print()} variant="payments" />
-        <ActionButton icon={FileDown} label="Export PDF" onClick={handleExportPDF} variant="payments" />
-        <ActionButton 
-          icon={FileUp} 
-          label="Import CSV" 
-          onClick={handleImportCSV}
-          disabled={isImporting || !isAdmin}
-          variant="payments"
-        />
-        <ActionButton icon={FileDown} label="Export CSV" onClick={handleExportCSV} variant="payments" />
-        <ActionButton icon={FileDown} label="Download Format" onClick={handleDownloadTemplate} variant="payments" />
-        {isAdmin && selectedPaymentIds.size > 0 && (
-          <Button
-            onClick={handleBulkDelete}
-            className="h-9 px-3 py-1.5 rounded-lg font-normal text-sm transition-all duration-200 bg-[#FF0000] hover:bg-[#CC0000] text-white border-[#FF0000] hover:border-[#CC0000] shadow-[0_2px_4px_rgba(0,0,0,0.1)] hover:shadow-[0_4px_8px_rgba(0,0,0,0.15)]"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Bulk Delete
-          </Button>
-        )}
-        {isAdmin && (
-          <div className="ml-auto">
-            <ActionButton 
-              icon={Plus} 
-              label="New Payment" 
-              variant="primary"
-              onClick={() => {
-                resetForm();
-                setIsFormOpen(true);
-              }} 
-            />
+      {/* Top Ribbon Toolbar */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
+        <div className="px-6 py-3">
+          <div className="flex items-center justify-between gap-4">
+            {/* Left Side - Action Buttons */}
+            <div className="flex items-center gap-2">
+              <ActionButton
+                icon={Printer}
+                label="Print"
+                onClick={handlePrint}
+                variant="payments"
+              />
+              <ActionButton
+                icon={FileDown}
+                label="Export PDF"
+                onClick={handleExportPDF}
+                variant="payments"
+              />
+              {canManage && (
+                <ActionButton
+                  icon={FileUp}
+                  label="Import CSV"
+                  onClick={handleImportCSV}
+                  disabled={isImporting}
+                  variant="payments"
+                />
+              )}
+              <ActionButton
+                icon={FileDown}
+                label="Export CSV"
+                onClick={handleExportCSV}
+                variant="payments"
+              />
+              <ActionButton
+                icon={FileDown}
+                label="Download Format"
+                onClick={handleDownloadTemplate}
+                variant="payments"
+              />
+              {canManage && selectedPayments.length > 0 && (
+                <BulkDeleteButton
+                  count={selectedPayments.length}
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                />
+              )}
+              {canManage && (
+                <ActionButton
+                  icon={Plus}
+                  label="New Payment"
+                  onClick={() => {
+                    resetForm();
+                    setIsFormOpen(true);
+                  }}
+                  variant="primary"
+                />
+              )}
+            </div>
+
+            {/* Right Side - Summary Card */}
+            <div className="bg-gradient-to-r from-[#8B5CF6] to-[#10B981] text-white px-6 py-3 rounded-lg shadow-md min-w-[280px]">
+              <div className="text-sm font-normal opacity-90">
+                Total Payments
+              </div>
+              <div className="text-2xl font-bold mt-1">
+                {formatFullDigitAmount(totalPaymentsAmount)}
+              </div>
+              <div className="text-xs font-normal opacity-80 mt-1">
+                {filteredPayments.length} Payments
+              </div>
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      <div className="flex items-center justify-start">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2 font-normal text-[#555555] hover:text-[#333333]"
-        >
-          {showFilters ? (
-            <>
-              <ChevronUp className="h-4 w-4" />
-              Hide Filters
-            </>
-          ) : (
-            <>
-              <ChevronDown className="h-4 w-4" />
-              Show Filters
-            </>
-          )}
-        </Button>
-      </div>
+      <div className="p-6 space-y-4">
+        {/* Show Filters Toggle */}
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 text-[#333333] hover:bg-gray-100 font-normal"
+          >
+            <Filter className="h-4 w-4" />
+            {showFilters ? "Hide Filters" : "Show Filters"}
+          </Button>
+        </div>
 
-      {showFilters && (
-        <Card className="shadow-md bg-[#E8F5E9] border-[#C8E6C9] rounded-xl">
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Filters Panel - 3-row layout */}
+        {showFilters && (
+          <Card className="shadow-sm bg-[#E8F5E9] border-[#A5D6A7] rounded-lg animate-in">
+            <CardContent className="p-4">
+              {/* Row 1: Projects, Payment Mode, Reference */}
+              <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
-                  <Label className="text-sm font-normal mb-2 block text-[#555555]">Projects</Label>
+                  <Label className="text-xs font-normal mb-1 block text-[#333333]">
+                    Projects
+                  </Label>
                   <div className="h-9">
                     <MultiSelectFilter
                       options={projectOptions}
@@ -454,416 +983,567 @@ export default function PaymentsPage() {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-sm font-normal mb-2 block text-[#555555]">Payment Mode</Label>
-                  <Select value={selectedPaymentMode} onValueChange={setSelectedPaymentMode}>
-                    <SelectTrigger className="bg-white h-9">
+                  <Label className="text-xs font-normal mb-1 block text-[#333333]">
+                    Payment Mode
+                  </Label>
+                  <Select
+                    value={paymentModeFilter}
+                    onValueChange={setPaymentModeFilter}
+                  >
+                    <SelectTrigger className="h-9 text-sm rounded-md font-normal">
                       <SelectValue placeholder="All modes" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All modes</SelectItem>
-                      <SelectItem value={PaymentMode.account}>Account</SelectItem>
-                      <SelectItem value={PaymentMode.cash}>Cash</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="account">Account</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-sm font-normal mb-2 block text-[#555555]">Reference</Label>
+                  <Label className="text-xs font-normal mb-1 block text-[#333333]">
+                    Reference
+                  </Label>
                   <Input
-                    type="text"
-                    placeholder="Exact reference text"
+                    placeholder="Search by reference"
                     value={referenceFilter}
                     onChange={(e) => setReferenceFilter(e.target.value)}
-                    className="bg-white h-9"
+                    className="h-9 text-sm rounded-md font-normal"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              {/* Row 2: Start Date, End Date, Year, Financial Year */}
+              <div className="grid grid-cols-4 gap-3 mb-3">
                 <div>
-                  <Label className="text-sm font-normal mb-2 block text-[#555555]">From Date</Label>
+                  <Label className="text-xs font-normal mb-1 block text-[#333333]">
+                    Start Date
+                  </Label>
                   <DateInput
-                    value={fromDate}
-                    onChange={setFromDate}
+                    value={startDateFilter}
+                    onChange={setStartDateFilter}
                     placeholder="dd-mm-yyyy"
-                    className="bg-white h-9"
+                    className="h-9 text-sm rounded-md font-normal"
                   />
                 </div>
                 <div>
-                  <Label className="text-sm font-normal mb-2 block text-[#555555]">To Date</Label>
+                  <Label className="text-xs font-normal mb-1 block text-[#333333]">
+                    End Date
+                  </Label>
                   <DateInput
-                    value={toDate}
-                    onChange={setToDate}
+                    value={endDateFilter}
+                    onChange={setEndDateFilter}
                     placeholder="dd-mm-yyyy"
-                    className="bg-white h-9"
+                    className="h-9 text-sm rounded-md font-normal"
                   />
+                </div>
+                <div>
+                  <Label className="text-xs font-normal mb-1 block text-[#333333]">
+                    Year
+                  </Label>
+                  <Select value={yearFilter} onValueChange={setYearFilter}>
+                    <SelectTrigger className="h-9 text-sm rounded-md font-normal">
+                      <SelectValue placeholder="All years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All years</SelectItem>
+                      {yearOptions.map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs font-normal mb-1 block text-[#333333]">
+                    Financial Year
+                  </Label>
+                  <Select
+                    value={financialYearFilter}
+                    onValueChange={setFinancialYearFilter}
+                  >
+                    <SelectTrigger className="h-9 text-sm rounded-md font-normal">
+                      <SelectValue placeholder="All financial years" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All financial years</SelectItem>
+                      {financialYearOptions.map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}-{year + 1}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-[#555555] font-normal">Showing {filteredPayments.length} of {payments.length} payments</p>
+
+              {/* Row 3: Record count (left) and Clear Filters button (right) */}
+              <div className="flex items-center justify-between pt-2 border-t border-[#A5D6A7]">
+                <p className="text-xs text-[#555555] font-normal">
+                  Showing {filteredPayments.length} of {payments.length}{" "}
+                  Payments
+                </p>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={clearFilters}
-                  className="font-normal"
+                  onClick={handleClearFilters}
+                  className="h-7 text-xs font-normal"
                 >
                   Clear Filters
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Payments List Table with Sortable Columns */}
+        <Card className="shadow-sm rounded-lg bg-white">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table className="table-fixed w-full">
+                <TableHeader>
+                  <TableRow className="bg-white hover:bg-white border-b border-gray-200">
+                    {canManage && (
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={handleSelectAll}
+                          className="border-gray-400"
+                        />
+                      </TableHead>
+                    )}
+                    <TableHead
+                      className="font-bold text-[#333333] w-28 cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort("date")}
+                    >
+                      Date{getSortIcon("date")}
+                    </TableHead>
+                    <TableHead
+                      className="font-bold text-[#333333] w-40 cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort("project")}
+                    >
+                      Project{getSortIcon("project")}
+                    </TableHead>
+                    <TableHead
+                      className="font-bold text-[#333333] text-right w-32 cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort("paymentAmount")}
+                    >
+                      Payment Amount{getSortIcon("paymentAmount")}
+                    </TableHead>
+                    <TableHead
+                      className="font-bold text-[#333333] w-32 cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort("paymentMode")}
+                    >
+                      Payment Mode{getSortIcon("paymentMode")}
+                    </TableHead>
+                    <TableHead
+                      className="font-bold text-[#333333] w-32 cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort("reference")}
+                    >
+                      Reference{getSortIcon("reference")}
+                    </TableHead>
+                    <TableHead className="font-bold text-[#333333] w-40">
+                      Remarks
+                    </TableHead>
+                    <TableHead className="font-bold text-[#333333] text-center w-24">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPayments.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={canManage ? 8 : 7}
+                        className="text-center py-8 text-[#555555] font-normal"
+                      >
+                        No payments found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredPayments.map((payment, index) => {
+                      const isNegative = payment.amount < 0;
+                      const rowClass = isNegative
+                        ? "bg-[#FFF9C4] hover:bg-[#FFF59D]"
+                        : index % 2 === 0
+                          ? "bg-white hover:bg-gray-50"
+                          : "bg-[#E8F5E9] hover:bg-[#C8E6C9]";
+
+                      return (
+                        <TableRow key={payment.id} className={rowClass}>
+                          {canManage && (
+                            <TableCell>
+                              <Checkbox
+                                checked={isPaymentSelected(payment.id)}
+                                onCheckedChange={(checked) =>
+                                  handleSelectPayment(
+                                    payment.id,
+                                    checked as boolean,
+                                  )
+                                }
+                                className="border-gray-400"
+                              />
+                            </TableCell>
+                          )}
+                          <TableCell className="font-normal text-[#333333] text-sm">
+                            {payment.date}
+                          </TableCell>
+                          <TableCell
+                            className="font-normal text-[#333333] text-sm truncate"
+                            title={getProjectName(payment.projectId)}
+                          >
+                            {getProjectName(payment.projectId)}
+                          </TableCell>
+                          <TableCell
+                            className={`font-normal text-right text-sm ${isNegative ? "text-[#FF0000]" : "text-[#333333]"}`}
+                          >
+                            {formatINR(payment.amount)}
+                          </TableCell>
+                          <TableCell className="font-normal text-[#333333] text-sm">
+                            {payment.paymentMode === PaymentMode.account
+                              ? "Account"
+                              : "Cash"}
+                          </TableCell>
+                          <TableCell
+                            className="font-normal text-[#333333] text-sm truncate"
+                            title={payment.reference}
+                          >
+                            {payment.reference}
+                          </TableCell>
+                          <TableCell
+                            className="font-normal text-[#333333] text-sm truncate"
+                            title={payment.remarks || "–"}
+                          >
+                            {payment.remarks || "–"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleView(payment)}
+                                className="text-[#0078D7] hover:text-[#005A9E] transition-colors"
+                                title="View"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              {canManage && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEdit(payment)}
+                                    className="text-[#0078D7] hover:text-[#005A9E] transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleDeleteClick(payment.id)
+                                    }
+                                    className="text-[#D32F2F] hover:text-[#B71C1C] transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* View Payment Modal - Styled per image 82 (Pic 3) */}
+      <Dialog
+        open={!!viewPayment}
+        onOpenChange={(open) => {
+          if (!open) setViewPayment(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader className="flex flex-row items-center justify-between border-b pb-3">
+            <DialogTitle className="font-bold text-xl text-[#333333]">
+              Payment Details
+            </DialogTitle>
+            <button
+              type="button"
+              onClick={() => setViewPayment(null)}
+              className="text-[#555555] hover:text-[#333333] transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </DialogHeader>
+          {viewPayment && (
+            <div className="space-y-3 py-4">
+              <div className="grid grid-cols-2 gap-4 bg-[#E3F2FD] p-3 rounded-md">
+                <div>
+                  <span className="font-bold text-[#333333]">Date:</span>
+                  <span className="ml-2 font-normal text-[#555555]">
+                    {viewPayment.date}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-bold text-[#333333]">Project:</span>
+                  <span className="ml-2 font-normal text-[#555555]">
+                    {getProjectName(viewPayment.projectId)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 bg-white p-3 rounded-md border border-gray-200">
+                <div>
+                  <span className="font-bold text-[#333333]">
+                    Payment Mode:
+                  </span>
+                  <span className="ml-2 font-normal text-[#555555]">
+                    {viewPayment.paymentMode === PaymentMode.account
+                      ? "Account"
+                      : "Cash"}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-bold text-[#333333]">
+                    Total Amount:
+                  </span>
+                  <span className="ml-2 font-normal text-[#555555]">
+                    {formatINR(viewPayment.amount)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-[#E3F2FD] p-3 rounded-md">
+                <div className="font-bold text-[#333333] mb-1">Reference:</div>
+                <div className="font-normal text-[#555555]">
+                  {viewPayment.reference}
+                </div>
+              </div>
+
+              <div className="bg-white p-3 rounded-md border border-gray-200">
+                <div className="font-bold text-[#333333] mb-1">Remarks:</div>
+                <div className="font-normal text-[#555555]">
+                  {viewPayment.remarks || "–"}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Form Dialog */}
+      {canManage && (
+        <Dialog
+          open={isFormOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setIsFormOpen(false);
+              resetForm();
+            }
+          }}
+        >
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="font-bold text-xl">
+                {editingPayment ? "Edit Payment" : "New Payment"}
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-4">
+                <div>
+                  <Label className="font-bold">Project *</Label>
+                  <Select
+                    value={formData.projectId}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, projectId: value })
+                    }
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="font-bold">Date *</Label>
+                  <DateInput
+                    value={formData.paymentDate}
+                    onChange={(value) =>
+                      setFormData({ ...formData, paymentDate: value })
+                    }
+                    placeholder="dd-mm-yyyy"
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label className="font-bold">Amount (₹) *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.paymentAmount || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        paymentAmount: Number.parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    placeholder="0.00"
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label className="font-bold">Payment Mode *</Label>
+                  <div className="flex gap-4 mt-2">
+                    <Button
+                      type="button"
+                      variant={
+                        formData.paymentMode === PaymentMode.account
+                          ? "default"
+                          : "outline"
+                      }
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          paymentMode: PaymentMode.account,
+                        })
+                      }
+                      className={
+                        formData.paymentMode === PaymentMode.account
+                          ? "bg-[#28A745] hover:bg-[#218838]"
+                          : ""
+                      }
+                    >
+                      Account
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={
+                        formData.paymentMode === PaymentMode.cash
+                          ? "default"
+                          : "outline"
+                      }
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          paymentMode: PaymentMode.cash,
+                        })
+                      }
+                      className={
+                        formData.paymentMode === PaymentMode.cash
+                          ? "bg-[#555555] hover:bg-[#333333]"
+                          : ""
+                      }
+                    >
+                      Cash
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="font-normal">Reference</Label>
+                  <Input
+                    value={formData.reference}
+                    onChange={(e) =>
+                      setFormData({ ...formData, reference: e.target.value })
+                    }
+                    placeholder="Enter reference"
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label className="font-normal">Remarks</Label>
+                  <Textarea
+                    value={formData.remarks}
+                    onChange={(e) =>
+                      setFormData({ ...formData, remarks: e.target.value })
+                    }
+                    placeholder="Enter remarks (optional)"
+                    className="mt-1"
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsFormOpen(false);
+                    resetForm();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-[#28A745] hover:bg-[#218838]"
+                >
+                  {editingPayment ? "Update Payment" : "Save Payment"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
 
-      <Card className="shadow-sm">
-        <CardContent className="p-0">
-          <div className="p-4 border-b bg-white">
-            <h3 className="font-bold text-[#555555]">Payment List ({filteredPayments.length} payments)</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {isAdmin && (
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={allSelected}
-                        onCheckedChange={handleSelectAll}
-                        aria-label="Select all"
-                        className={someSelected ? 'data-[state=checked]:bg-[#0078D7]' : ''}
-                      />
-                    </TableHead>
-                  )}
-                  <TableHead 
-                    className={`font-bold cursor-pointer hover:bg-gray-100 transition-colors ${sortField === 'date' ? 'text-[#0078D7]' : ''}`}
-                    onClick={() => handleSort('date')}
-                  >
-                    Payment Date{getSortIcon('date')}
-                  </TableHead>
-                  <TableHead 
-                    className={`font-bold cursor-pointer hover:bg-gray-100 transition-colors ${sortField === 'project' ? 'text-[#0078D7]' : ''}`}
-                    onClick={() => handleSort('project')}
-                  >
-                    Project Name{getSortIcon('project')}
-                  </TableHead>
-                  <TableHead 
-                    className={`font-bold cursor-pointer hover:bg-gray-100 transition-colors ${sortField === 'amount' ? 'text-[#0078D7]' : ''}`}
-                    onClick={() => handleSort('amount')}
-                  >
-                    Payment Amount{getSortIcon('amount')}
-                  </TableHead>
-                  <TableHead 
-                    className={`font-bold cursor-pointer hover:bg-gray-100 transition-colors ${sortField === 'paymentMode' ? 'text-[#0078D7]' : ''}`}
-                    onClick={() => handleSort('paymentMode')}
-                  >
-                    Payment Mode{getSortIcon('paymentMode')}
-                  </TableHead>
-                  <TableHead 
-                    className={`font-bold cursor-pointer hover:bg-gray-100 transition-colors ${sortField === 'reference' ? 'text-[#0078D7]' : ''}`}
-                    onClick={() => handleSort('reference')}
-                  >
-                    Reference{getSortIcon('reference')}
-                  </TableHead>
-                  <TableHead className="font-bold">Remarks</TableHead>
-                  {isAdmin && <TableHead className="font-bold">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPayments.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-gray-500 font-normal">
-                      No payments found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredPayments.map((payment, index) => {
-                    const isSelected = selectedPaymentIds.has(payment.id);
-                    const isNegative = payment.amount < 0;
-                    
-                    // Determine row background color
-                    let rowClass = '';
-                    if (isNegative) {
-                      // Negative amount: soft light yellow background overrides zebra striping
-                      rowClass = 'bg-[#FFF9C4]';
-                    } else if (isSelected) {
-                      // Selected: blue background
-                      rowClass = 'bg-blue-50';
-                    } else {
-                      // Normal zebra striping
-                      rowClass = index % 2 === 0 ? 'bg-[#E8F5E9]' : '';
-                    }
-                    
-                    // Determine hover class
-                    let hoverClass = '';
-                    if (isNegative) {
-                      // Negative amount: slightly darker yellow on hover
-                      hoverClass = 'hover:bg-[#FFF59D]';
-                    } else if (isSelected) {
-                      // Selected: darker blue on hover
-                      hoverClass = 'hover:bg-blue-100';
-                    } else {
-                      // Normal hover
-                      hoverClass = index % 2 === 0 ? 'hover:bg-[#C8E6C9]' : 'hover:bg-gray-50';
-                    }
-                    
-                    return (
-                      <TableRow 
-                        key={payment.id}
-                        className={`${rowClass} ${hoverClass} transition-colors`}
-                      >
-                        {isAdmin && (
-                          <TableCell>
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={(checked) => handleSelectPayment(payment.id, checked as boolean)}
-                              aria-label={`Select payment ${payment.id}`}
-                            />
-                          </TableCell>
-                        )}
-                        <TableCell className="font-normal">{payment.date}</TableCell>
-                        <TableCell className="font-normal">{getProjectName(payment.projectId)}</TableCell>
-                        <TableCell className={`font-normal ${isNegative ? 'text-[#FF0000]' : ''}`}>
-                          {formatCurrency(payment.amount)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={payment.paymentMode === PaymentMode.account ? 'default' : 'secondary'}
-                            className={payment.paymentMode === PaymentMode.account ? 'bg-green-100 text-green-800 font-normal' : 'bg-gray-100 text-gray-800 font-normal'}
-                          >
-                            {payment.paymentMode === PaymentMode.account ? 'Account' : 'Cash'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-normal">{payment.reference || '–'}</TableCell>
-                        <TableCell className="font-normal">{payment.remarks || '–'}</TableCell>
-                        {isAdmin && (
-                          <TableCell>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEdit(payment)}
-                                title="Edit payment"
-                              >
-                                <Pencil className="h-4 w-4 text-[#0078D7]" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDelete(payment.id)}
-                                title="Delete payment"
-                              >
-                                <Trash2 className="h-4 w-4 text-[#D32F2F]" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Edit Password Modal */}
+      {canManage && (
+        <PasswordConfirmModal
+          open={showEditPasswordDialog}
+          onOpenChange={setShowEditPasswordDialog}
+          onConfirm={confirmEdit}
+          title="Confirm Edit"
+          description="Please enter your password to confirm payment update."
+          confirmText="Confirm Update"
+          isPending={updatePayment.isPending}
+        />
+      )}
 
-      <Dialog open={isFormOpen} onOpenChange={(open) => {
-        setIsFormOpen(open);
-        if (!open) resetForm();
-      }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-[#E8F5E9] border-[#28A745] border-2 rounded-lg shadow-lg">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-[#333333]">
-              {editingPayment ? 'Edit Payment' : 'New Payment'}
-            </DialogTitle>
-            <p className="text-sm text-gray-500 font-normal">Record a new payment for a project</p>
-          </DialogHeader>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="projectId" className="text-sm font-normal text-[#333333]">
-                Project <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={formData.projectId}
-                onValueChange={(value) => setFormData({ ...formData, projectId: value })}
-              >
-                <SelectTrigger className="mt-1 rounded-md h-10 font-normal">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map(project => (
-                    <SelectItem key={project.id} value={project.id} className="font-normal">
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      {/* Delete Confirmation Modal */}
+      {canManage && (
+        <PasswordConfirmModal
+          open={!!deleteConfirmPayment}
+          onOpenChange={(open) => {
+            if (!open) setDeleteConfirmPayment(null);
+          }}
+          onConfirm={confirmDelete}
+          title="Confirm Delete"
+          description="Are you sure you want to delete this payment? This action cannot be undone."
+          confirmText="Delete Payment"
+          isPending={deletePayment.isPending}
+        />
+      )}
 
-            <div>
-              <Label htmlFor="paymentDate" className="text-sm font-normal text-[#333333]">
-                Date <span className="text-red-500">*</span>
-              </Label>
-              <DateInput
-                id="paymentDate"
-                value={formData.paymentDate}
-                onChange={(value) => setFormData({ ...formData, paymentDate: value })}
-                placeholder="dd-mm-yyyy"
-                required
-                className="mt-1 h-10 font-normal"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="paymentAmount" className="text-sm font-normal text-[#333333]">
-                Amount <span className="text-red-500">*</span>
-              </Label>
-              <div className="flex items-center mt-1 border border-gray-300 rounded-md h-10 px-3">
-                <span className="text-gray-600 mr-2 font-normal">₹</span>
-                <Input
-                  id="paymentAmount"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={formData.paymentAmount}
-                  onChange={(e) => setFormData({ ...formData, paymentAmount: parseFloat(e.target.value) || 0 })}
-                  required
-                  className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0 font-normal"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="paymentMode" className="text-sm font-normal text-[#333333]">
-                Payment Mode <span className="text-red-500">*</span>
-              </Label>
-              <div className="flex gap-2 mt-2">
-                <Button
-                  type="button"
-                  variant={formData.paymentMode === PaymentMode.account ? 'default' : 'outline'}
-                  className={`flex-1 rounded-full h-12 font-normal ${
-                    formData.paymentMode === PaymentMode.account
-                      ? 'bg-[#28A745] hover:bg-[#218838] text-white'
-                      : 'bg-white text-gray-700 border-gray-300'
-                  }`}
-                  onClick={() => setFormData({ ...formData, paymentMode: PaymentMode.account })}
-                >
-                  Account
-                </Button>
-                <Button
-                  type="button"
-                  variant={formData.paymentMode === PaymentMode.cash ? 'default' : 'outline'}
-                  className={`flex-1 rounded-full h-12 font-normal ${
-                    formData.paymentMode === PaymentMode.cash
-                      ? 'bg-[#28A745] hover:bg-[#218838] text-white'
-                      : 'bg-white text-gray-700 border-gray-300'
-                  }`}
-                  onClick={() => setFormData({ ...formData, paymentMode: PaymentMode.cash })}
-                >
-                  Cash
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="reference" className="text-sm font-normal text-[#333333]">
-                Reference
-              </Label>
-              <Input
-                id="reference"
-                type="text"
-                placeholder="Enter reference"
-                value={formData.reference}
-                onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-                className="mt-1 rounded-md h-10 font-normal"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="remarks" className="text-sm font-normal text-[#333333]">
-                Remarks
-              </Label>
-              <Textarea
-                id="remarks"
-                placeholder="Enter any remarks"
-                value={formData.remarks}
-                onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                className="mt-1 rounded-md font-normal"
-                rows={4}
-              />
-            </div>
-
-            <DialogFooter className="gap-2 pt-4 flex justify-end sticky bottom-0 bg-[#E8F5E9] pb-4">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setIsFormOpen(false)}
-                className="rounded-md font-normal"
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit" 
-                className="bg-[#28A745] hover:bg-[#218838] text-white rounded-md font-normal"
-                disabled={addPayment.isPending || updatePayment.isPending}
-              >
-                {addPayment.isPending || updatePayment.isPending ? 'Saving...' : 'Save'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
-        <DialogContent className="max-w-md bg-white rounded-lg shadow-lg">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-[#333333]">
-              Confirm Bulk Delete
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600 font-normal">
-              You are about to delete {selectedPaymentIds.size} selected payment{selectedPaymentIds.size > 1 ? 's' : ''}. This action cannot be undone. Please enter your password to confirm bulk deletion.
-            </p>
-            
-            <div>
-              <Label htmlFor="bulkDeletePassword" className="text-sm font-normal text-[#333333]">
-                Enter Password <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="bulkDeletePassword"
-                type="password"
-                placeholder="Please enter your password to confirm bulk deletion"
-                value={bulkDeletePassword}
-                onChange={(e) => setBulkDeletePassword(e.target.value)}
-                className="mt-1 rounded-md h-10 font-normal"
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => {
-                setIsBulkDeleteDialogOpen(false);
-                setBulkDeletePassword('');
-              }}
-              className="rounded-md font-normal"
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="button" 
-              className="bg-[#D32F2F] hover:bg-[#B71C1C] text-white rounded-md font-normal"
-              onClick={confirmBulkDelete}
-              disabled={deletePayment.isPending}
-            >
-              {deletePayment.isPending ? 'Deleting...' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Bulk Delete Confirmation Modal */}
+      {canManage && (
+        <PasswordConfirmModal
+          open={showBulkDeleteDialog}
+          onOpenChange={setShowBulkDeleteDialog}
+          onConfirm={handleBulkDelete}
+          title="Confirm Bulk Delete"
+          description={`Are you sure you want to delete ${selectedPayments.length} selected payment(s)? This action cannot be undone.`}
+          confirmText="Delete Payments"
+          isPending={bulkDeletePayments.isPending}
+        />
+      )}
     </div>
   );
 }

@@ -1,22 +1,25 @@
-import ReactDOM from 'react-dom/client';
-import { InternetIdentityProvider } from './hooks/useInternetIdentity';
-import { initEditor } from './hooks/useEditor';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import App from './App';
-import './index.css';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import { InternetIdentityProvider } from "./hooks/useInternetIdentity";
+import "../index.css";
+
+BigInt.prototype.toJSON = function () {
+  return this.toString();
+};
+
+declare global {
+  interface BigInt {
+    toJSON(): string;
+  }
+}
 
 const queryClient = new QueryClient();
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => initEditor());
-} else {
-    initEditor();
-}
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-    <QueryClientProvider client={queryClient}>
-        <InternetIdentityProvider>
-            <App />
-        </InternetIdentityProvider>
-    </QueryClientProvider>
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <QueryClientProvider client={queryClient}>
+    <InternetIdentityProvider>
+      <App />
+    </InternetIdentityProvider>
+  </QueryClientProvider>,
 );

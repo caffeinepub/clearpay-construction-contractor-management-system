@@ -2,7 +2,12 @@
   "Accordion": {
     "import": "@/components/ui/accordion",
     "desc": "A vertically stacked set of interactive headings that each reveal a section of content.",
-    "exports": ["Accordion", "AccordionItem", "AccordionTrigger", "AccordionContent"],
+    "exports": [
+      "Accordion",
+      "AccordionItem",
+      "AccordionTrigger",
+      "AccordionContent"
+    ],
     "asChildExports": ["AccordionTrigger"]
   },
   "AlertDialog": {
@@ -50,7 +55,9 @@
     "exports": ["Badge", "badgeVariants"],
     "exportVariants": {
       "Badge": {
-        "variants": { "variant": ["default", "outline", "secondary", "destructive"] },
+        "variants": {
+          "variant": ["default", "outline", "secondary", "destructive"]
+        },
         "defaultVariants": { "variant": "default" }
       }
     }
@@ -76,7 +83,14 @@
     "exportVariants": {
       "Button": {
         "variants": {
-          "variant": ["default", "secondary", "destructive", "outline", "ghost", "link"],
+          "variant": [
+            "default",
+            "secondary",
+            "destructive",
+            "outline",
+            "ghost",
+            "link"
+          ],
           "size": ["sm", "default", "lg", "icon"]
         },
         "defaultVariants": { "variant": "default", "size": "default" }
@@ -91,12 +105,26 @@
   "Card": {
     "import": "@/components/ui/card",
     "desc": "Displays a card with header, content, and footer.",
-    "exports": ["Card", "CardHeader", "CardFooter", "CardTitle", "CardAction", "CardDescription", "CardContent"]
+    "exports": [
+      "Card",
+      "CardHeader",
+      "CardFooter",
+      "CardTitle",
+      "CardAction",
+      "CardDescription",
+      "CardContent"
+    ]
   },
   "Carousel": {
     "import": "@/components/ui/carousel",
     "desc": "A carousel with motion and swipe built using Embla.",
-    "exports": ["Carousel", "CarouselContent", "CarouselItem", "CarouselPrevious", "CarouselNext"]
+    "exports": [
+      "Carousel",
+      "CarouselContent",
+      "CarouselItem",
+      "CarouselPrevious",
+      "CarouselNext"
+    ]
   },
   "Chart": {
     "import": "@/components/ui/chart",
@@ -137,7 +165,7 @@
   },
   "ContextMenu": {
     "import": "@/components/ui/context-menu",
-    "desc": "Displays a menu to the user — such as a set of actions or functions — triggered by a button.",
+    "desc": "Displays a menu to the user â such as a set of actions or functions â triggered by a button.",
     "exports": [
       "ContextMenu",
       "ContextMenuTrigger",
@@ -193,7 +221,7 @@
   },
   "DropdownMenu": {
     "import": "@/components/ui/dropdown-menu",
-    "desc": "Displays a menu to the user — such as a set of actions or functions — triggered by a button.",
+    "desc": "Displays a menu to the user â such as a set of actions or functions â triggered by a button.",
     "exports": [
       "DropdownMenu",
       "DropdownMenuPortal",
@@ -236,7 +264,12 @@
   "InputOTP": {
     "import": "@/components/ui/input-otp",
     "desc": "Accessible one-time password component with copy paste functionality.",
-    "exports": ["InputOTP", "InputOTPGroup", "InputOTPSlot", "InputOTPSeparator"]
+    "exports": [
+      "InputOTP",
+      "InputOTPGroup",
+      "InputOTPSlot",
+      "InputOTPSeparator"
+    ]
   },
   "Input": {
     "import": "@/components/ui/input",
@@ -313,7 +346,7 @@
   },
   "RadioGroup": {
     "import": "@/components/ui/radio-group",
-    "desc": "A set of checkable buttons—known as radio buttons—where no more than one of the buttons can be checked at a time.",
+    "desc": "A set of checkable buttonsâknown as radio buttonsâwhere no more than one of the buttons can be checked at a time.",
     "exports": ["RadioGroup", "RadioGroupItem"]
   },
   "Resizable": {
@@ -328,7 +361,7 @@
   },
   "Select": {
     "import": "@/components/ui/select",
-    "desc": "Displays a list of options for the user to pick from—triggered by a button.",
+    "desc": "Displays a list of options for the user to pick fromâtriggered by a button.",
     "exports": [
       "Select",
       "SelectContent",
@@ -394,7 +427,10 @@
     ],
     "exportVariants": {
       "SidebarMenuButton": {
-        "variants": { "variant": ["default", "outline"], "size": ["default", "sm", "lg"] },
+        "variants": {
+          "variant": ["default", "outline"],
+          "size": ["default", "sm", "lg"]
+        },
         "defaultVariants": { "variant": "default", "size": "default" }
       }
     }
@@ -435,7 +471,7 @@
   },
   "Tabs": {
     "import": "@/components/ui/tabs",
-    "desc": "A set of layered sections of content—known as tab panels—that are displayed one at a time.",
+    "desc": "A set of layered sections of contentâknown as tab panelsâthat are displayed one at a time.",
     "exports": ["Tabs", "TabsList", "TabsTrigger", "TabsContent"],
     "asChildExports": ["TabsTrigger"]
   },
@@ -466,7 +502,12 @@
   "Tooltip": {
     "import": "@/components/ui/tooltip",
     "desc": "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it.",
-    "exports": ["Tooltip", "TooltipTrigger", "TooltipContent", "TooltipProvider"],
+    "exports": [
+      "Tooltip",
+      "TooltipTrigger",
+      "TooltipContent",
+      "TooltipProvider"
+    ],
     "asChildExports": ["TooltipTrigger"]
   }
 }

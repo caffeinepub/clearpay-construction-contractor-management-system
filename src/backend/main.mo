@@ -1,21 +1,26 @@
-import AccessControl "authorization/access-control";
 import Map "mo:core/Map";
-import Iter "mo:core/Iter";
 import List "mo:core/List";
 import Text "mo:core/Text";
+import Iter "mo:core/Iter";
+import Nat "mo:core/Nat";
+import Runtime "mo:core/Runtime";
 import Principal "mo:core/Principal";
 import Time "mo:core/Time";
 import Float "mo:core/Float";
-import Nat "mo:core/Nat";
-import Order "mo:core/Order";
-import Runtime "mo:core/Runtime";
 import OutCall "http-outcalls/outcall";
-import Bool "mo:core/Bool";
-import Int "mo:core/Int";
-import Migration "migration";
+import Order "mo:core/Order";
+import Authorization "authorization/access-control";
+import MixinStorage "blob-storage/Mixin";
+import Blob "mo:core/Blob";
+import Array "mo:core/Array";
+import Nat8 "mo:core/Nat8";
 
-(with migration = Migration.run)
+
+
+
 actor {
+  include MixinStorage();
+
   type BillKey = {
     projectId : Text;
     billNumber : Text;
@@ -27,13 +32,14 @@ actor {
       switch (projectCmp) {
         case (#less) { #less };
         case (#greater) { #greater };
-        case (#equal) { Text.compare(k1.billNumber, k2.billNumber) };
+        case (#equal) {
+          Text.compare(k1.billNumber, k2.billNumber);
+        };
       };
     };
   };
 
-  type UserRole = AccessControl.UserRole;
-
+  type UserRole = Authorization.UserRole;
   type Project = {
     id : Text;
     name : Text;
@@ -51,7 +57,13 @@ actor {
   };
 
   module Project {
-    public func compareByOutstandingAndName(a : Project, b : Project, useOutstanding : Bool, billData : Map.Map<BillKey, Bill>, paymentData : Map.Map<Text, Payment>) : Order.Order {
+    public func compareByOutstandingAndName(
+      a : Project,
+      b : Project,
+      useOutstanding : Bool,
+      billData : Map.Map<BillKey, Bill>,
+      paymentData : Map.Map<Text, Payment>,
+    ) : Order.Order {
       if (useOutstanding) {
         let outstandingA = calculateOutstanding(a.id, billData, paymentData);
         let outstandingB = calculateOutstanding(b.id, billData, paymentData);
@@ -62,7 +74,6 @@ actor {
       Text.compare(a.name, b.name);
     };
 
-    // Helper function to calculate outstanding amount for a project
     func calculateOutstanding(projectId : Text, billData : Map.Map<BillKey, Bill>, paymentData : Map.Map<Text, Payment>) : Float {
       var totalBills = 0.0;
       var totalPayments = 0.0;
@@ -83,7 +94,7 @@ actor {
     };
   };
 
-  let projects = Map.empty<Text, Project>();
+  stable var projects = Map.empty<Text, Project>();
 
   type Bill = {
     projectId : Text;
@@ -117,7 +128,7 @@ actor {
     };
   };
 
-  let bills = Map.empty<BillKey, Bill>();
+  stable var bills = Map.empty<BillKey, Bill>();
 
   type PaymentMode = {
     #account;
@@ -134,7 +145,7 @@ actor {
     remarks : ?Text;
   };
 
-  let payments = Map.empty<Text, Payment>();
+  stable var payments = Map.empty<Text, Payment>();
 
   type Client = {
     id : Text;
@@ -151,7 +162,7 @@ actor {
     };
   };
 
-  let clients = Map.empty<Text, Client>();
+  stable var clients = Map.empty<Text, Client>();
 
   type UserProfile = {
     fullName : Text;
@@ -159,9 +170,14 @@ actor {
     email : Text;
     role : UserRole;
     active : Bool;
+    accessProjects : [Text];
   };
 
-  let userProfiles = Map.empty<Principal, UserProfile>();
+  stable var userProfiles = Map.empty<Principal, UserProfile>();
+
+  let DEFAULT_ADMIN_EMAIL = "jogaraoseri.er@mktconstructions.com";
+  let DEFAULT_ADMIN_CONTACT = "7575944949";
+  let DEFAULT_ADMIN_NAME = "Seri Jogarao";
 
   type ProjectFilters = {
     search : ?Text;
@@ -196,20 +212,400 @@ actor {
     reference : ?Text;
   };
 
-  type UserFilters = {
-    name : ?Text;
-    contact : ?Text;
-    email : ?Text;
-    role : ?UserRole;
+  let accessControlState = Authorization.initState();
+
+  type AdminPasswordData = {
+    password : Text;
+    hintQuestion : ?Text;
+    hintAnswer : ?Text;
   };
 
-  let accessControlState = AccessControl.initState();
+  stable var adminPasswordData : ?AdminPasswordData = ?{
+    password = "3554";
+    hintQuestion = null;
+    hintAnswer = null;
+  };
+
+  stable var isInitialized : Bool = false;
+  stable var defaultAdminPrincipal : ?Principal = null;
+  stable var userPrincipalCounter : Nat = 0;
+
+  func isDefaultAdmin(email : Text) : Bool {
+    Text.equal(email, DEFAULT_ADMIN_EMAIL);
+  };
+
+  func isDefaultAdminByPrincipal(principal : Principal) : Bool {
+    switch (userProfiles.get(principal)) {
+      case (null) { false };
+      case (?profile) { isDefaultAdmin(profile.email) };
+    };
+  };
+
+  func isAdminRole(principal : Principal) : Bool {
+    switch (userProfiles.get(principal)) {
+      case (null) { false };
+      case (?profile) {
+        switch (profile.role) {
+          case (#admin) { true };
+          case (_) { false };
+        };
+      };
+    };
+  };
+
+  func isAdminUser(principal : Principal) : Bool {
+    if (isDefaultAdminByPrincipal(principal)) {
+      return true;
+    };
+    if (isAdminRole(principal)) {
+      return true;
+    };
+    Authorization.isAdmin(accessControlState, principal);
+  };
+
+  func findPrincipalByEmail(email : Text) : ?Principal {
+    for ((principal, profile) in userProfiles.entries()) {
+      if (Text.equal(profile.email, email)) {
+        return ?principal;
+      };
+    };
+    null;
+  };
+
+  func isAuthenticatedUser(caller : Principal) : Bool {
+    if (caller.isAnonymous()) {
+      return false;
+    };
+    if (isDefaultAdminByPrincipal(caller)) {
+      return true;
+    };
+    if (isAdminRole(caller)) {
+      return true;
+    };
+    Authorization.hasPermission(accessControlState, caller, #user) or Authorization.hasPermission(accessControlState, caller, #admin);
+  };
+
+  func isUserActive(caller : Principal) : Bool {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return true;
+    };
+    if (isAdminRole(caller)) {
+      return true;
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return true;
+    };
+    switch (userProfiles.get(caller)) {
+      case (null) { false };
+      case (?profile) { profile.active };
+    };
+  };
+
+  func requireAdmin(caller : Principal) : () {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return;
+    };
+    if (isAdminRole(caller)) {
+      return;
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return;
+    };
+    Runtime.trap("Unauthorized: Only admins can perform this action");
+  };
+
+  func requireAuthenticated(caller : Principal) : () {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return;
+    };
+    if (isAdminRole(caller)) {
+      return;
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return;
+    };
+    if (not isAuthenticatedUser(caller)) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+    if (not isUserActive(caller)) {
+      Runtime.trap("Your account is not active. Please contact the administrator.");
+    };
+  };
+
+  func requireAdminOrMasterAdmin(caller : Principal) : () {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return;
+    };
+    if (isAdminRole(caller)) {
+      return;
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return;
+    };
+    Runtime.trap("Unauthorized: Only admins can access this module");
+  };
+
+  func validateAdminPassword(password : Text) : () {
+    switch (adminPasswordData) {
+      case (null) {
+        Runtime.trap("Admin password not initialized");
+      };
+      case (?data) {
+        if (not Text.equal(data.password, password)) {
+          Runtime.trap("Invalid password");
+        };
+      };
+    };
+  };
+
+  func generateUniquePrincipal() : Principal {
+    userPrincipalCounter += 1;
+    let timestamp = Time.now();
+    let counterBytes = Nat8.fromNat(userPrincipalCounter % 256);
+    let timestampText = timestamp.toText();
+
+    let seedText = "user-" # userPrincipalCounter.toText() # "-" # timestampText;
+    let seedBytes = seedText.encodeUtf8().toArray();
+
+    let principalBytes = Array.tabulate(29, func(i) {
+      if (i < seedBytes.size()) {
+        seedBytes[i];
+      } else {
+        counterBytes;
+      };
+    });
+
+    Blob.fromArray(principalBytes).fromBlob();
+  };
+
+  func ensureDefaultAdmin() : () {
+    switch (findPrincipalByEmail(DEFAULT_ADMIN_EMAIL)) {
+      case (null) {
+        let defaultAdminProfile : UserProfile = {
+          fullName = DEFAULT_ADMIN_NAME;
+          contact = DEFAULT_ADMIN_CONTACT;
+          email = DEFAULT_ADMIN_EMAIL;
+          role = #admin;
+          active = true;
+          accessProjects = [];
+        };
+
+        let adminPrincipal = switch (defaultAdminPrincipal) {
+          case (null) {
+            let newPrincipal = Principal.fromText("2vxsx-fae");
+            defaultAdminPrincipal := ?newPrincipal;
+            newPrincipal;
+          };
+          case (?existing) { existing };
+        };
+
+        userProfiles.add(adminPrincipal, defaultAdminProfile);
+        
+        if (not isInitialized) {
+          Authorization.initialize(accessControlState, adminPrincipal);
+        };
+      };
+      case (?existingPrincipal) {
+        defaultAdminPrincipal := ?existingPrincipal;
+        
+        if (not isInitialized) {
+          Authorization.initialize(accessControlState, existingPrincipal);
+        };
+      };
+    };
+  };
+
+  func removeDuplicateAdmins() : () {
+    var firstAdminPrincipal : ?Principal = null;
+    let duplicatePrincipals = List.empty<Principal>();
+
+    for ((principal, profile) in userProfiles.entries()) {
+      if (Text.equal(profile.email, DEFAULT_ADMIN_EMAIL)) {
+        switch (firstAdminPrincipal) {
+          case (null) {
+            firstAdminPrincipal := ?principal;
+          };
+          case (?_) {
+            duplicatePrincipals.add(principal);
+          };
+        };
+      };
+    };
+
+    for (duplicatePrincipal in duplicatePrincipals.values()) {
+      userProfiles.remove(duplicatePrincipal);
+    };
+
+    switch (firstAdminPrincipal) {
+      case (null) {};
+      case (?adminPrincipal) {
+        let correctedProfile : UserProfile = {
+          fullName = DEFAULT_ADMIN_NAME;
+          contact = "+91 " # DEFAULT_ADMIN_CONTACT;
+          email = DEFAULT_ADMIN_EMAIL;
+          role = #admin;
+          active = true;
+          accessProjects = [];
+        };
+        userProfiles.add(adminPrincipal, correctedProfile);
+        defaultAdminPrincipal := ?adminPrincipal;
+      };
+    };
+  };
+
+  func getUserAccessProjects(caller : Principal) : [Text] {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return [];
+    };
+    if (isAdminRole(caller)) {
+      return [];
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return [];
+    };
+    switch (userProfiles.get(caller)) {
+      case (null) { [] };
+      case (?profile) { profile.accessProjects };
+    };
+  };
+
+  func hasProjectAccess(caller : Principal, projectId : Text) : Bool {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return true;
+    };
+    if (isAdminRole(caller)) {
+      return true;
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return true;
+    };
+
+    let accessProjects = getUserAccessProjects(caller);
+    if (accessProjects.size() == 0) {
+      return true;
+    };
+
+    accessProjects.find<Text>(func(pid) { Text.equal(pid, projectId) }) != null;
+  };
+
+  func filterProjectsByAccess(caller : Principal, projectsList : [Project]) : [Project] {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return projectsList;
+    };
+    if (isAdminRole(caller)) {
+      return projectsList;
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return projectsList;
+    };
+
+    let accessProjects = getUserAccessProjects(caller);
+    if (accessProjects.size() == 0) {
+      return projectsList;
+    };
+
+    projectsList.filter<Project>(func(project) {
+      accessProjects.find<Text>(func(pid) { Text.equal(pid, project.id) }) != null;
+    });
+  };
+
+  func filterBillsByAccess(caller : Principal, billsList : [Bill]) : [Bill] {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return billsList;
+    };
+    if (isAdminRole(caller)) {
+      return billsList;
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return billsList;
+    };
+
+    let accessProjects = getUserAccessProjects(caller);
+    if (accessProjects.size() == 0) {
+      return billsList;
+    };
+
+    billsList.filter<Bill>(func(bill) {
+      accessProjects.find<Text>(func(pid) { Text.equal(pid, bill.projectId) }) != null;
+    });
+  };
+
+  func filterPaymentsByAccess(caller : Principal, paymentsList : [Payment]) : [Payment] {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return paymentsList;
+    };
+    if (isAdminRole(caller)) {
+      return paymentsList;
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return paymentsList;
+    };
+
+    let accessProjects = getUserAccessProjects(caller);
+    if (accessProjects.size() == 0) {
+      return paymentsList;
+    };
+
+    paymentsList.filter<Payment>(func(payment) {
+      accessProjects.find<Text>(func(pid) { Text.equal(pid, payment.projectId) }) != null;
+    });
+  };
+
+  system func preupgrade() {
+  };
+
+  system func postupgrade() {
+    // Always ensure default admin exists after every upgrade
+    ensureDefaultAdmin();
+    removeDuplicateAdmins();
+    isInitialized := true;
+  };
 
   public shared ({ caller }) func initializeAccessControl() : async () {
-    AccessControl.initialize(accessControlState, caller);
+    if (not isInitialized) {
+      ensureDefaultAdmin();
+      removeDuplicateAdmins();
+      isInitialized := true;
+    };
+  };
+
+  public query ({ caller }) func getCallerUserRole() : async UserRole {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return #admin;
+    };
+    if (isAdminRole(caller)) {
+      return #admin;
+    };
+    Authorization.getUserRole(accessControlState, caller);
+  };
+
+  public shared ({ caller }) func assignCallerUserRole(user : Principal, role : UserRole) : async () {
+    requireAdmin(caller);
+    Authorization.assignRole(accessControlState, caller, user, role);
+  };
+
+  public query ({ caller }) func isCallerAdmin() : async Bool {
+    if (isDefaultAdminByPrincipal(caller)) {
+      return true;
+    };
+    if (isAdminRole(caller)) {
+      return true;
+    };
+    Authorization.isAdmin(accessControlState, caller);
+  };
+
+  public query ({ caller }) func getDefaultAdminProfile() : async ?UserProfile {
+    switch (findPrincipalByEmail(DEFAULT_ADMIN_EMAIL)) {
+      case (null) { null };
+      case (?principal) { userProfiles.get(principal) };
+    };
   };
 
   public query ({ caller }) func hasActiveProfile(email : Text) : async Bool {
+    if (isDefaultAdmin(email)) {
+      return true;
+    };
+
     if (userProfiles.isEmpty()) {
       return false;
     };
@@ -219,304 +615,335 @@ actor {
         return true;
       };
     };
-
     return false;
   };
 
   public query ({ caller }) func validateActiveUser(email : Text) : async () {
-    if (userProfiles.isEmpty()) {
-      Runtime.trap("User profile not found and no active users exist");
+    if (isDefaultAdmin(email)) {
+      return;
     };
 
     var foundProfile : ?UserProfile = null;
+    var hasAnyUsers = false;
+
     for ((_, profile) in userProfiles.entries()) {
+      hasAnyUsers := true;
       if (Text.equal(profile.email, email)) {
         foundProfile := ?profile;
       };
     };
 
+    if (not hasAnyUsers) {
+      Runtime.trap("User profile not found and no active users exist");
+    };
+
     switch (foundProfile) {
       case (null) {
-        var hasAnyActive = false;
-        for ((_, profile) in userProfiles.entries()) {
-          if (profile.active) {
-            hasAnyActive := true;
-          };
-        };
-
-        if (hasAnyActive) {
-          Runtime.trap("Your email ID is not activated.");
-        } else {
-          Runtime.trap("User profile not found and no active users exist");
-        };
+        Runtime.trap("Your account is not active. Please contact the administrator.");
       };
       case (?profile) {
         if (not profile.active) {
-          Runtime.trap("Your email ID is not activated.");
+          Runtime.trap("Your account is not active. Please contact the administrator.");
         };
       };
     };
   };
 
   public query ({ caller }) func hasProfileSetup() : async Bool {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access profiles");
+    if (caller.isAnonymous()) {
+      return false;
     };
+
     switch (userProfiles.get(caller)) {
       case (null) { false };
       case (?_) { true };
     };
   };
 
-  public query ({ caller }) func getCallerUserRole() : async UserRole {
-    AccessControl.getUserRole(accessControlState, caller);
-  };
-
-  public shared ({ caller }) func assignCallerUserRole(user : Principal, role : UserRole) : async () {
-    AccessControl.assignRole(accessControlState, caller, user, role);
-  };
-
-  public query ({ caller }) func isCallerAdmin() : async Bool {
-    AccessControl.isAdmin(accessControlState, caller);
-  };
-
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access profiles");
+    if (caller.isAnonymous()) {
+      return null;
     };
+
     userProfiles.get(caller);
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    if (isDefaultAdminByPrincipal(caller)) {
+      return userProfiles.get(user);
+    };
+    if (isAdminRole(caller)) {
+      return userProfiles.get(user);
+    };
+    if (Authorization.isAdmin(accessControlState, caller)) {
+      return userProfiles.get(user);
+    };
+
+    if (caller != user) {
       Runtime.trap("Unauthorized: Can only view your own profile");
     };
     userProfiles.get(user);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Anonymous users cannot save profiles");
     };
+
     userProfiles.add(caller, profile);
+
+    if (not isInitialized) {
+      ensureDefaultAdmin();
+      removeDuplicateAdmins();
+      isInitialized := true;
+    };
   };
 
-  public query ({ caller }) func getAllUsers() : async [(Principal, UserProfile)] {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can view all users");
+  public shared ({ caller }) func linkMasterAdminPrincipal() : async Bool {
+    // Reject anonymous callers
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Anonymous users cannot link profiles");
     };
-    userProfiles.entries().toArray();
+
+    // Check if caller already has a profile
+    switch (userProfiles.get(caller)) {
+      case (?_) {
+        // Caller already has a profile, no linking needed
+        return false;
+      };
+      case (null) {
+        // Caller has no profile, check for placeholder admin
+        let placeholderPrincipal = Principal.fromText("2vxsx-fae");
+        
+        switch (userProfiles.get(placeholderPrincipal)) {
+          case (null) {
+            // No placeholder profile exists
+            return false;
+          };
+          case (?placeholderProfile) {
+            // Check if this is the master admin profile
+            if (Text.equal(placeholderProfile.email, DEFAULT_ADMIN_EMAIL)) {
+              // Remove from placeholder principal
+              userProfiles.remove(placeholderPrincipal);
+              
+              // Add under real caller principal
+              userProfiles.add(caller, placeholderProfile);
+              
+              // Update defaultAdminPrincipal
+              defaultAdminPrincipal := ?caller;
+              
+              return true;
+            } else {
+              // Placeholder exists but not for master admin
+              return false;
+            };
+          };
+        };
+      };
+    };
   };
 
-  public query ({ caller }) func filterUsers(filters : UserFilters) : async [(Principal, UserProfile)] {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can filter users");
-    };
-
-    let filteredUsers = List.empty<(Principal, UserProfile)>();
-
-    for ((principal, profile) in userProfiles.entries()) {
-      let matchesName = switch (filters.name) {
-        case (null) { true };
-        case (?name) {
-          profile.fullName.toLower().contains(#text (name.toLower()));
-        };
-      };
-
-      let matchesContact = switch (filters.contact) {
-        case (null) { true };
-        case (?contact) {
-          profile.contact.contains(#text contact);
-        };
-      };
-
-      let matchesEmail = switch (filters.email) {
-        case (null) { true };
-        case (?email) {
-          profile.email.toLower().contains(#text (email.toLower()));
-        };
-      };
-
-      let matchesRole = switch (filters.role) {
-        case (null) { true };
-        case (?role) { profile.role == role };
-      };
-
-      if (matchesName and matchesContact and matchesEmail and matchesRole) {
-        filteredUsers.add((principal, profile));
-      };
-    };
-
-    filteredUsers.toArray();
-  };
-
-  public shared ({ caller }) func addUser(user : Principal, profile : UserProfile) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can add users");
-    };
-
-    if (userProfiles.containsKey(user)) {
-      Runtime.trap("User already exists");
-    };
+  public shared ({ caller }) func addUser(profile : UserProfile) : async Principal {
+    requireAdminOrMasterAdmin(caller);
 
     for ((_, existingProfile) in userProfiles.entries()) {
       if (Text.equal(existingProfile.email, profile.email)) {
-        Runtime.trap("This email ID is already registered.");
+        Runtime.trap("User with this email already exists");
       };
     };
 
-    for ((_, existingProfile) in userProfiles.entries()) {
-      if (Text.equal(existingProfile.contact, profile.contact)) {
-        Runtime.trap("This mobile number is already registered.");
-      };
-    };
+    let newPrincipal = generateUniquePrincipal();
+    userProfiles.add(newPrincipal, profile);
 
-    userProfiles.add(user, profile);
-    AccessControl.assignRole(accessControlState, caller, user, profile.role);
+    removeDuplicateAdmins();
+
+    newPrincipal;
   };
 
-  public shared ({ caller }) func updateUser(user : Principal, profile : UserProfile) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can update users");
-    };
+  public query ({ caller }) func listUsers() : async [(Principal, UserProfile)] {
+    requireAdminOrMasterAdmin(caller);
 
-    switch (userProfiles.get(user)) {
-      case (null) { Runtime.trap("User not found") };
+    userProfiles.entries().toArray();
+  };
+
+  public shared ({ caller }) func updateUser(userPrincipal : Principal, profile : UserProfile) : async () {
+    requireAdminOrMasterAdmin(caller);
+
+    switch (userProfiles.get(userPrincipal)) {
+      case (null) {
+        Runtime.trap("User not found");
+      };
       case (?existingProfile) {
-        if (existingProfile.email != profile.email) {
-          for ((otherPrincipal, otherProfile) in userProfiles.entries()) {
-            if (otherPrincipal != user and Text.equal(otherProfile.email, profile.email)) {
-              Runtime.trap("This email ID is already registered.");
-            };
+        if (isDefaultAdmin(existingProfile.email)) {
+          Runtime.trap("Cannot modify default admin user");
+        };
+
+        for ((otherPrincipal, otherProfile) in userProfiles.entries()) {
+          if (otherPrincipal != userPrincipal and Text.equal(otherProfile.email, profile.email)) {
+            Runtime.trap("Email already in use by another user");
           };
         };
 
-        if (existingProfile.contact != profile.contact) {
-          for ((otherPrincipal, otherProfile) in userProfiles.entries()) {
-            if (otherPrincipal != user and Text.equal(otherProfile.contact, profile.contact)) {
-              Runtime.trap("This mobile number is already registered.");
-            };
+        userProfiles.add(userPrincipal, profile);
+      };
+    };
+    removeDuplicateAdmins();
+  };
+
+  public shared ({ caller }) func deleteUsers(password : Text, principalIds : [Text]) : async () {
+    requireAdminOrMasterAdmin(caller);
+    validateAdminPassword(password);
+
+    for (principalIdText in principalIds.vals()) {
+      let principalId = Principal.fromText(principalIdText);
+
+      switch (userProfiles.get(principalId)) {
+        case (null) {};
+        case (?profile) {
+          if (not isDefaultAdmin(profile.email)) {
+            userProfiles.remove(principalId);
           };
         };
+      };
+    };
 
-        userProfiles.add(user, profile);
-        if (existingProfile.role != profile.role) {
-          AccessControl.assignRole(accessControlState, caller, user, profile.role);
+    removeDuplicateAdmins();
+  };
+
+  public query ({ caller }) func isAdminPasswordSet() : async Bool {
+    requireAuthenticated(caller);
+
+    switch (adminPasswordData) {
+      case (null) { false };
+      case (?_) { true };
+    };
+  };
+
+  public query ({ caller }) func getHintQuestion() : async ?Text {
+    requireAuthenticated(caller);
+
+    switch (adminPasswordData) {
+      case (null) { null };
+      case (?data) { data.hintQuestion };
+    };
+  };
+
+  public shared ({ caller }) func setHintQuestionAndAnswer(question : Text, answer : Text) : async () {
+    requireAdmin(caller);
+
+    switch (adminPasswordData) {
+      case (null) {
+        Runtime.trap("Admin password not initialized");
+      };
+      case (?data) {
+        adminPasswordData := ?{
+          password = data.password;
+          hintQuestion = ?question;
+          hintAnswer = ?answer;
         };
       };
     };
   };
 
-  public shared ({ caller }) func deleteUser(user : Principal, password : Text) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can delete users");
-    };
+  public shared ({ caller }) func verifyHintAnswer(answer : Text) : async Text {
+    requireAdmin(caller);
 
-    if (password != "3554") {
-      Runtime.trap("Invalid password. User deletion not allowed.");
-    };
-
-    if (caller == user) {
-      Runtime.trap("Cannot delete your own account");
-    };
-
-    switch (userProfiles.get(user)) {
-      case (null) { Runtime.trap("User not found") };
-      case (?_) {
-        userProfiles.remove(user);
+    switch (adminPasswordData) {
+      case (null) {
+        Runtime.trap("Admin password not initialized");
       };
-    };
-  };
-
-  public shared ({ caller }) func toggleUserActiveStatus(user : Principal, active : Bool) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can toggle user active status");
-    };
-
-    switch (userProfiles.get(user)) {
-      case (null) { Runtime.trap("User not found") };
-      case (?profile) {
-        let updatedProfile = {
-          profile with active = active;
+      case (?data) {
+        switch (data.hintAnswer) {
+          case (null) {
+            Runtime.trap("Hint answer not set");
+          };
+          case (?storedAnswer) {
+            if (Text.equal(storedAnswer, answer)) {
+              return data.password;
+            } else {
+              Runtime.trap("Incorrect answer. Password cannot be shown.");
+            };
+          };
         };
-        userProfiles.add(user, updatedProfile);
       };
     };
   };
 
   public shared ({ caller }) func addProject(project : Project) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can add projects");
-    };
+    requireAdmin(caller);
+
     if (projects.containsKey(project.id)) {
       Runtime.trap("Project ID already exists");
     };
     projects.add(project.id, project);
   };
 
-  public shared ({ caller }) func updateProject(project : Project) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can update projects");
-    };
+  public shared ({ caller }) func updateProject(project : Project, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+
     switch (projects.get(project.id)) {
       case (null) { Runtime.trap("Project not found") };
       case (_) { projects.add(project.id, project) };
     };
   };
 
-  public shared ({ caller }) func deleteProject(id : Text) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can delete projects");
-    };
+  public shared ({ caller }) func deleteProject(id : Text, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+
     projects.remove(id);
   };
 
   public query ({ caller }) func getAllProjects() : async [Project] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view projects");
-    };
-    projects.values().toArray();
+    requireAuthenticated(caller);
+    let allProjects = projects.values().toArray();
+    filterProjectsByAccess(caller, allProjects);
   };
 
   public query ({ caller }) func filterProjects(filters : ProjectFilters) : async [Project] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can filter projects");
-    };
+    requireAuthenticated(caller);
 
     let filteredProjects = List.empty<Project>();
 
     for ((_, project) in projects.entries()) {
-      let matchesSearch = switch (filters.search) {
-        case (null) { true };
-        case (?search) {
-          let searchLower = search.toLower();
-          let nameMatches = project.name.toLower().contains(#text (searchLower));
-          let clientMatches = project.client.toLower().contains(#text (searchLower));
-          let locationMatches = project.location.toLower().contains(#text (searchLower));
-          let contactMatches = project.contactNumber.contains(#text (searchLower));
-          nameMatches or clientMatches or locationMatches or contactMatches;
+      if (hasProjectAccess(caller, project.id)) {
+        let matchesSearch = switch (filters.search) {
+          case (null) { true };
+          case (?search) {
+            let searchLower = search.toLower();
+            let nameMatches = project.name.toLower().contains(#text (searchLower));
+            let clientMatches = project.client.toLower().contains(#text (searchLower));
+            let locationMatches = project.location.toLower().contains(#text (searchLower));
+            let contactMatches = project.contactNumber.contains(#text (searchLower));
+            nameMatches or clientMatches or locationMatches or contactMatches;
+          };
         };
-      };
 
-      let matchesClient = switch (filters.client) {
-        case (null) { true };
-        case (?client) {
-          project.client.toLower().contains(#text (client.toLower()));
+        let matchesClient = switch (filters.client) {
+          case (null) { true };
+          case (?client) {
+            project.client.toLower().contains(#text (client.toLower()));
+          };
         };
-      };
 
-      let matchesMinPrice = switch (filters.minUnitPrice) {
-        case (null) { true };
-        case (?minPrice) { project.unitPrice >= minPrice };
-      };
+        let matchesMinPrice = switch (filters.minUnitPrice) {
+          case (null) { true };
+          case (?minPrice) { project.unitPrice >= minPrice };
+        };
 
-      let matchesMaxPrice = switch (filters.maxUnitPrice) {
-        case (null) { true };
-        case (?maxPrice) { project.unitPrice <= maxPrice };
-      };
+        let matchesMaxPrice = switch (filters.maxUnitPrice) {
+          case (null) { true };
+          case (?maxPrice) { project.unitPrice <= maxPrice };
+        };
 
-      if (matchesSearch and matchesClient and matchesMinPrice and matchesMaxPrice) {
-        filteredProjects.add(project);
+        if (matchesSearch and matchesClient and matchesMinPrice and matchesMaxPrice) {
+          filteredProjects.add(project);
+        };
       };
     };
 
@@ -524,9 +951,7 @@ actor {
   };
 
   public shared ({ caller }) func addBill(bill : Bill) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can add bills");
-    };
+    requireAdmin(caller);
 
     let key = {
       projectId = bill.projectId;
@@ -543,10 +968,9 @@ actor {
     };
   };
 
-  public shared ({ caller }) func updateBill(bill : Bill) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can update bills");
-    };
+  public shared ({ caller }) func updateBill(bill : Bill, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
 
     let key = {
       projectId = bill.projectId;
@@ -563,10 +987,9 @@ actor {
     };
   };
 
-  public shared ({ caller }) func deleteBill(projectId : Text, billNumber : Text) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can delete bills");
-    };
+  public shared ({ caller }) func deleteBill(projectId : Text, billNumber : Text, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
 
     let key = {
       projectId;
@@ -576,87 +999,106 @@ actor {
   };
 
   public query ({ caller }) func getAllBills() : async [Bill] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view bills");
+    requireAuthenticated(caller);
+    let allBills = bills.values().toArray();
+    filterBillsByAccess(caller, allBills);
+  };
+
+  public query ({ caller }) func getBillDetails(projectId : Text, billNumber : Text) : async ?Bill {
+    requireAuthenticated(caller);
+
+    let key = {
+      projectId;
+      billNumber;
     };
-    bills.values().toArray();
+
+    switch (bills.get(key)) {
+      case (null) { null };
+      case (?bill) {
+        if (hasProjectAccess(caller, bill.projectId)) {
+          ?bill;
+        } else {
+          null;
+        };
+      };
+    };
   };
 
   public query ({ caller }) func filterBills(billFilters : BillFilters) : async [Bill] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can filter bills");
-    };
+    requireAuthenticated(caller);
 
     let filteredBills = List.empty<Bill>();
 
     for ((_, bill) in bills.entries()) {
-      let matchesSearch = switch (billFilters.search) {
-        case (null) { true };
-        case (?search) {
-          let searchLower = search.toLower();
-          let descMatches = bill.description.toLower().contains(#text (searchLower));
-          let projectMatches = switch (billFilters.projectId) {
-            case (null) { false };
-            case (?projectId) { bill.projectId == projectId };
-          };
-          let minAmountOk = switch (billFilters.minAmount) {
-            case (null) { true };
-            case (?min) { bill.amount >= min };
-          };
-          let maxAmountOk = switch (billFilters.maxAmount) {
-            case (null) { true };
-            case (?max) { bill.amount <= max };
-          };
-          descMatches or projectMatches or (minAmountOk and maxAmountOk);
-        };
-      };
-
-      let matchesBlock = switch (billFilters.blockId) {
-        case (null) { true };
-        case (?block) {
-          switch (bill.blockId) {
-            case (null) { false };
-            case (?id) { id.contains(#text block) };
+      if (hasProjectAccess(caller, bill.projectId)) {
+        let matchesSearch = switch (billFilters.search) {
+          case (null) { true };
+          case (?search) {
+            let searchLower = bill.description.toLower();
+            let descMatches = bill.description.toLower().contains(#text (searchLower));
+            let projectMatches = switch (billFilters.projectId) {
+              case (null) { false };
+              case (?projectId) { bill.projectId == projectId };
+            };
+            let minAmountOk = switch (billFilters.minAmount) {
+              case (null) { true };
+              case (?min) { bill.amount >= min };
+            };
+            let maxAmountOk = switch (billFilters.maxAmount) {
+              case (null) { true };
+              case (?max) { bill.amount <= max };
+            };
+            descMatches or projectMatches or (minAmountOk and maxAmountOk);
           };
         };
-      };
 
-      let matchesBillNumber = switch (billFilters.billNumber) {
-        case (null) { true };
-        case (?billNum) {
-          Text.equal(bill.billNumber, billNum);
-        };
-      };
-
-      let matchesClient = switch (billFilters.client) {
-        case (null) { true };
-        case (?clientName) {
-          switch (projects.get(bill.projectId)) {
-            case (null) { false };
-            case (?project) {
-              project.client.toLower().contains(#text (clientName.toLower()));
+        let matchesBlock = switch (billFilters.blockId) {
+          case (null) { true };
+          case (?block) {
+            switch (bill.blockId) {
+              case (null) { false };
+              case (?id) { id.contains(#text block) };
             };
           };
         };
-      };
 
-      let matchesGst = switch (billFilters.includesGst) {
-        case (null) { true };
-        case (?gst) { bill.includesGst == gst };
-      };
+        let matchesBillNumber = switch (billFilters.billNumber) {
+          case (null) { true };
+          case (?billNum) {
+            Text.equal(bill.billNumber, billNum);
+          };
+        };
 
-      let matchesMaxAmount = switch (billFilters.maxAmount) {
-        case (null) { true };
-        case (?maxAmount) { bill.amount <= maxAmount };
-      };
+        let matchesClient = switch (billFilters.client) {
+          case (null) { true };
+          case (?clientName) {
+            switch (projects.get(bill.projectId)) {
+              case (null) { false };
+              case (?project) {
+                project.client.toLower().contains(#text (clientName.toLower()));
+              };
+            };
+          };
+        };
 
-      let matchesMinAmount = switch (billFilters.minAmount) {
-        case (null) { true };
-        case (?minAmount) { bill.amount >= minAmount };
-      };
+        let matchesGst = switch (billFilters.includesGst) {
+          case (null) { true };
+          case (?gst) { bill.includesGst == gst };
+        };
 
-      if (matchesSearch and matchesBlock and matchesBillNumber and matchesClient and matchesGst and matchesMaxAmount and matchesMinAmount) {
-        filteredBills.add(bill);
+        let matchesMaxAmount = switch (billFilters.maxAmount) {
+          case (null) { true };
+          case (?maxAmount) { bill.amount <= maxAmount };
+        };
+
+        let matchesMinAmount = switch (billFilters.minAmount) {
+          case (null) { true };
+          case (?minAmount) { bill.amount >= minAmount };
+        };
+
+        if (matchesSearch and matchesBlock and matchesBillNumber and matchesClient and matchesGst and matchesMaxAmount and matchesMinAmount) {
+          filteredBills.add(bill);
+        };
       };
     };
 
@@ -664,9 +1106,12 @@ actor {
   };
 
   public query ({ caller }) func filterBillsByProject(projectId : Text) : async [Bill] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can filter bills");
+    requireAuthenticated(caller);
+
+    if (not hasProjectAccess(caller, projectId)) {
+      return [];
     };
+
     bills.values().toArray().filter(func(bill) { bill.projectId == projectId });
   };
 
@@ -674,18 +1119,17 @@ actor {
     sortBy : ?Text,
     ascending : Bool
   ) : async [Bill] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view bills");
-    };
+    requireAuthenticated(caller);
 
-    let billsArray = bills.values().toArray();
+    let allBills = bills.values().toArray();
+    let accessibleBills = filterBillsByAccess(caller, allBills);
 
     let sortedArray = switch (sortBy) {
-      case (null) { billsArray };
+      case (null) { accessibleBills };
       case (?sortKey) {
         switch (sortKey) {
           case ("projectName") {
-            billsArray.sort(
+            accessibleBills.sort(
               func(a, b) {
                 let comparison = Text.compare(a.projectId, b.projectId);
                 if (ascending) { comparison } else {
@@ -699,7 +1143,7 @@ actor {
             );
           };
           case ("billNumber") {
-            billsArray.sort(
+            accessibleBills.sort(
               func(a, b) {
                 let comparison = Text.compare(a.billNumber, b.billNumber);
                 if (ascending) { comparison } else {
@@ -713,7 +1157,7 @@ actor {
             );
           };
           case ("date") {
-            billsArray.sort(
+            accessibleBills.sort(
               func(a, b) {
                 let comparison = Text.compare(a.date, b.date);
                 if (ascending) { comparison } else {
@@ -727,12 +1171,9 @@ actor {
             );
           };
           case ("amount") {
-            billsArray.sort(
+            accessibleBills.sort(
               func(a, b) {
-                let comparison = Nat.compare(
-                  a.amount.toInt().toNat(),
-                  b.amount.toInt().toNat(),
-                );
+                let comparison = Float.compare(a.amount, b.amount);
                 if (ascending) { comparison } else {
                   switch (comparison) {
                     case (#less) { #greater };
@@ -743,7 +1184,7 @@ actor {
               }
             );
           };
-          case (_) { billsArray };
+          case (_) { accessibleBills };
         };
       };
     };
@@ -752,13 +1193,8 @@ actor {
   };
 
   public shared ({ caller }) func bulkDeleteBillsWithPassword(password : Text, billKeys : [BillKey]) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can bulk delete bills");
-    };
-
-    if (password != "3554") {
-      Runtime.trap("Incorrect password. Bulk delete failed.");
-    };
+    requireAdmin(caller);
+    validateAdminPassword(password);
 
     for (billKey in billKeys.values()) {
       bills.remove(billKey);
@@ -766,106 +1202,122 @@ actor {
   };
 
   public shared ({ caller }) func addPayment(payment : Payment) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can add payments");
-    };
+    requireAdmin(caller);
+
     if (payments.containsKey(payment.id)) {
       Runtime.trap("Payment ID already exists");
     };
     payments.add(payment.id, payment);
   };
 
-  public shared ({ caller }) func updatePayment(payment : Payment) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can update payments");
-    };
+  public shared ({ caller }) func updatePayment(payment : Payment, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+
     switch (payments.get(payment.id)) {
       case (null) { Runtime.trap("Payment not found") };
       case (_) { payments.add(payment.id, payment) };
     };
   };
 
-  public shared ({ caller }) func deletePayment(id : Text) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can delete payments");
-    };
+  public shared ({ caller }) func deletePayment(id : Text, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+
     payments.remove(id);
   };
 
   public shared ({ caller }) func bulkDeletePayments(password : Text, ids : [Text]) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can bulk delete payments");
-    };
-    let storedPassword = "3554";
-    if (password != storedPassword) {
-      Runtime.trap("Incorrect password. Bulk delete failed.");
-    };
+    requireAdmin(caller);
+    validateAdminPassword(password);
+
     for (id in ids.values()) {
       payments.remove(id);
     };
   };
 
   public query ({ caller }) func getAllPayments() : async [Payment] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view payments");
+    requireAuthenticated(caller);
+    let allPayments = payments.values().toArray();
+    filterPaymentsByAccess(caller, allPayments);
+  };
+
+  public query ({ caller }) func getPaymentDetails(paymentId : Text) : async ?Payment {
+    requireAuthenticated(caller);
+
+    switch (payments.get(paymentId)) {
+      case (null) { null };
+      case (?payment) {
+        if (hasProjectAccess(caller, payment.projectId)) {
+          ?payment;
+        } else {
+          null;
+        };
+      };
     };
-    payments.values().toArray();
   };
 
   public query ({ caller }) func filterPayments(filters : PaymentFilters) : async [Payment] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can filter payments");
-    };
+    requireAuthenticated(caller);
 
     let filteredPayments = List.empty<Payment>();
 
     for ((_, payment) in payments.entries()) {
-      let matchesSearch = switch (filters.search) {
-        case (null) { true };
-        case (?search) {
-          let searchLower = search.toLower();
-          let referenceMatches = payment.reference.toLower().contains(#text (searchLower));
-          let minAmountOk = switch (filters.minAmount) {
-            case (null) { true };
-            case (?min) { payment.amount >= min };
+      if (hasProjectAccess(caller, payment.projectId)) {
+        let matchesSearch = switch (filters.search) {
+          case (null) { true };
+          case (?search) {
+            let searchLower = payment.reference.toLower();
+            let referenceMatches = searchLower.contains(#text (search.toLower()));
+            let minAmountOk = switch (filters.minAmount) {
+              case (null) { true };
+              case (?min) { payment.amount >= min };
+            };
+            let maxAmountOk = switch (filters.maxAmount) {
+              case (null) { true };
+              case (?max) { payment.amount <= max };
+            };
+            referenceMatches or (minAmountOk and maxAmountOk);
           };
-          let maxAmountOk = switch (filters.maxAmount) {
-            case (null) { true };
-            case (?max) { payment.amount <= max };
+        };
+
+        let matchesProject = switch (filters.projectId) {
+          case (null) { true };
+          case (?projectId) { payment.projectId == projectId };
+        };
+
+        let matchesPaymentMode = switch (filters.paymentMode) {
+          case (null) { true };
+          case (?paymentMode) { payment.paymentMode == paymentMode };
+        };
+
+        let matchesReference = switch (filters.reference) {
+          case (null) { true };
+          case (?reference) { Text.equal(payment.reference, reference) };
+        };
+
+        let matchesMinAmount = switch (filters.minAmount) {
+          case (null) { true };
+          case (?minAmount) { payment.amount >= minAmount };
+        };
+
+        let matchesMaxAmount = switch (filters.maxAmount) {
+          case (null) { true };
+          case (?maxAmount) { payment.amount <= maxAmount };
+        };
+
+        let matchesAmountRange = switch (filters.minAmount, filters.maxAmount) {
+          case (?minAmount, ?maxAmount) {
+            matchesMinAmount and matchesMaxAmount and payment.amount >= minAmount and payment.amount <= maxAmount;
           };
-          referenceMatches or (minAmountOk and maxAmountOk);
+          case (?minAmount, null) { matchesMinAmount and payment.amount >= minAmount };
+          case (null, ?maxAmount) { matchesMaxAmount and payment.amount <= maxAmount };
+          case (null, null) { true };
         };
-      };
 
-      let matchesProject = switch (filters.projectId) {
-        case (null) { true };
-        case (?projectId) { payment.projectId == projectId };
-      };
-
-      let matchesPaymentMode = switch (filters.paymentMode) {
-        case (null) { true };
-        case (?paymentMode) { payment.paymentMode == paymentMode };
-      };
-
-      let matchesReference = switch (filters.reference) {
-        case (null) { true };
-        case (?reference) {
-          Text.equal(payment.reference, reference);
+        if (matchesSearch and matchesProject and matchesPaymentMode and matchesReference and matchesAmountRange) {
+          filteredPayments.add(payment);
         };
-      };
-
-      let matchesMinAmount = switch (filters.minAmount) {
-        case (null) { true };
-        case (?minAmount) { payment.amount >= minAmount };
-      };
-
-      let matchesMaxAmount = switch (filters.maxAmount) {
-        case (null) { true };
-        case (?maxAmount) { payment.amount <= maxAmount };
-      };
-
-      if (matchesSearch and matchesProject and matchesPaymentMode and matchesReference and matchesMinAmount and matchesMaxAmount) {
-        filteredPayments.add(payment);
       };
     };
 
@@ -873,36 +1325,33 @@ actor {
   };
 
   public shared ({ caller }) func addClient(client : Client) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can add clients");
-    };
+    requireAdmin(caller);
+
     if (clients.containsKey(client.id)) {
       Runtime.trap("Client ID already exists");
     };
     clients.add(client.id, client);
   };
 
-  public shared ({ caller }) func updateClient(client : Client) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can update clients");
-    };
+  public shared ({ caller }) func updateClient(client : Client, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+
     switch (clients.get(client.id)) {
       case (null) { Runtime.trap("Client not found") };
       case (_) { clients.add(client.id, client) };
     };
   };
 
-  public shared ({ caller }) func deleteClient(id : Text) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can delete clients");
-    };
+  public shared ({ caller }) func deleteClient(id : Text, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+
     clients.remove(id);
   };
 
   public query ({ caller }) func getAllClients() : async [Client] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view clients");
-    };
+    requireAuthenticated(caller);
     clients.values().toArray();
   };
 
@@ -920,34 +1369,32 @@ actor {
   };
 
   public query ({ caller }) func getProjectWiseAnalyticsData(sortBy : Text) : async [ProjectAnalyticsData] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view analytics");
-    };
+    requireAuthenticated(caller);
 
-    let projectsArray = projects.values().toArray();
+    let allProjects = projects.values().toArray();
+    let accessibleProjects = filterProjectsByAccess(caller, allProjects);
 
     let sortedArray = switch (sortBy) {
       case ("outstanding") {
-        projectsArray.sort(
+        accessibleProjects.sort(
           func(a, b) {
             Project.compareByOutstandingAndName(a, b, true, bills, payments);
           }
         );
       };
       case ("name") {
-        projectsArray.sort(
+        accessibleProjects.sort(
           func(a, b) {
             Text.compare(a.name, b.name);
           }
         );
       };
-      case (_) { projectsArray };
+      case (_) { accessibleProjects };
     };
 
     sortedArray.map(func(project) { { id = project.id; name = project.name; outstandingAmount = calculateOutstanding(project.id); } });
   };
 
-  // Helper function to calculate outstanding amount for a project
   func calculateOutstanding(projectId : Text) : Float {
     var totalBills = 0.0;
     var totalPayments = 0.0;
@@ -968,11 +1415,16 @@ actor {
   };
 
   public query ({ caller }) func getDashboardMetrics() : async DashboardMetrics {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view dashboard metrics");
-    };
-    let billsTotal = bills.values().toArray().values().foldLeft(0.0, func(total, bill) { total + bill.amount });
-    let paymentsTotal = payments.values().toArray().values().foldLeft(0.0, func(total, payment) { total + payment.amount });
+    requireAuthenticated(caller);
+
+    let allBills = bills.values().toArray();
+    let accessibleBills = filterBillsByAccess(caller, allBills);
+
+    let allPayments = payments.values().toArray();
+    let accessiblePayments = filterPaymentsByAccess(caller, allPayments);
+
+    let billsTotal = accessibleBills.values().foldLeft(0.0, func(total, bill) { total + bill.amount });
+    let paymentsTotal = accessiblePayments.values().foldLeft(0.0, func(total, payment) { total + payment.amount });
 
     let outstanding = billsTotal - paymentsTotal;
 
@@ -985,62 +1437,48 @@ actor {
   };
 
   public query ({ caller }) func getOutstandingAmount() : async Float {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view outstanding");
-    };
-    let billsTotal = bills.values().toArray().values().foldLeft(0.0, func(total, bill) { total + bill.amount });
-    let paymentsTotal = payments.values().toArray().values().foldLeft(0.0, func(total, payment) { total + payment.amount });
+    requireAuthenticated(caller);
+
+    let allBills = bills.values().toArray();
+    let accessibleBills = filterBillsByAccess(caller, allBills);
+
+    let allPayments = payments.values().toArray();
+    let accessiblePayments = filterPaymentsByAccess(caller, allPayments);
+
+    let billsTotal = accessibleBills.values().foldLeft(0.0, func(total, bill) { total + bill.amount });
+    let paymentsTotal = accessiblePayments.values().foldLeft(0.0, func(total, payment) { total + payment.amount });
     billsTotal - paymentsTotal;
   };
 
   let gstRatePercent : Nat = 18;
 
   public query ({ caller }) func getTotalGst() : async Float {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view GST");
-    };
-    let billsTotal = bills.values().toArray().values().foldLeft(0.0, func(total, bill) { total + bill.amount });
+    requireAuthenticated(caller);
+
+    let allBills = bills.values().toArray();
+    let accessibleBills = filterBillsByAccess(caller, allBills);
+
+    let billsTotal = accessibleBills.values().foldLeft(0.0, func(total, bill) { total + bill.amount });
     (billsTotal * gstRatePercent.toFloat()) / 100.0;
   };
 
-  let bulkDeletePassword = "3554";
-
-  public shared ({ caller }) func bulkDeleteProjects(password : Text) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can bulk delete projects");
-    };
-    if (password != bulkDeletePassword) {
-      Runtime.trap("Invalid password");
-    };
-    projects.clear();
+  type ImportRequest = {
+    projectsData : [Project];
+    billsData : [Bill];
+    paymentsData : [Payment];
+    clientsData : [Client];
+    usersData : [(Principal, UserProfile)];
   };
 
-  public shared ({ caller }) func bulkDeleteClients(password : Text) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can bulk delete clients");
-    };
-    if (password != bulkDeletePassword) {
-      Runtime.trap("Invalid password");
-    };
-    clients.clear();
-  };
+  public shared ({ caller }) func importData(request : ImportRequest, password : Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
 
-  public shared ({ caller }) func importProjects(projectsData : [Project]) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can import projects");
-    };
-
-    for (project in projectsData.values()) {
+    for (project in request.projectsData.values()) {
       projects.add(project.id, project);
     };
-  };
 
-  public shared ({ caller }) func importBills(billsData : [Bill]) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can import bills");
-    };
-
-    for (bill in billsData.values()) {
+    for (bill in request.billsData.values()) {
       let key = {
         projectId = bill.projectId;
         billNumber = bill.billNumber;
@@ -1053,34 +1491,16 @@ actor {
         case (?_) {};
       };
     };
-  };
 
-  public shared ({ caller }) func importPayments(paymentsData : [Payment]) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can import payments");
-    };
-
-    for (payment in paymentsData.values()) {
+    for (payment in request.paymentsData.values()) {
       payments.add(payment.id, payment);
     };
-  };
 
-  public shared ({ caller }) func importClients(clientsData : [Client]) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can import clients");
-    };
-
-    for (client in clientsData.values()) {
+    for (client in request.clientsData.values()) {
       clients.add(client.id, client);
     };
-  };
 
-  public shared ({ caller }) func importUsers(usersData : [(Principal, UserProfile)]) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can import users");
-    };
-
-    for ((principal, userProfile) in usersData.values()) {
+    for ((principal, userProfile) in request.usersData.values()) {
       var emailExists = false;
       for ((otherPrincipal, otherProfile) in userProfiles.entries()) {
         if (otherPrincipal != principal and Text.equal(otherProfile.email, userProfile.email)) {
@@ -1097,65 +1517,57 @@ actor {
 
       if (not emailExists and not contactExists) {
         userProfiles.add(principal, userProfile);
-        AccessControl.assignRole(accessControlState, caller, principal, userProfile.role);
       };
     };
+    ensureDefaultAdmin();
+    removeDuplicateAdmins();
   };
 
-  public shared ({ caller }) func importActiveUsers(userProfilesData : [(Principal, UserProfile)]) : async () {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can import users");
-    };
-
-    var inactiveProfileCount = 0;
-    for ((_, profile) in userProfilesData.values()) {
-      if (not profile.active) {
-        inactiveProfileCount += 1;
-      };
-    };
-
-    if (inactiveProfileCount > 0) {
-      Runtime.trap("At least 1 user profile was imported as inactive. Please activate manually to allow access.");
-    };
-
-    for ((principal, userProfile) in userProfilesData.values()) {
-      userProfiles.add(principal, userProfile);
-      AccessControl.assignRole(accessControlState, caller, principal, userProfile.role);
-    };
-  };
-
-  public query ({ caller }) func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
+  public query func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
     OutCall.transform(input);
   };
 
   public query ({ caller }) func getGreetingMessage(_ : ()) : async Text {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only authenticated users can access Seri AI");
+    requireAuthenticated(caller);
+
+    let currentTimeMillis = Time.now();
+    let istTimeMillis = (currentTimeMillis + (5 * 3600000000000) + (30 * 60000000000)) % (24 * 3600000000000);
+
+    let baseGreeting = if (istTimeMillis >= (5 * 3600000000000) and istTimeMillis < (12 * 3600000000000)) {
+      "Good Morning";
+    } else if (istTimeMillis >= (12 * 3600000000000) and istTimeMillis < (17 * 3600000000000)) {
+      "Good Afternoon";
+    } else if (istTimeMillis >= (17 * 3600000000000) and istTimeMillis < (22 * 3600000000000)) {
+      "Good Evening";
+    } else {
+      "Good Night";
     };
 
     switch (userProfiles.get(caller)) {
-      case (null) { "Hello 👋\n\nI'm Seri AI 👋\nI can help you with Projects, Bills, Payments, Outstanding, GST, Reports, and Analytics.\nWhat would you like to know?" };
+      case (null) {
+        "Hello 👋\n\nI'm Seri AI 👋\nI can help you with Projects, Bills, Payments, Outstanding, GST, Reports, and Analytics.\nWhat would you like to know?";
+      };
       case (?profile) {
-        let currentTimeMillis = Time.now();
-        let istTimeMillis = (currentTimeMillis + (5 * 3600000000000) + (30 * 60000000000)) % (24 * 3600000000000);
-        if (istTimeMillis >= (5 * 3600000000000) and istTimeMillis < (12 * 3600000000000)) {
-          return "Good Morning, " # profile.fullName # " ☀️\n\nI'm Seri AI 👋\nI can help you with Projects, Bills, Payments, Outstanding, GST, Reports, and Analytics.\nWhat would you like to know?";
+        let timeEmoji = if (istTimeMillis >= (5 * 3600000000000) and istTimeMillis < (12 * 3600000000000)) {
+          "☀️";
         } else if (istTimeMillis >= (12 * 3600000000000) and istTimeMillis < (17 * 3600000000000)) {
-          return "Good Afternoon, " # profile.fullName # " 🌤️\n\nI'm Seri AI 👋\nI can help you with Projects, Bills, Payments, Outstanding, GST, Reports, and Analytics.\nWhat would you like to know?";
+          "🌤️";
         } else if (istTimeMillis >= (17 * 3600000000000) and istTimeMillis < (22 * 3600000000000)) {
-          return "Good Evening, " # profile.fullName # " 🌆\n\nI'm Seri AI 👋\nI can help you with Projects, Bills, Payments, Outstanding, GST, Reports, and Analytics.\nWhat would you like to know?";
+          "🌆";
         } else {
-          return "Good Night, " # profile.fullName # " 🌙\n\nI'm Seri AI 👋\nI can help you with Projects, Bills, Payments, Outstanding, GST, Reports, and Analytics.\nWhat would you like to know?";
+          "🌙";
         };
+
+        baseGreeting # ", " # profile.fullName # " " # timeEmoji # "\n\nI'm Seri AI 👋\nI can help you with Projects, Bills, Payments, Outstanding, GST, Reports, and Analytics.\nWhat would you like to know?";
       };
     };
   };
 
   public query ({ caller }) func getAllProjectNames() : async [Text] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can view project names");
-    };
-    projects.values().toArray().map(func(p) { p.name });
+    requireAuthenticated(caller);
+    let allProjects = projects.values().toArray();
+    let accessibleProjects = filterProjectsByAccess(caller, allProjects);
+    accessibleProjects.map(func(p) { p.name });
   };
 
   public query ({ caller }) func getProjectSummary(projectId : Text) : async ?{
@@ -1167,8 +1579,10 @@ actor {
     outstanding : Float;
     gstOutstanding : Float;
   } {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only authenticated users can access Seri AI");
+    requireAuthenticated(caller);
+
+    if (not hasProjectAccess(caller, projectId)) {
+      return null;
     };
 
     switch (projects.get(projectId)) {
@@ -1209,6 +1623,127 @@ actor {
           outstanding;
           gstOutstanding;
         };
+      };
+    };
+  };
+
+  public query ({ caller }) func getUserAccess(email : Text) : async [Text] {
+    requireAuthenticated(caller);
+
+    if (isDefaultAdmin(email)) {
+      return [];
+    };
+
+    if (isDefaultAdminByPrincipal(caller)) {
+      switch (findPrincipalByEmail(email)) {
+        case (null) { [] };
+        case (?targetPrincipal) {
+          switch (userProfiles.get(targetPrincipal)) {
+            case (null) { [] };
+            case (?profile) { profile.accessProjects };
+          };
+        };
+      };
+    } else if (isAdminRole(caller)) {
+      switch (findPrincipalByEmail(email)) {
+        case (null) { [] };
+        case (?targetPrincipal) {
+          switch (userProfiles.get(targetPrincipal)) {
+            case (null) { [] };
+            case (?profile) { profile.accessProjects };
+          };
+        };
+      };
+    } else if (Authorization.isAdmin(accessControlState, caller)) {
+      switch (findPrincipalByEmail(email)) {
+        case (null) { [] };
+        case (?targetPrincipal) {
+          switch (userProfiles.get(targetPrincipal)) {
+            case (null) { [] };
+            case (?profile) { profile.accessProjects };
+          };
+        };
+      };
+    } else {
+      switch (findPrincipalByEmail(email)) {
+        case (null) { [] };
+        case (?targetPrincipal) {
+          let isOwnProfile = caller == targetPrincipal;
+
+          if (not isOwnProfile) {
+            Runtime.trap("Unauthorized: Can only view your own project access");
+          };
+
+          switch (userProfiles.get(targetPrincipal)) {
+            case (null) { [] };
+            case (?profile) { profile.accessProjects };
+          };
+        };
+      };
+    };
+  };
+
+  public query ({ caller }) func getAdminPasswordQuestion() : async ?Text {
+    requireAdmin(caller);
+
+    switch (adminPasswordData) {
+      case (null) { null };
+      case (?data) { data.hintQuestion };
+    };
+  };
+
+  public shared ({ caller }) func revealAdminPassword(answer : Text) : async ?Text {
+    requireAdmin(caller);
+
+    switch (adminPasswordData) {
+      case (null) {
+        Runtime.trap("Admin password not initialized");
+      };
+      case (?data) {
+        switch (data.hintAnswer) {
+          case (null) {
+            Runtime.trap("Hint answer not set");
+          };
+          case (?storedAnswer) {
+            if (Text.equal(storedAnswer, answer)) {
+              ?data.password;
+            } else {
+              Runtime.trap("Incorrect answer. Password cannot be shown.");
+            };
+          };
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func changeAdminPassword(
+    adminEmail : Text,
+    oldPwd : Text,
+    newPwd : Text,
+    confirmPwd : Text,
+    newQuestion : Text,
+    newAnswer : Text
+  ) : async Bool {
+    requireAdmin(caller);
+
+    switch (adminPasswordData) {
+      case (null) {
+        Runtime.trap("Admin password not initialized");
+      };
+      case (?data) {
+        if (not Text.equal(data.password, oldPwd)) {
+          Runtime.trap("Incorrect old password.");
+        };
+        if (not Text.equal(newPwd, confirmPwd)) {
+          Runtime.trap("New password and confirmation do not match.");
+        };
+
+        adminPasswordData := ?{
+          password = newPwd;
+          hintQuestion = ?newQuestion;
+          hintAnswer = ?newAnswer;
+        };
+        true;
       };
     };
   };

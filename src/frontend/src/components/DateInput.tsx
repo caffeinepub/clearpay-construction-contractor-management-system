@@ -1,10 +1,24 @@
-import React from 'react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 
 interface DateInputProps {
   id?: string;
@@ -16,14 +30,14 @@ interface DateInputProps {
   disabled?: boolean;
 }
 
-export function DateInput({ 
-  id, 
-  value, 
-  onChange, 
-  placeholder = 'dd-mm-yyyy', 
+export function DateInput({
+  id,
+  value,
+  onChange,
+  placeholder = "dd-mm-yyyy",
   required = false,
-  className = '',
-  disabled = false
+  className = "",
+  disabled = false,
 }: DateInputProps) {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [displayMonth, setDisplayMonth] = useState<Date>(new Date());
@@ -32,10 +46,10 @@ export function DateInput({
   // Parse value to set initial display month and selected date
   useEffect(() => {
     if (value) {
-      const [day, month, year] = value.split('-').map(Number);
+      const [day, month, year] = value.split("-").map(Number);
       if (day && month && year) {
         const date = new Date(year, month - 1, day);
-        if (!isNaN(date.getTime())) {
+        if (!Number.isNaN(date.getTime())) {
           setSelectedDate(date);
           setDisplayMonth(date);
         }
@@ -44,9 +58,13 @@ export function DateInput({
   }, [value]);
 
   const handleDateSelect = (day: number) => {
-    const newDate = new Date(displayMonth.getFullYear(), displayMonth.getMonth(), day);
-    const dayStr = String(day).padStart(2, '0');
-    const monthStr = String(displayMonth.getMonth() + 1).padStart(2, '0');
+    const newDate = new Date(
+      displayMonth.getFullYear(),
+      displayMonth.getMonth(),
+      day,
+    );
+    const dayStr = String(day).padStart(2, "0");
+    const monthStr = String(displayMonth.getMonth() + 1).padStart(2, "0");
     const yearStr = displayMonth.getFullYear();
     onChange(`${dayStr}-${monthStr}-${yearStr}`);
     setSelectedDate(newDate);
@@ -54,21 +72,29 @@ export function DateInput({
   };
 
   const handleMonthChange = (monthIndex: string) => {
-    const newDate = new Date(displayMonth.getFullYear(), parseInt(monthIndex), 1);
+    const newDate = new Date(
+      displayMonth.getFullYear(),
+      Number.parseInt(monthIndex),
+      1,
+    );
     setDisplayMonth(newDate);
   };
 
   const handleYearChange = (year: string) => {
-    const newDate = new Date(parseInt(year), displayMonth.getMonth(), 1);
+    const newDate = new Date(Number.parseInt(year), displayMonth.getMonth(), 1);
     setDisplayMonth(newDate);
   };
 
   const goToPreviousMonth = () => {
-    setDisplayMonth(new Date(displayMonth.getFullYear(), displayMonth.getMonth() - 1, 1));
+    setDisplayMonth(
+      new Date(displayMonth.getFullYear(), displayMonth.getMonth() - 1, 1),
+    );
   };
 
   const goToNextMonth = () => {
-    setDisplayMonth(new Date(displayMonth.getFullYear(), displayMonth.getMonth() + 1, 1));
+    setDisplayMonth(
+      new Date(displayMonth.getFullYear(), displayMonth.getMonth() + 1, 1),
+    );
   };
 
   const getDaysInMonth = (date: Date) => {
@@ -78,7 +104,7 @@ export function DateInput({
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDayOfWeek = firstDay.getDay();
-    
+
     return { daysInMonth, startingDayOfWeek };
   };
 
@@ -95,23 +121,32 @@ export function DateInput({
 
     // Add cells for each day of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      const currentDate = new Date(displayMonth.getFullYear(), displayMonth.getMonth(), day);
+      const currentDate = new Date(
+        displayMonth.getFullYear(),
+        displayMonth.getMonth(),
+        day,
+      );
       currentDate.setHours(0, 0, 0, 0);
       const isToday = currentDate.getTime() === today.getTime();
       const isSunday = currentDate.getDay() === 0;
-      const isSelected = selectedDate && 
+      const isSelected =
+        selectedDate &&
         currentDate.getDate() === selectedDate.getDate() &&
         currentDate.getMonth() === selectedDate.getMonth() &&
         currentDate.getFullYear() === selectedDate.getFullYear();
 
-      let buttonClass = 'h-9 w-9 rounded-md text-sm font-normal hover:bg-gray-100 transition-colors';
-      
+      let buttonClass =
+        "h-9 w-9 rounded-md text-sm font-normal hover:bg-gray-100 transition-colors";
+
       if (isSelected) {
-        buttonClass = 'h-9 w-9 rounded-md text-sm font-bold bg-blue-500 text-white hover:bg-blue-600';
+        buttonClass =
+          "h-9 w-9 rounded-md text-sm font-bold bg-blue-500 text-white hover:bg-blue-600";
       } else if (isToday) {
-        buttonClass = 'h-9 w-9 rounded-md text-sm font-bold bg-green-500 text-white hover:bg-green-600';
+        buttonClass =
+          "h-9 w-9 rounded-md text-sm font-bold bg-green-500 text-white hover:bg-green-600";
       } else if (isSunday) {
-        buttonClass = 'h-9 w-9 rounded-md text-sm font-bold bg-red-500 text-white hover:bg-red-600';
+        buttonClass =
+          "h-9 w-9 rounded-md text-sm font-bold bg-red-500 text-white hover:bg-red-600";
       }
 
       days.push(
@@ -122,7 +157,7 @@ export function DateInput({
           className={buttonClass}
         >
           {day}
-        </button>
+        </button>,
       );
     }
 
@@ -130,8 +165,18 @@ export function DateInput({
   };
 
   const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
   ];
 
   const currentYear = new Date().getFullYear();
@@ -175,28 +220,42 @@ export function DateInput({
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              
+
               <div className="flex gap-2 flex-1">
-                <Select value={displayMonth.getMonth().toString()} onValueChange={handleMonthChange}>
+                <Select
+                  value={displayMonth.getMonth().toString()}
+                  onValueChange={handleMonthChange}
+                >
                   <SelectTrigger className="h-8 text-sm font-normal">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {months.map((month, index) => (
-                      <SelectItem key={index} value={index.toString()} className="text-sm font-normal">
+                      <SelectItem
+                        key={month}
+                        value={index.toString()}
+                        className="text-sm font-normal"
+                      >
                         {month}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
 
-                <Select value={displayMonth.getFullYear().toString()} onValueChange={handleYearChange}>
+                <Select
+                  value={displayMonth.getFullYear().toString()}
+                  onValueChange={handleYearChange}
+                >
                   <SelectTrigger className="h-8 text-sm font-normal w-24">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {years.map((year) => (
-                      <SelectItem key={year} value={year.toString()} className="text-sm font-normal">
+                      <SelectItem
+                        key={year}
+                        value={year.toString()}
+                        className="text-sm font-normal"
+                      >
                         {year}
                       </SelectItem>
                     ))}
@@ -218,15 +277,16 @@ export function DateInput({
             {/* Calendar Grid */}
             <div>
               <div className="grid grid-cols-7 gap-1 mb-2">
-                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-                  <div key={day} className="h-9 w-9 flex items-center justify-center text-xs font-bold text-gray-600">
+                {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                  <div
+                    key={day}
+                    className="h-9 w-9 flex items-center justify-center text-xs font-bold text-gray-600"
+                  >
                     {day}
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 gap-1">
-                {renderCalendar()}
-              </div>
+              <div className="grid grid-cols-7 gap-1">{renderCalendar()}</div>
             </div>
           </div>
         </PopoverContent>

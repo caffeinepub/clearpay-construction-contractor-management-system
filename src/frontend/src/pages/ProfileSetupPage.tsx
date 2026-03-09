@@ -1,19 +1,30 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useSaveCallerUserProfile } from '../hooks/useQueries';
-import { useActor } from '../hooks/useActor';
-import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
-import type { UserProfile } from '../backend';
-import { UserRole } from '../backend';
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import type { UserProfile } from "../backend";
+import { UserRole } from "../backend";
+import { useActor } from "../hooks/useActor";
+import { useSaveCallerUserProfile } from "../hooks/useQueries";
 
-export default function ProfileSetupPage() {
-  const [fullName, setFullName] = useState('');
-  const [contact, setContact] = useState('');
-  const [email, setEmail] = useState('');
+interface ProfileSetupPageProps {
+  onBypass?: () => void;
+}
+
+export default function ProfileSetupPage({ onBypass }: ProfileSetupPageProps) {
+  const [fullName, setFullName] = useState("");
+  const [contact, setContact] = useState("");
+  const [email, setEmail] = useState("");
+  const [saveAttempts, setSaveAttempts] = useState(0);
 
   const { actor } = useActor();
   const saveProfileMutation = useSaveCallerUserProfile();
@@ -26,57 +37,64 @@ export default function ProfileSetupPage() {
   };
 
   const handleSave = async () => {
-    // Validation
     if (!fullName.trim()) {
-      toast.error('Please enter your full name');
+      toast.error("Please enter your full name");
       return;
     }
 
     if (!contact.trim()) {
-      toast.error('Please enter your contact number');
+      toast.error("Please enter your contact number");
       return;
     }
 
     if (!email.trim()) {
-      toast.error('Please enter your email address');
+      toast.error("Please enter your email address");
       return;
     }
 
     if (!validateEmail(email)) {
-      toast.error('Please enter a valid email address');
+      toast.error("Please enter a valid email address");
       return;
     }
 
     try {
       if (!actor) {
-        toast.error('System not ready. Please try again.');
+        toast.error("System not ready. Please try again.");
         return;
       }
 
-      // Check if email is active in the system
-      const hasActiveProfile = await actor.hasActiveProfile(email.trim());
-      
-      if (!hasActiveProfile) {
-        // No active profile with this email exists
-        toast.error('Your email ID is not activated. Please contact the administrator.');
-        return;
-      }
-
-      // If validation passes, save the profile
       const profile: UserProfile = {
         fullName: fullName.trim(),
         contact: contact.trim(),
         email: email.trim(),
-        role: UserRole.admin, // First user is admin
+        role: UserRole.admin,
         active: true,
+        accessProjects: [],
       };
 
       await saveProfileMutation.mutateAsync(profile);
-      toast.success('Profile setup complete!');
+      toast.success("Profile setup complete! Redirecting to Dashboard...");
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error: any) {
-      console.error('Profile setup error:', error);
-      // Show the exact error message from backend
-      toast.error(error.message || 'Failed to save profile. Please try again.');
+      console.error("Profile setup error:", error);
+      const errorMessage =
+        error?.message || "Failed to save profile. Please try again.";
+      toast.error(errorMessage);
+
+      const newAttempts = saveAttempts + 1;
+      setSaveAttempts(newAttempts);
+
+      if (newAttempts >= 2 && onBypass) {
+        toast.error(
+          "Having trouble saving? You can skip setup and continue to Dashboard.",
+          {
+            duration: 6000,
+          },
+        );
+      }
     }
   };
 
@@ -85,20 +103,42 @@ export default function ProfileSetupPage() {
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <img src="/assets/logo mkt.png" alt="ClearPay Logo" className="h-20 w-20" />
+            <img
+              src="/assets/logo mkt.png"
+              alt="ClearPay Logo"
+              className="h-20 w-20"
+            />
           </div>
           <div>
-            <CardTitle className="text-3xl font-bold" style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 700 }}>
+            <CardTitle
+              className="text-3xl font-bold"
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 700,
+              }}
+            >
               Profile Setup
             </CardTitle>
-            <CardDescription className="text-base mt-2" style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 400 }}>
+            <CardDescription
+              className="text-base mt-2"
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 400,
+              }}
+            >
               Complete your profile to get started
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="fullName" style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 400 }}>
+            <Label
+              htmlFor="fullName"
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 400,
+              }}
+            >
               Full Name *
             </Label>
             <Input
@@ -108,12 +148,21 @@ export default function ProfileSetupPage() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               disabled={isSaving}
-              style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 400 }}
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 400,
+              }}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="contact" style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 400 }}>
+            <Label
+              htmlFor="contact"
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 400,
+              }}
+            >
               Contact Number *
             </Label>
             <Input
@@ -123,12 +172,21 @@ export default function ProfileSetupPage() {
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               disabled={isSaving}
-              style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 400 }}
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 400,
+              }}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email" style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 400 }}>
+            <Label
+              htmlFor="email"
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 400,
+              }}
+            >
               Email Address *
             </Label>
             <Input
@@ -138,7 +196,10 @@ export default function ProfileSetupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isSaving}
-              style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 400 }}
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 400,
+              }}
             />
           </div>
 
@@ -146,7 +207,10 @@ export default function ProfileSetupPage() {
             onClick={handleSave}
             disabled={isSaving}
             className="w-full bg-[#28A745] hover:bg-[#218838] text-white"
-            style={{ fontFamily: 'Century Gothic, Gothic A1, sans-serif', fontWeight: 600 }}
+            style={{
+              fontFamily: "Century Gothic, Gothic A1, sans-serif",
+              fontWeight: 600,
+            }}
           >
             {isSaving ? (
               <>
@@ -154,9 +218,33 @@ export default function ProfileSetupPage() {
                 Saving...
               </>
             ) : (
-              'Complete Setup'
+              "Complete Setup"
             )}
           </Button>
+
+          {saveAttempts >= 2 && onBypass && (
+            <Button
+              onClick={onBypass}
+              variant="outline"
+              className="w-full"
+              style={{
+                fontFamily: "Century Gothic, Gothic A1, sans-serif",
+                fontWeight: 600,
+              }}
+            >
+              Skip Setup & Continue to Dashboard
+            </Button>
+          )}
+
+          <p
+            className="text-xs text-center text-gray-500 mt-4"
+            style={{
+              fontFamily: "Century Gothic, Gothic A1, sans-serif",
+              fontWeight: 400,
+            }}
+          >
+            Having trouble? Contact support at +91 7575 94 4949
+          </p>
         </CardContent>
       </Card>
     </div>

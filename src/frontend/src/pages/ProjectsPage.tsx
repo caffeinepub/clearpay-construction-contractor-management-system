@@ -35,7 +35,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronUp,
@@ -81,9 +80,9 @@ type SortField =
 type SortDirection = "asc" | "desc" | null;
 
 export default function ProjectsPage() {
-  const navigate = useNavigate();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [viewingProject, setViewingProject] = useState<Project | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
@@ -346,7 +345,7 @@ export default function ProjectsPage() {
   };
 
   const handleView = (project: Project) => {
-    navigate({ to: `/projects/${project.id}` });
+    setViewingProject(project);
   };
 
   const handleEdit = (project: Project) => {
@@ -800,6 +799,169 @@ export default function ProjectsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* View Project Details Modal */}
+      <Dialog
+        open={viewingProject !== null}
+        onOpenChange={(open) => {
+          if (!open) setViewingProject(null);
+        }}
+      >
+        <DialogContent
+          data-ocid="projects.view_modal"
+          className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-lg"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-[#333333]">
+              Project Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewingProject && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Project Name
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {viewingProject.name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Client
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {viewingProject.client}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Start Date
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {viewingProject.startDate || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Contact Number
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {viewingProject.contactNumber}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Unit Price
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {formatCurrency(viewingProject.unitPrice)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Quantity
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {viewingProject.quantity}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Estimated Amount
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {formatCurrency(viewingProject.estimatedAmount)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Location
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {viewingProject.location || "—"}
+                  </p>
+                </div>
+              </div>
+
+              {viewingProject.address && (
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Address
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {viewingProject.address}
+                  </p>
+                </div>
+              )}
+
+              {viewingProject.notes && (
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                    Notes
+                  </p>
+                  <p className="text-sm text-[#333333]">
+                    {viewingProject.notes}
+                  </p>
+                </div>
+              )}
+
+              {(viewingProject.attachmentLinks[0] ||
+                viewingProject.attachmentLinks[1]) && (
+                <div>
+                  <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-2">
+                    Attachments
+                  </p>
+                  <div className="space-y-2">
+                    {viewingProject.attachmentLinks[0] && (
+                      <div>
+                        <span className="text-xs text-[#555555] mr-2">
+                          Link 1:
+                        </span>
+                        <a
+                          href={viewingProject.attachmentLinks[0]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-[#0078D7] underline hover:text-[#005a9e] break-all"
+                        >
+                          {viewingProject.attachmentLinks[0]}
+                        </a>
+                      </div>
+                    )}
+                    {viewingProject.attachmentLinks[1] && (
+                      <div>
+                        <span className="text-xs text-[#555555] mr-2">
+                          Link 2:
+                        </span>
+                        <a
+                          href={viewingProject.attachmentLinks[1]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-[#0078D7] underline hover:text-[#005a9e] break-all"
+                        >
+                          {viewingProject.attachmentLinks[1]}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="pt-4">
+            <Button
+              data-ocid="projects.view.close_button"
+              onClick={() => setViewingProject(null)}
+              className="bg-[#0078D7] hover:bg-[#005a9e] text-white rounded-md"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* New Project Form Dialog - Two Column Layout */}
       <Dialog

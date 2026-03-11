@@ -45,18 +45,17 @@ export default function MainLayout() {
   const { clear } = useInternetIdentity();
   const queryClient = useQueryClient();
   const { data: userProfile } = useGetCallerUserProfile();
-  const { isMasterAdmin, isDefaultAdminDetected } = useMasterAdmin();
+  const { isMasterAdmin } = useMasterAdmin();
 
   const handleLogout = async () => {
     await clear();
     queryClient.clear();
   };
 
-  // CRITICAL: Check if user is admin (Master Admin via email-only OR Admin role OR default admin detected)
-  const isAdmin =
-    isMasterAdmin || isDefaultAdminDetected || userProfile?.role === "admin";
+  // CRITICAL: Admin = confirmed master admin (by email) OR admin role from profile.
+  // isDefaultAdminDetected is no longer used here to prevent false positives.
+  const isAdmin = isMasterAdmin || userProfile?.role === "admin";
 
-  // CRITICAL: Filter navigation items based on user role
   const allNavItems = [
     { id: "dashboard" as Page, label: "Dashboard", icon: LayoutDashboard },
     { id: "analytics" as Page, label: "Analytics", icon: BarChart3 },
@@ -77,7 +76,6 @@ export default function MainLayout() {
     return true;
   });
 
-  // CRITICAL: Redirect to dashboard if non-admin tries to access Users page
   const handlePageChange = (pageId: Page) => {
     if (pageId === "users" && !isAdmin) {
       console.warn("Unauthorized access attempt to Users module");
@@ -88,7 +86,6 @@ export default function MainLayout() {
   };
 
   const renderPage = () => {
-    // CRITICAL: Block access to Users page for non-admin users
     if (currentPage === "users" && !isAdmin) {
       return <DashboardPage />;
     }

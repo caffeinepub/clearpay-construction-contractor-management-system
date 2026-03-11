@@ -19,7 +19,7 @@ function App() {
     isFetched,
     error: profileError,
   } = useGetCallerUserProfile();
-  const { isMasterAdmin, isDefaultAdminDetected } = useMasterAdmin();
+  const { isMasterAdmin } = useMasterAdmin();
 
   const [bypassProfileSetup, setBypassProfileSetup] = useState(false);
   const [inactiveAccountError, setInactiveAccountError] = useState(false);
@@ -31,7 +31,6 @@ function App() {
   // CRITICAL: Check if user account is active
   useEffect(() => {
     if (isAuthenticated && isFetched && userProfile) {
-      // Master Admin and Admin role users are always active
       const isAdminUser = isMasterAdmin || userProfile.role === "admin";
 
       if (!isAdminUser && !userProfile.active) {
@@ -47,17 +46,17 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated || !actor || actorFetching) return;
 
-    // Profile found under caller's real principal - all good
+    // Profile found under caller's real principal — all good, show app
     if (isFetched && userProfile) {
       if (isMasterAdmin) {
         console.log("Master admin detected - bypassing all profile checks");
         setBypassProfileSetup(true);
-        setShowApp(true);
       }
+      setShowApp(true);
       return;
     }
 
-    // Profile not found under caller principal - try linking master admin
+    // No profile found under caller principal — try linking master admin principal
     if (isFetched && !userProfile && !linkAttemptedRef.current) {
       linkAttemptedRef.current = true;
       console.log(
@@ -71,88 +70,37 @@ function App() {
             console.log(
               "Master admin principal linked successfully - refetching profile...",
             );
-            // Invalidate and refetch profile so useMasterAdmin picks up the new profile
+            // Invalidate and refetch — the profile will now load with master admin data
             queryClient.invalidateQueries({ queryKey: ["currentUserProfile"] });
             queryClient.invalidateQueries({ queryKey: ["users"] });
           } else {
-            // Not master admin or profile already exists - check getDefaultAdminProfile
-            return actor.getDefaultAdminProfile().then((defaultAdmin) => {
-              if (
-                defaultAdmin &&
-                defaultAdmin.email === "jogaraoseri.er@mktconstructions.com"
-              ) {
-                console.log(
-                  "Master admin detected via default profile - bypassing",
-                );
-                setBypassProfileSetup(true);
-                setShowApp(true);
-              } else {
-                // Not master admin - auto bypass after short delay
-                setTimeout(() => {
-                  console.log("Profile not found - bypassing to app");
-                  setBypassProfileSetup(true);
-                  setShowApp(true);
-                }, 2000);
-              }
-            });
+            // NOT the master admin — this is a regular user with no profile yet.
+            // Do NOT check getDefaultAdminProfile() here; that would incorrectly
+            // grant master admin privileges to any user without a profile.
+            console.log(
+              "User is not master admin and has no profile - showing app with limited access",
+            );
+            setBypassProfileSetup(true);
+            setShowApp(true);
           }
         })
         .catch((err) => {
           console.error("Error during principal linking:", err);
-          // Fallback: check default admin profile
-          actor
-            .getDefaultAdminProfile()
-            .then((defaultAdmin) => {
-              if (
-                defaultAdmin &&
-                defaultAdmin.email === "jogaraoseri.er@mktconstructions.com"
-              ) {
-                setBypassProfileSetup(true);
-                setShowApp(true);
-              } else {
-                setTimeout(() => {
-                  setBypassProfileSetup(true);
-                  setShowApp(true);
-                }, 2000);
-              }
-            })
-            .catch(() => {
-              setTimeout(() => {
-                setBypassProfileSetup(true);
-                setShowApp(true);
-              }, 2000);
-            });
+          // Fallback on error: let the user into the app with limited access
+          setTimeout(() => {
+            setBypassProfileSetup(true);
+            setShowApp(true);
+          }, 2000);
         });
     }
 
     // Handle profileError case
     if (profileError && !linkAttemptedRef.current) {
       linkAttemptedRef.current = true;
-      actor
-        .getDefaultAdminProfile()
-        .then((defaultAdmin) => {
-          if (
-            defaultAdmin &&
-            defaultAdmin.email === "jogaraoseri.er@mktconstructions.com"
-          ) {
-            console.log(
-              "Master admin detected via default profile (error fallback)",
-            );
-            setBypassProfileSetup(true);
-            setShowApp(true);
-          } else {
-            setTimeout(() => {
-              setBypassProfileSetup(true);
-              setShowApp(true);
-            }, 3000);
-          }
-        })
-        .catch(() => {
-          setTimeout(() => {
-            setBypassProfileSetup(true);
-            setShowApp(true);
-          }, 2000);
-        });
+      setTimeout(() => {
+        setBypassProfileSetup(true);
+        setShowApp(true);
+      }, 2000);
     }
   }, [
     isAuthenticated,
@@ -165,35 +113,26 @@ function App() {
     queryClient,
   ]);
 
-  // CRITICAL: Show app when profile is loaded successfully (after linking or normal load)
+  // Show app when profile is loaded successfully
   useEffect(() => {
     if (isAuthenticated && isFetched && userProfile && !inactiveAccountError) {
       setShowApp(true);
     }
   }, [isAuthenticated, isFetched, userProfile, inactiveAccountError]);
 
-  // CRITICAL: Show app if detected as master admin via default profile check
-  useEffect(() => {
-    if (isDefaultAdminDetected && isAuthenticated) {
-      setBypassProfileSetup(true);
-      setShowApp(true);
-    }
-  }, [isDefaultAdminDetected, isAuthenticated]);
-
-  // CRITICAL: Automatic timeout for loading states
+  // Automatic timeout for loading states (safety net)
   useEffect(() => {
     if (isAuthenticated && !showApp && !inactiveAccountError) {
       const timeoutId = setTimeout(() => {
         console.log("Loading timeout reached - automatically showing app");
         setBypassProfileSetup(true);
         setShowApp(true);
-      }, 10000); // 10 second maximum wait
+      }, 10000);
 
       return () => clearTimeout(timeoutId);
     }
   }, [isAuthenticated, showApp, inactiveAccountError]);
 
-  // Optimized loading state for initial authentication
   if (isInitializing) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -210,12 +149,10 @@ function App() {
     );
   }
 
-  // Not authenticated - show login
   if (!isAuthenticated) {
     return <LoginPage />;
   }
 
-  // CRITICAL: Show inactive account error
   if (inactiveAccountError) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -268,14 +205,14 @@ function App() {
   }
 
   // CRITICAL: Master Admin should NEVER see any blocking screens
+  // For normal users: show ProfileSetupPage only if they have no profile AND haven't bypassed
   const showProfileSetup =
     isAuthenticated &&
     !profileLoading &&
     isFetched &&
     userProfile === null &&
     !bypassProfileSetup &&
-    !isMasterAdmin &&
-    !isDefaultAdminDetected;
+    !isMasterAdmin;
 
   if (showProfileSetup) {
     return (
@@ -288,7 +225,6 @@ function App() {
     );
   }
 
-  // Show loading only if we haven't shown the app yet and we're still fetching
   if (!showApp && (actorFetching || profileLoading)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -305,7 +241,6 @@ function App() {
     );
   }
 
-  // All checks passed or bypassed - show main app
   return (
     <>
       <MainLayout />

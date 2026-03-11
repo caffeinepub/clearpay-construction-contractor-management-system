@@ -139,8 +139,8 @@ export default function MainLayout() {
               className="h-10 w-10"
             />
             <div className="text-2xl font-bold">
-              <span className="text-[#0078D7]">Clear</span>
-              <span className="text-[#555555]">Pay</span>
+              <span className="text-[#0078D7] font-bold">Clear</span>
+              <span className="text-[#555555] font-bold">Pay</span>
             </div>
           </div>
           <div className="text-sm text-gray-500" style={{ fontWeight: 400 }}>

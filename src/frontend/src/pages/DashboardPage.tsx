@@ -305,9 +305,10 @@ export default function DashboardPage() {
       }
     }
 
-    return Array.from(projectMap.entries())
-      .map(([name, data]) => ({ name, ...data }))
-      .slice(0, 10);
+    return Array.from(projectMap.entries()).map(([name, data]) => ({
+      name,
+      ...data,
+    }));
   }, [filteredBills, filteredPayments, projects]);
 
   const paymentModeData = useMemo(() => {
@@ -331,9 +332,10 @@ export default function DashboardPage() {
       }
     }
 
-    return Array.from(modeMap.entries())
-      .map(([name, data]) => ({ name, ...data }))
-      .slice(0, 10);
+    return Array.from(modeMap.entries()).map(([name, data]) => ({
+      name,
+      ...data,
+    }));
   }, [filteredPayments, projects]);
 
   const outstandingGstData = useMemo(() => {
@@ -366,8 +368,7 @@ export default function DashboardPage() {
           outstanding,
           gst,
         };
-      })
-      .slice(0, 8);
+      });
   }, [filteredBills, filteredPayments, projects]);
 
   const billsDistributionData = useMemo(() => {
@@ -381,9 +382,10 @@ export default function DashboardPage() {
       }
     }
 
-    return Array.from(projectBills.entries())
-      .map(([name, value]) => ({ name, value }))
-      .slice(0, 8);
+    return Array.from(projectBills.entries()).map(([name, value]) => ({
+      name,
+      value,
+    }));
   }, [filteredBills, projects]);
 
   const paymentsTrendData = useMemo(() => {

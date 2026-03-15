@@ -6,6 +6,7 @@ import { useActor } from "./hooks/useActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useMasterAdmin } from "./hooks/useMasterAdmin";
 import { useGetCallerUserProfile } from "./hooks/useQueries";
+import AccountLinkPage from "./pages/AccountLinkPage";
 import LoginPage from "./pages/LoginPage";
 import ProfileSetupPage from "./pages/ProfileSetupPage";
 
@@ -24,6 +25,10 @@ function App() {
   const [bypassProfileSetup, setBypassProfileSetup] = useState(false);
   const [inactiveAccountError, setInactiveAccountError] = useState(false);
   const [showApp, setShowApp] = useState(false);
+  // Phase: 'init' | 'link_master' | 'link_email' | 'new_user' | 'done'
+  const [linkPhase, setLinkPhase] = useState<
+    "init" | "link_master" | "link_email" | "new_user" | "done"
+  >("init");
   const linkAttemptedRef = useRef(false);
 
   const isAuthenticated = !!identity;
@@ -42,65 +47,65 @@ function App() {
     }
   }, [isAuthenticated, isFetched, userProfile, isMasterAdmin]);
 
-  // CRITICAL: Master Admin principal linking + bypass logic
+  // CRITICAL: Profile linking logic
   useEffect(() => {
     if (!isAuthenticated || !actor || actorFetching) return;
 
-    // Profile found under caller's real principal — all good, show app
+    // Profile found under caller's real principal — all good
     if (isFetched && userProfile) {
       if (isMasterAdmin) {
-        console.log("Master admin detected - bypassing all profile checks");
         setBypassProfileSetup(true);
       }
+      setLinkPhase("done");
       setShowApp(true);
       return;
     }
 
-    // No profile found under caller principal — try linking master admin principal
+    // No profile found — first try master admin linking
     if (isFetched && !userProfile && !linkAttemptedRef.current) {
       linkAttemptedRef.current = true;
-      console.log(
-        "No profile found - attempting master admin principal linking...",
-      );
+      setLinkPhase("link_master");
 
       actor
         .linkMasterAdminPrincipal()
         .then((linked) => {
           if (linked) {
-            console.log(
-              "Master admin principal linked successfully - refetching profile...",
-            );
-            // Invalidate and refetch — the profile will now load with master admin data
+            // Master admin linked — refetch
             queryClient.invalidateQueries({ queryKey: ["currentUserProfile"] });
             queryClient.invalidateQueries({ queryKey: ["users"] });
           } else {
-            // NOT the master admin — this is a regular user with no profile yet.
-            // Do NOT check getDefaultAdminProfile() here; that would incorrectly
-            // grant master admin privileges to any user without a profile.
-            console.log(
-              "User is not master admin and has no profile - showing app with limited access",
-            );
-            setBypassProfileSetup(true);
-            setShowApp(true);
+            // CRITICAL FIX: Check if profile loaded while we were waiting.
+            // If yes, go directly to done instead of showing email link page.
+            const cachedProfile = queryClient.getQueryData([
+              "currentUserProfile",
+            ]);
+            if (cachedProfile) {
+              setLinkPhase("done");
+              setShowApp(true);
+            } else {
+              // Not master admin — prompt for email to link existing user account
+              setLinkPhase("link_email");
+            }
           }
         })
         .catch((err) => {
-          console.error("Error during principal linking:", err);
-          // Fallback on error: let the user into the app with limited access
-          setTimeout(() => {
-            setBypassProfileSetup(true);
+          console.error("Error during master admin linking:", err);
+          const cachedProfile = queryClient.getQueryData([
+            "currentUserProfile",
+          ]);
+          if (cachedProfile) {
+            setLinkPhase("done");
             setShowApp(true);
-          }, 2000);
+          } else {
+            setLinkPhase("link_email");
+          }
         });
     }
 
     // Handle profileError case
     if (profileError && !linkAttemptedRef.current) {
       linkAttemptedRef.current = true;
-      setTimeout(() => {
-        setBypassProfileSetup(true);
-        setShowApp(true);
-      }, 2000);
+      setLinkPhase("link_email");
     }
   }, [
     isAuthenticated,
@@ -116,22 +121,27 @@ function App() {
   // Show app when profile is loaded successfully
   useEffect(() => {
     if (isAuthenticated && isFetched && userProfile && !inactiveAccountError) {
+      setLinkPhase("done");
       setShowApp(true);
     }
   }, [isAuthenticated, isFetched, userProfile, inactiveAccountError]);
 
   // Automatic timeout for loading states (safety net)
   useEffect(() => {
-    if (isAuthenticated && !showApp && !inactiveAccountError) {
+    if (
+      isAuthenticated &&
+      !showApp &&
+      !inactiveAccountError &&
+      linkPhase === "init"
+    ) {
       const timeoutId = setTimeout(() => {
-        console.log("Loading timeout reached - automatically showing app");
-        setBypassProfileSetup(true);
-        setShowApp(true);
+        console.log("Loading timeout reached - showing email link screen");
+        setLinkPhase("link_email");
       }, 10000);
 
       return () => clearTimeout(timeoutId);
     }
-  }, [isAuthenticated, showApp, inactiveAccountError]);
+  }, [isAuthenticated, showApp, inactiveAccountError, linkPhase]);
 
   if (isInitializing) {
     return (
@@ -204,15 +214,49 @@ function App() {
     );
   }
 
-  // CRITICAL: Master Admin should NEVER see any blocking screens
-  // For normal users: show ProfileSetupPage only if they have no profile AND haven't bypassed
+  // Show email linking screen for regular users who have an existing account
+  if (linkPhase === "link_email" && actor) {
+    return (
+      <AccountLinkPage
+        actor={actor}
+        onLinked={() => {
+          queryClient.invalidateQueries({ queryKey: ["currentUserProfile"] });
+          queryClient.invalidateQueries({ queryKey: ["users"] });
+          queryClient.invalidateQueries({ queryKey: ["accessProjects"] });
+          // CRITICAL FIX: Do NOT reset linkAttemptedRef or go back to "init".
+          // Resetting caused a race condition where linkMasterAdminPrincipal()
+          // would override linkPhase back to "link_email" after profile loaded.
+          // Instead: show loading spinner while profile refetches, then show app.
+          setLinkPhase("link_master");
+        }}
+        onNewUser={() => {
+          setLinkPhase("new_user");
+        }}
+      />
+    );
+  }
+
+  // Show profile setup for genuinely new users
+  if (linkPhase === "new_user") {
+    return (
+      <ProfileSetupPage
+        onBypass={() => {
+          setBypassProfileSetup(true);
+          setShowApp(true);
+        }}
+      />
+    );
+  }
+
+  // Legacy fallback: show ProfileSetupPage if bypassed flag not set and no profile
   const showProfileSetup =
     isAuthenticated &&
     !profileLoading &&
     isFetched &&
     userProfile === null &&
     !bypassProfileSetup &&
-    !isMasterAdmin;
+    !isMasterAdmin &&
+    linkPhase === "done";
 
   if (showProfileSetup) {
     return (
@@ -225,7 +269,10 @@ function App() {
     );
   }
 
-  if (!showApp && (actorFetching || profileLoading)) {
+  if (
+    !showApp &&
+    (actorFetching || profileLoading || linkPhase === "link_master")
+  ) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">

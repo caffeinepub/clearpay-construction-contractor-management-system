@@ -33,6 +33,7 @@ import {
   useGetAllClients,
   useGetAllPayments,
   useGetAllProjects,
+  useGetCompletedProjectIds,
 } from "../hooks/useQueries";
 
 export default function AnalyticsPage() {
@@ -53,6 +54,7 @@ export default function AnalyticsPage() {
   const { data: payments = [], isLoading: paymentsLoading } =
     useGetAllPayments();
   const { data: _clients = [] } = useGetAllClients();
+  const { data: completedProjectIds = [] } = useGetCompletedProjectIds();
 
   const isLoading = projectsLoading || billsLoading || paymentsLoading;
 
@@ -74,6 +76,7 @@ export default function AnalyticsPage() {
 
   const filteredBills = useMemo(() => {
     return bills.filter((b) => {
+      if (completedProjectIds.includes(b.projectId)) return false;
       // Project filter
       if (
         selectedProjects.length > 0 &&
@@ -124,6 +127,7 @@ export default function AnalyticsPage() {
     });
   }, [
     bills,
+    completedProjectIds,
     selectedProjects,
     selectedClient,
     selectedYear,
@@ -135,6 +139,7 @@ export default function AnalyticsPage() {
 
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
+      if (completedProjectIds.includes(p.projectId)) return false;
       // Project filter
       if (
         selectedProjects.length > 0 &&
@@ -185,6 +190,7 @@ export default function AnalyticsPage() {
     });
   }, [
     payments,
+    completedProjectIds,
     selectedProjects,
     selectedClient,
     selectedYear,
@@ -195,7 +201,7 @@ export default function AnalyticsPage() {
   ]);
 
   const filteredProjects = useMemo(() => {
-    let filtered = projects;
+    let filtered = projects.filter((p) => !completedProjectIds.includes(p.id));
 
     if (selectedProjects.length > 0) {
       filtered = filtered.filter((p) => selectedProjects.includes(p.id));
@@ -206,7 +212,7 @@ export default function AnalyticsPage() {
     }
 
     return filtered;
-  }, [projects, selectedProjects, selectedClient]);
+  }, [projects, completedProjectIds, selectedProjects, selectedClient]);
 
   const projectMetrics = useMemo(() => {
     const metrics = filteredProjects.map((project) => {

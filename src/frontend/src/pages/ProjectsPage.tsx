@@ -53,11 +53,17 @@ import { toast } from "sonner";
 import { type Project, UserRole } from "../backend";
 import { ActionButton } from "../components/ActionButton";
 import { DateInput } from "../components/DateInput";
+import { useActor } from "../hooks/useActor";
+import { useMasterAdmin } from "../hooks/useMasterAdmin";
 import {
   useAddProject,
   useDeleteProject,
   useGetAllProjects,
   useGetCallerUserRole,
+  useGetCompletedProjectIds,
+  useGetProjectMapLocations,
+  useSetProjectMapLocation,
+  useToggleProjectCompleted,
   useUpdateProject,
 } from "../hooks/useQueries";
 import {
@@ -116,6 +122,7 @@ export default function ProjectsPage() {
     address: "",
     contactNumber: "+91",
     location: "",
+    mapLocation: "",
     attachmentLink1: "",
     attachmentLink2: "",
   });
@@ -125,8 +132,57 @@ export default function ProjectsPage() {
   const addProject = useAddProject();
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
+  const { data: completedIds = [] } = useGetCompletedProjectIds();
+  const toggleCompleted = useToggleProjectCompleted();
+  const { data: mapLocations = {} } = useGetProjectMapLocations();
+  const setMapLocation = useSetProjectMapLocation();
+  const [optimisticCompleted, setOptimisticCompleted] = useState<Set<string>>(
+    new Set(),
+  );
+  const [optimisticRemoved, setOptimisticRemoved] = useState<Set<string>>(
+    new Set(),
+  );
 
-  const isAdmin = userRole === UserRole.admin;
+  const isCompleted = (id: string) => {
+    if (optimisticRemoved.has(id)) return false;
+    if (optimisticCompleted.has(id)) return true;
+    return completedIds.includes(id);
+  };
+
+  const { isMasterAdmin } = useMasterAdmin();
+  const { actor } = useActor();
+  const isAdmin = isMasterAdmin || userRole === UserRole.admin;
+
+  const handleToggleCompleted = (id: string) => {
+    if (!actor) return;
+    const currentlyCompleted = isCompleted(id);
+    // Optimistic update
+    if (currentlyCompleted) {
+      setOptimisticRemoved((prev) => new Set([...prev, id]));
+      setOptimisticCompleted((prev) => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+    } else {
+      setOptimisticCompleted((prev) => new Set([...prev, id]));
+      setOptimisticRemoved((prev) => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+    }
+    toggleCompleted.mutate(id, {
+      onSuccess: () => {
+        setOptimisticCompleted(new Set());
+        setOptimisticRemoved(new Set());
+      },
+      onError: () => {
+        setOptimisticCompleted(new Set());
+        setOptimisticRemoved(new Set());
+      },
+    });
+  };
 
   // Filter and search projects
   const filteredProjects = useMemo(() => {
@@ -290,6 +346,10 @@ export default function ProjectsPage() {
     } else {
       try {
         await addProject.mutateAsync(projectData);
+        await setMapLocation.mutateAsync({
+          projectId: projectData.id,
+          location: formData.mapLocation || "",
+        });
         toast.success("Project added successfully");
         setIsFormOpen(false);
         resetForm();
@@ -331,6 +391,10 @@ export default function ProjectsPage() {
         project: projectData,
         password: editPassword,
       });
+      await setMapLocation.mutateAsync({
+        projectId: projectData.id,
+        location: formData.mapLocation || "",
+      });
       toast.success("Project updated successfully");
       setIsFormOpen(false);
       setShowEditPasswordDialog(false);
@@ -361,6 +425,7 @@ export default function ProjectsPage() {
       address: project.address,
       contactNumber: project.contactNumber,
       location: project.location,
+      mapLocation: mapLocations[project.id] || "",
       attachmentLink1: project.attachmentLinks[0] || "",
       attachmentLink2: project.attachmentLinks[1] || "",
     });
@@ -411,6 +476,7 @@ export default function ProjectsPage() {
       address: "",
       contactNumber: "+91",
       location: "",
+      mapLocation: "",
       attachmentLink1: "",
       attachmentLink2: "",
     });
@@ -724,6 +790,7 @@ export default function ProjectsPage() {
                   >
                     Location {getSortIcon("location")}
                   </TableHead>
+                  <TableHead className="text-center w-24">Completed</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -731,7 +798,7 @@ export default function ProjectsPage() {
                 {filteredProjects.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={9}
+                      colSpan={10}
                       className="text-center py-8 text-gray-500"
                     >
                       No projects found
@@ -742,9 +809,11 @@ export default function ProjectsPage() {
                     <TableRow
                       key={project.id}
                       className={
-                        index % 2 === 0
-                          ? "bg-[#E3F2FD] hover:bg-[#BBDEFB]"
-                          : "hover:bg-gray-50"
+                        isCompleted(project.id)
+                          ? "bg-gray-100 opacity-70"
+                          : index % 2 === 0
+                            ? "bg-[#E3F2FD] hover:bg-[#BBDEFB]"
+                            : "hover:bg-gray-50"
                       }
                     >
                       <TableCell className="font-medium">
@@ -759,6 +828,42 @@ export default function ProjectsPage() {
                       </TableCell>
                       <TableCell>{project.contactNumber}</TableCell>
                       <TableCell>{project.location}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCompleted(project.id)}
+                            disabled={toggleCompleted.isPending || !actor}
+                            className={`w-5 h-5 border-2 rounded flex items-center justify-center transition-colors ${
+                              isCompleted(project.id)
+                                ? "bg-[#28A745] border-[#28A745]"
+                                : "bg-white border-gray-400 hover:border-[#28A745]"
+                            } ${!isAdmin ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                            title={
+                              isCompleted(project.id)
+                                ? "Mark as ongoing"
+                                : "Mark as completed"
+                            }
+                            data-ocid="projects.completed.checkbox"
+                          >
+                            {isCompleted(project.id) && (
+                              <svg
+                                className="w-3 h-3 text-white"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                                role="img"
+                                aria-label="Completed"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button
@@ -884,6 +989,35 @@ export default function ProjectsPage() {
                     {viewingProject.location || "—"}
                   </p>
                 </div>
+                {mapLocations[viewingProject.id] && (
+                  <div>
+                    <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">
+                      Map Location
+                    </p>
+                    <p className="text-sm text-[#333333] mb-1">
+                      {mapLocations[viewingProject.id]}
+                    </p>
+                    <a
+                      href={`https://www.google.com/maps?q=${encodeURIComponent(mapLocations[viewingProject.id] || "")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-[#0078D7] hover:underline font-semibold"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="w-4 h-4"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        role="img"
+                        aria-label="Map pin"
+                      >
+                        <title>Map pin</title>
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                      </svg>
+                      Open in Google Maps
+                    </a>
+                  </div>
+                )}
               </div>
 
               {viewingProject.address && (
@@ -1262,6 +1396,25 @@ export default function ProjectsPage() {
                       setFormData({ ...formData, location: e.target.value })
                     }
                     className="mt-1 rounded-md h-10"
+                  />
+                </div>
+
+                <div>
+                  <Label
+                    htmlFor="mapLocation"
+                    className="text-sm font-normal text-[#333333]"
+                  >
+                    Map Location
+                  </Label>
+                  <Input
+                    id="mapLocation"
+                    placeholder="Example: 17.502186, 78.292149"
+                    value={formData.mapLocation}
+                    onChange={(e) =>
+                      setFormData({ ...formData, mapLocation: e.target.value })
+                    }
+                    className="mt-1 rounded-md h-10"
+                    data-ocid="project.map_location.input"
                   />
                 </div>
 

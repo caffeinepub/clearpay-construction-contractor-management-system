@@ -200,6 +200,7 @@ export interface Project {
     unitPrice: number;
     attachmentLinks: Array<string>;
     location: string;
+    mapLocation?: string;
     estimatedAmount: number;
     startDate: string;
 }
@@ -267,6 +268,7 @@ export interface backendInterface {
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getDashboardMetrics(): Promise<DashboardMetrics>;
+    getCompletedProjectIds(): Promise<Array<string>>;
     getDefaultAdminProfile(): Promise<UserProfile | null>;
     getGreetingMessage(arg0: null): Promise<string>;
     getHintQuestion(): Promise<string | null>;
@@ -293,10 +295,14 @@ export interface backendInterface {
     isAdminPasswordSet(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     linkMasterAdminPrincipal(): Promise<boolean>;
+    linkUserByEmail(email: string): Promise<boolean>;
     listUsers(): Promise<Array<[Principal, UserProfile]>>;
     revealAdminPassword(answer: string): Promise<string | null>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     setHintQuestionAndAnswer(question: string, answer: string): Promise<void>;
+    toggleProjectCompleted(id: string): Promise<void>;
+    setProjectMapLocation(projectId: string, location: string): Promise<void>;
+    getProjectMapLocations(): Promise<Array<[string, string]>>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
     updateBill(bill: Bill, password: string): Promise<void>;
     updateClient(client: Client, password: string): Promise<void>;
@@ -1045,6 +1051,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async linkUserByEmail(email: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.linkUserByEmail(email);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.linkUserByEmail(email);
+            return result;
+        }
+    }
     async listUsers(): Promise<Array<[Principal, UserProfile]>> {
         if (this.processError) {
             try {
@@ -1100,6 +1120,18 @@ export class Backend implements backendInterface {
             const result = await this.actor.setHintQuestionAndAnswer(arg0, arg1);
             return result;
         }
+    }
+    async getCompletedProjectIds(): Promise<Array<string>> {
+        return (await this.actor).getCompletedProjectIds();
+    }
+    async toggleProjectCompleted(id: string): Promise<void> {
+        return (await this.actor).toggleProjectCompleted(id);
+    }
+    async setProjectMapLocation(projectId: string, location: string): Promise<void> {
+        return (await this.actor).setProjectMapLocation(projectId, location);
+    }
+    async getProjectMapLocations(): Promise<Array<[string, string]>> {
+        return (await this.actor).getProjectMapLocations();
     }
     async transform(arg0: TransformationInput): Promise<TransformationOutput> {
         if (this.processError) {

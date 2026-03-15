@@ -571,3 +571,65 @@ export function useImportData() {
     },
   });
 }
+
+export function useGetCompletedProjectIds() {
+  const { actor, isFetching } = useActor();
+  return useQuery<string[]>({
+    queryKey: ["completedProjectIds"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getCompletedProjectIds();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_STABLE,
+  });
+}
+
+export function useToggleProjectCompleted() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.toggleProjectCompleted(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["completedProjectIds"] });
+      queryClient.invalidateQueries({ queryKey: ["bills"] });
+      queryClient.invalidateQueries({ queryKey: ["payments"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardMetrics"] });
+      queryClient.invalidateQueries({ queryKey: ["analyticsData"] });
+    },
+  });
+}
+
+export function useGetProjectMapLocations() {
+  const { actor, isFetching } = useActor();
+  return useQuery<Record<string, string>>({
+    queryKey: ["projectMapLocations"],
+    queryFn: async () => {
+      if (!actor) return {};
+      const entries = await actor.getProjectMapLocations();
+      return Object.fromEntries(entries);
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME_STABLE,
+  });
+}
+
+export function useSetProjectMapLocation() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      location,
+    }: { projectId: string; location: string }) => {
+      if (!actor) throw new Error("Actor not available");
+      return actor.setProjectMapLocation(projectId, location);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projectMapLocations"] });
+    },
+  });
+}

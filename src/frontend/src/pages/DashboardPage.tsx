@@ -55,6 +55,7 @@ import {
   useGetAllClients,
   useGetAllPayments,
   useGetAllProjects,
+  useGetCompletedProjectIds,
 } from "../hooks/useQueries";
 
 export default function DashboardPage() {
@@ -71,6 +72,7 @@ export default function DashboardPage() {
   const { data: bills = [] } = useGetAllBills();
   const { data: payments = [] } = useGetAllPayments();
   const { data: projects = [] } = useGetAllProjects();
+  const { data: completedProjectIds = [] } = useGetCompletedProjectIds();
   const { data: _clients = [] } = useGetAllClients();
 
   // Validate date range
@@ -88,6 +90,7 @@ export default function DashboardPage() {
 
   const filteredBills = useMemo(() => {
     return bills.filter((b) => {
+      if (completedProjectIds.includes(b.projectId)) return false;
       // Project filter
       if (
         selectedProjects.length > 0 &&
@@ -138,6 +141,7 @@ export default function DashboardPage() {
     });
   }, [
     bills,
+    completedProjectIds,
     selectedProjects,
     selectedClient,
     selectedYear,
@@ -149,6 +153,7 @@ export default function DashboardPage() {
 
   const filteredPayments = useMemo(() => {
     return payments.filter((p) => {
+      if (completedProjectIds.includes(p.projectId)) return false;
       // Project filter
       if (
         selectedProjects.length > 0 &&
@@ -199,6 +204,7 @@ export default function DashboardPage() {
     });
   }, [
     payments,
+    completedProjectIds,
     selectedProjects,
     selectedClient,
     selectedYear,

@@ -95,6 +95,8 @@ actor {
   };
 
   stable var projects = Map.empty<Text, Project>();
+  stable var completedProjectIds = Map.empty<Text, Bool>();
+  stable var projectMapLocations = Map.empty<Text, Text>();
 
   type Bill = {
     projectId : Text;
@@ -281,6 +283,17 @@ actor {
     };
     if (isAdminRole(caller)) {
       return true;
+    };
+    // Also check if caller has a linked profile in userProfiles (covers users linked via linkUserByEmail)
+    switch (userProfiles.get(caller)) {
+      case (?profile) {
+        switch (profile.role) {
+          case (#user) { return true };
+          case (#admin) { return true };
+          case (_) {};
+        };
+      };
+      case (null) {};
     };
     Authorization.hasPermission(accessControlState, caller, #user) or Authorization.hasPermission(accessControlState, caller, #admin);
   };
@@ -746,6 +759,36 @@ actor {
       };
     };
   };
+  // Links a user account to their real Internet Identity principal by email.
+  // Called when a user logs in but no profile is found under their II principal.
+  // Finds the profile stored under an admin-generated PID and remaps it to the caller.
+  public shared ({ caller }) func linkUserByEmail(email : Text) : async Bool {
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Anonymous users cannot link profiles");
+    };
+
+    // If caller already has a profile, no linking needed
+    switch (userProfiles.get(caller)) {
+      case (?existing) {
+        return Text.equal(existing.email, email);
+      };
+      case (null) {};
+    };
+
+    // Search all profiles for one matching the given email
+    for ((principal, profile) in userProfiles.entries()) {
+      if (Text.equal(profile.email, email)) {
+        if (principal != caller) {
+          userProfiles.remove(principal);
+          userProfiles.add(caller, profile);
+          return true;
+        };
+      };
+    };
+
+    return false;
+  };
+
 
   public shared ({ caller }) func addUser(profile : UserProfile) : async Principal {
     requireAdminOrMasterAdmin(caller);
@@ -1746,5 +1789,31 @@ actor {
         true;
       };
     };
+  };
+
+  public shared ({ caller }) func toggleProjectCompleted(id : Text) : async () {
+    requireAdmin(caller);
+    switch (completedProjectIds.get(id)) {
+      case (null) { completedProjectIds.add(id, true) };
+      case (?_) { completedProjectIds.remove(id) };
+    };
+  };
+
+  public query func getCompletedProjectIds() : async [Text] {
+    completedProjectIds.keys().toArray();
+  };
+
+  public shared ({ caller }) func setProjectMapLocation(projectId : Text, location : Text) : async () {
+    requireAdmin(caller);
+    if (location == "") {
+      projectMapLocations.remove(projectId);
+    } else {
+      projectMapLocations.add(projectId, location);
+    };
+  };
+
+  public query ({ caller }) func getProjectMapLocations() : async [(Text, Text)] {
+    requireAuthenticated(caller);
+    projectMapLocations.entries().toArray();
   };
 };

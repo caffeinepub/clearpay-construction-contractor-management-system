@@ -63,21 +63,25 @@ export default function ProfileSetupPage({ onBypass }: ProfileSetupPageProps) {
         return;
       }
 
+      // New users default to INACTIVE — master admin must activate them
       const profile: UserProfile = {
         fullName: fullName.trim(),
         contact: contact.trim(),
         email: email.trim(),
-        role: UserRole.admin,
-        active: true,
+        role: UserRole.user,
+        active: false,
         accessProjects: [],
       };
 
       await saveProfileMutation.mutateAsync(profile);
-      toast.success("Profile setup complete! Redirecting to Dashboard...");
+      toast.success(
+        "Registration complete. Please wait for the administrator to activate your account.",
+        { duration: 6000 },
+      );
 
       setTimeout(() => {
         window.location.reload();
-      }, 1000);
+      }, 1500);
     } catch (error: any) {
       console.error("Profile setup error:", error);
       const errorMessage =

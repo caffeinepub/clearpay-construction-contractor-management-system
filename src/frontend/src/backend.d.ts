@@ -168,6 +168,7 @@ export interface backendInterface {
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getDashboardMetrics(): Promise<DashboardMetrics>;
+    getCompletedProjectIds(): Promise<Array<string>>;
     getDefaultAdminProfile(): Promise<UserProfile | null>;
     getGreetingMessage(arg0: null): Promise<string>;
     getHintQuestion(): Promise<string | null>;
@@ -194,10 +195,14 @@ export interface backendInterface {
     isAdminPasswordSet(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     linkMasterAdminPrincipal(): Promise<boolean>;
+    linkUserByEmail(email: string): Promise<boolean>;
     listUsers(): Promise<Array<[Principal, UserProfile]>>;
     revealAdminPassword(answer: string): Promise<string | null>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     setHintQuestionAndAnswer(question: string, answer: string): Promise<void>;
+    toggleProjectCompleted(id: string): Promise<void>;
+    setProjectMapLocation(projectId: string, location: string): Promise<void>;
+    getProjectMapLocations(): Promise<Array<[string, string]>>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
     updateBill(bill: Bill, password: string): Promise<void>;
     updateClient(client: Client, password: string): Promise<void>;

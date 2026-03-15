@@ -58,6 +58,7 @@ import {
   useGetAllBills,
   useGetAllProjects,
   useGetCallerUserProfile,
+  useGetCompletedProjectIds,
   useUpdateBill,
 } from "../hooks/useQueries";
 import {
@@ -120,6 +121,7 @@ export default function BillsPage() {
 
   const { data: bills = [] } = useGetAllBills();
   const { data: projects = [] } = useGetAllProjects();
+  const { data: completedProjectIds = [] } = useGetCompletedProjectIds();
   const { data: currentUser } = useGetCallerUserProfile();
   const addBill = useAddBill();
   const updateBill = useUpdateBill();
@@ -167,6 +169,11 @@ export default function BillsPage() {
 
   const filteredBills = useMemo(() => {
     let filtered = bills.filter((bill) => {
+      if (
+        completedProjectIds.length > 0 &&
+        !completedProjectIds.includes(bill.projectId)
+      )
+        return false;
       if (
         selectedProjects.length > 0 &&
         !selectedProjects.includes(bill.projectId)
@@ -299,6 +306,7 @@ export default function BillsPage() {
     return filtered;
   }, [
     bills,
+    completedProjectIds,
     selectedProjects,
     selectedClients,
     blockIdFilter,

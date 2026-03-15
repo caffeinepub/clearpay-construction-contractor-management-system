@@ -58,6 +58,7 @@ import {
   useGetAllPayments,
   useGetAllProjects,
   useGetCallerUserProfile,
+  useGetCompletedProjectIds,
   useUpdatePayment,
 } from "../hooks/useQueries";
 import {
@@ -111,6 +112,7 @@ export default function PaymentsPage() {
 
   const { data: payments = [] } = useGetAllPayments();
   const { data: projects = [] } = useGetAllProjects();
+  const { data: completedProjectIds = [] } = useGetCompletedProjectIds();
   const { data: currentUser } = useGetCallerUserProfile();
   const addPayment = useAddPayment();
   const updatePayment = useUpdatePayment();
@@ -147,6 +149,11 @@ export default function PaymentsPage() {
 
   const filteredPayments = useMemo(() => {
     let filtered = payments.filter((payment) => {
+      if (
+        completedProjectIds.length > 0 &&
+        !completedProjectIds.includes(payment.projectId)
+      )
+        return false;
       if (
         selectedProjects.length > 0 &&
         !selectedProjects.includes(payment.projectId)
@@ -269,6 +276,7 @@ export default function PaymentsPage() {
     return filtered;
   }, [
     payments,
+    completedProjectIds,
     selectedProjects,
     paymentModeFilter,
     referenceFilter,

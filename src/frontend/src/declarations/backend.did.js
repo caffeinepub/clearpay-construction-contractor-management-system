@@ -565,6 +565,10 @@ export const idlFactory = ({ IDL }) => {
     'updateUser' : IDL.Func([IDL.Principal, UserProfile], [], []),
     'validateActiveUser' : IDL.Func([IDL.Text], [], ['query']),
     'verifyHintAnswer' : IDL.Func([IDL.Text], [IDL.Text], []),
+    'toggleProjectCompleted' : IDL.Func([IDL.Text], [], []),
+    'getCompletedProjectIds' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+    'setProjectMapLocation' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'getProjectMapLocations' : IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], ['query']),
   });
 };
 

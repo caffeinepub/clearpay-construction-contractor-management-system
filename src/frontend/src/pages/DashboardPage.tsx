@@ -50,12 +50,14 @@ import { toast } from "sonner";
 import type { PaymentMode } from "../backend";
 import ChartZoomModal from "../components/ChartZoomModal";
 import { DateInput } from "../components/DateInput";
+import ProjectLocationsMap from "../components/ProjectLocationsMap";
 import {
   useGetAllBills,
   useGetAllClients,
   useGetAllPayments,
   useGetAllProjects,
   useGetCompletedProjectIds,
+  useGetProjectMapLocations,
 } from "../hooks/useQueries";
 
 export default function DashboardPage() {
@@ -73,6 +75,7 @@ export default function DashboardPage() {
   const { data: payments = [] } = useGetAllPayments();
   const { data: projects = [] } = useGetAllProjects();
   const { data: completedProjectIds = [] } = useGetCompletedProjectIds();
+  const { data: mapLocations = {} } = useGetProjectMapLocations();
   const { data: _clients = [] } = useGetAllClients();
 
   // Validate date range
@@ -503,6 +506,36 @@ export default function DashboardPage() {
   };
 
   const _projectOptions = projects.map((p) => ({ id: p.id, label: p.name }));
+
+  const projectLocations = useMemo(() => {
+    return projects
+      .filter((p) => mapLocations[p.id])
+      .map((p) => {
+        const coords = mapLocations[p.id]
+          .split(",")
+          .map((s: string) => Number.parseFloat(s.trim()));
+        if (
+          coords.length < 2 ||
+          Number.isNaN(coords[0]) ||
+          Number.isNaN(coords[1])
+        )
+          return null;
+        return {
+          id: p.id,
+          name: p.name,
+          lat: coords[0],
+          lng: coords[1],
+          isCompleted: completedProjectIds.includes(p.id),
+        };
+      })
+      .filter(Boolean) as {
+      id: string;
+      name: string;
+      lat: number;
+      lng: number;
+      isCompleted: boolean;
+    }[];
+  }, [projects, mapLocations, completedProjectIds]);
 
   const getProjectDisplayText = () => {
     if (selectedProjects.length === 0) return "All Projects";
@@ -1261,6 +1294,8 @@ export default function DashboardPage() {
           </LineChart>
         </ResponsiveContainer>
       </ChartZoomModal>
+
+      <ProjectLocationsMap projectLocations={projectLocations} />
     </div>
   );
 }

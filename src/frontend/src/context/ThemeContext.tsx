@@ -1,9 +1,8 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext } from "react";
 
-type Theme = "light" | "dark";
-
+// Theme system disabled — always light mode
 interface ThemeContextValue {
-  theme: Theme;
+  theme: "light";
   toggleTheme: () => void;
 }
 
@@ -13,33 +12,8 @@ const ThemeContext = createContext<ThemeContextValue>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    try {
-      return (localStorage.getItem("clearpay-theme") as Theme) || "light";
-    } catch {
-      return "light";
-    }
-  });
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-    try {
-      localStorage.setItem("clearpay-theme", theme);
-    } catch {
-      // ignore
-    }
-  }, [theme]);
-
-  const toggleTheme = () =>
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
-
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme: "light", toggleTheme: () => {} }}>
       {children}
     </ThemeContext.Provider>
   );

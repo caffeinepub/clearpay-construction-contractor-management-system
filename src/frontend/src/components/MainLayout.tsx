@@ -1,4 +1,11 @@
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
@@ -10,15 +17,12 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  Moon,
-  Sun,
+  Plus,
   UserCog,
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AppHeader } from "../components/AppHeader";
 import { type Page, useNavigation } from "../context/NavigationContext";
-import { useTheme } from "../context/ThemeContext";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useMasterAdmin } from "../hooks/useMasterAdmin";
 import { useGetCallerUserProfile } from "../hooks/useQueries";
@@ -31,17 +35,35 @@ import ProjectsPage from "../pages/ProjectsPage";
 import ReportsPage from "../pages/ReportsPage";
 import SeriAIPage from "../pages/SeriAIPage";
 import UsersPage from "../pages/UsersPage";
+import { AppHeader } from "./AppHeader";
+
+const TICKER_STORAGE_KEY = "clearpay_ticker_messages";
+
+function loadTickerMessages(): string {
+  try {
+    const stored = localStorage.getItem(TICKER_STORAGE_KEY);
+    if (stored) return stored;
+  } catch (_) {
+    /* ignore */
+  }
+  return "";
+}
 
 export default function MainLayout() {
   const { currentPage, setCurrentPage } = useNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
-  const { theme, toggleTheme } = useTheme();
+
+  // Ticker state
+  const [tickerText, setTickerText] = useState<string>(loadTickerMessages);
+  const [tickerDialogOpen, setTickerDialogOpen] = useState(false);
+  const [newMessage, setNewMessage] = useState("");
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
   const { clear } = useInternetIdentity();
   const queryClient = useQueryClient();
   const { data: userProfile } = useGetCallerUserProfile();
@@ -52,8 +74,6 @@ export default function MainLayout() {
     queryClient.clear();
   };
 
-  // CRITICAL: Admin = confirmed master admin (by email) OR admin role from profile.
-  // isDefaultAdminDetected is no longer used here to prevent false positives.
   const isAdmin = isMasterAdmin || userProfile?.role === "admin";
 
   const allNavItems = [
@@ -68,7 +88,6 @@ export default function MainLayout() {
     { id: "seri-ai" as Page, label: "Seri AI", icon: Bot },
   ];
 
-  // CRITICAL: Filter out Users module for non-admin users
   const navItems = allNavItems.filter((item) => {
     if (item.adminOnly) {
       return isAdmin;
@@ -83,6 +102,21 @@ export default function MainLayout() {
       return;
     }
     setCurrentPage(pageId);
+  };
+
+  const handleSaveTickerMessage = () => {
+    if (!newMessage.trim()) return;
+    const updated = tickerText
+      ? `${newMessage.trim()}  |  ${tickerText}`
+      : newMessage.trim();
+    setTickerText(updated);
+    try {
+      localStorage.setItem(TICKER_STORAGE_KEY, updated);
+    } catch (_) {
+      /* ignore */
+    }
+    setNewMessage("");
+    setTickerDialogOpen(false);
   };
 
   const renderPage = () => {
@@ -122,6 +156,19 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
+      {/* Marquee keyframe style */}
+      <style>{`
+        @keyframes marquee-rtl {
+          from { transform: translateX(100%); }
+          to   { transform: translateX(-100%); }
+        }
+        .ticker-track {
+          display: inline-block;
+          white-space: nowrap;
+          animation: marquee-rtl 30s linear infinite;
+        }
+      `}</style>
+
       {/* Sidebar */}
       <aside
         className={`${
@@ -168,8 +215,8 @@ export default function MainLayout() {
         </nav>
 
         <div className="p-4 border-t border-border">
-          <div className="text-sm text-[#555555] mb-2">
-            <div className="font-bold">{userProfile?.fullName}</div>
+          <div className="text-xs text-[#555555] mb-2 text-center">
+            © 2025 ClearPay. Powered by Seri AI.
           </div>
           <Button
             onClick={handleLogout}
@@ -200,24 +247,7 @@ export default function MainLayout() {
               {getPageTitle()}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              title={
-                theme === "dark"
-                  ? "Switch to Light Mode"
-                  : "Switch to Dark Mode"
-              }
-              data-ocid="nav.toggle"
-            >
-              {theme === "dark" ? (
-                <Sun className="h-5 w-5 text-yellow-500" />
-              ) : (
-                <Moon className="h-5 w-5 text-[#555555]" />
-              )}
-            </Button>
+          <div className="flex items-center gap-3">
             <AppHeader />
           </div>
         </header>
@@ -225,21 +255,98 @@ export default function MainLayout() {
         {/* Page Content */}
         <main className="flex-1 overflow-auto bg-gray-50">{renderPage()}</main>
 
-        {/* Footer — 3-column: empty left | center copyright | right date/time */}
-        <footer className="bg-white border-t border-border px-6 py-3 flex items-center text-sm text-[#555555] font-normal">
-          <div className="flex-1" />
-          <span className="flex-1 text-center">
-            © 2025 ClearPay. Powered by Seri AI.
-          </span>
+        {/* Footer — ticker + date/time */}
+        <footer className="bg-white border-t border-border px-4 py-2 flex items-center gap-3 text-sm text-[#555555] font-normal overflow-hidden">
+          {/* Scrolling ticker area */}
+          <div className="flex items-center gap-2 flex-1 overflow-hidden">
+            {isMasterAdmin && (
+              <button
+                type="button"
+                onClick={() => setTickerDialogOpen(true)}
+                title="Add scrolling message"
+                data-ocid="ticker.open_modal_button"
+                style={{
+                  background: "#0078D7",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "4px",
+                  width: "22px",
+                  height: "22px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  fontSize: "16px",
+                  lineHeight: 1,
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <div
+              className="overflow-hidden flex-1"
+              style={{ position: "relative" }}
+            >
+              {tickerText && (
+                <span
+                  className="ticker-track text-[#555555]"
+                  style={{ fontSize: "0.8rem" }}
+                >
+                  {tickerText}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Fixed date/time */}
           <span
-            className="flex-1 text-right"
-            style={{ fontFamily: "'Consolas', monospace" }}
+            className="flex-shrink-0 text-right"
+            style={{ fontFamily: "'Consolas', monospace", fontSize: "0.8rem" }}
           >
             {currentDateTime.toLocaleDateString("en-GB").replace(/\//g, "/")}{" "}
             {currentDateTime.toLocaleTimeString("en-GB")}
           </span>
         </footer>
       </div>
+
+      {/* Add Scrolling Message Dialog */}
+      <Dialog open={tickerDialogOpen} onOpenChange={setTickerDialogOpen}>
+        <DialogContent data-ocid="ticker.dialog">
+          <DialogHeader>
+            <DialogTitle>Add Scrolling Message</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <textarea
+              rows={3}
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              placeholder="Enter message (all special characters allowed)..."
+              data-ocid="ticker.textarea"
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#0078D7]"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setNewMessage("");
+                setTickerDialogOpen(false);
+              }}
+              data-ocid="ticker.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveTickerMessage}
+              style={{ background: "#0078D7", color: "#fff" }}
+              data-ocid="ticker.save_button"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

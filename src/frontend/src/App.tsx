@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import MainLayout from "./components/MainLayout";
 import { NavigationProvider } from "./context/NavigationContext";
 import { ShortcutProvider } from "./context/ShortcutContext";
-import { ThemeProvider } from "./context/ThemeContext";
 import { useActor } from "./hooks/useActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useMasterAdmin } from "./hooks/useMasterAdmin";
@@ -35,6 +34,16 @@ function App() {
   const linkAttemptedRef = useRef(false);
 
   const isAuthenticated = !!identity;
+
+  // Ensure dark mode class is never applied
+  useEffect(() => {
+    document.documentElement.classList.remove("dark");
+    try {
+      localStorage.removeItem("clearpay-theme");
+    } catch (_) {
+      /* ignore */
+    }
+  }, []);
 
   // CRITICAL: Check if user account is active
   useEffect(() => {
@@ -226,10 +235,6 @@ function App() {
           queryClient.invalidateQueries({ queryKey: ["currentUserProfile"] });
           queryClient.invalidateQueries({ queryKey: ["users"] });
           queryClient.invalidateQueries({ queryKey: ["accessProjects"] });
-          // CRITICAL FIX: Do NOT reset linkAttemptedRef or go back to "init".
-          // Resetting caused a race condition where linkMasterAdminPrincipal()
-          // would override linkPhase back to "link_email" after profile loaded.
-          // Instead: show loading spinner while profile refetches, then show app.
           setLinkPhase("link_master");
         }}
         onNewUser={() => {
@@ -292,14 +297,12 @@ function App() {
   }
 
   return (
-    <ThemeProvider>
-      <NavigationProvider>
-        <ShortcutProvider>
-          <MainLayout />
-          <Toaster />
-        </ShortcutProvider>
-      </NavigationProvider>
-    </ThemeProvider>
+    <NavigationProvider>
+      <ShortcutProvider>
+        <MainLayout />
+        <Toaster />
+      </ShortcutProvider>
+    </NavigationProvider>
   );
 }
 

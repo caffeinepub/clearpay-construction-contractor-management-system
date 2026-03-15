@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { Principal } from "@icp-sdk/core/principal";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Download,
   Eye,
@@ -37,6 +38,7 @@ import { AppHeader } from "../components/AppHeader";
 import { MultiSelectFilter } from "../components/MultiSelectFilter";
 import { SECURITY_QUESTIONS } from "../constants/securityQuestions";
 import { useActor } from "../hooks/useActor";
+import { usePageShortcuts } from "../hooks/usePageShortcuts";
 import {
   useAddUser,
   useDeleteUsers,
@@ -250,6 +252,24 @@ export default function UsersPage() {
     }
   };
 
+  // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
+  const queryClient = useQueryClient();
+  usePageShortcuts({
+    newForm: () => {
+      setDialogMode("add");
+      setShowUserDialog(true);
+    },
+    refreshList: () => queryClient.invalidateQueries({ queryKey: ["users"] }),
+    focusSearch: () => {
+      const input =
+        document.querySelector<HTMLInputElement>("input[placeholder]");
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    },
+  });
+
   const handlePrint = () => {
     window.print();
   };
@@ -264,6 +284,7 @@ export default function UsersPage() {
       "Access",
       "Principal ID",
     ];
+
     const rows = filteredUsers.map(([principal, profile]) => [
       profile.fullName,
       profile.email,

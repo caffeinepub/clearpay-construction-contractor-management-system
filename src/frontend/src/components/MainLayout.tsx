@@ -13,8 +13,9 @@ import {
   UserCog,
   Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppHeader } from "../components/AppHeader";
+import { type Page, useNavigation } from "../context/NavigationContext";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useMasterAdmin } from "../hooks/useMasterAdmin";
 import { useGetCallerUserProfile } from "../hooks/useQueries";
@@ -28,20 +29,15 @@ import ReportsPage from "../pages/ReportsPage";
 import SeriAIPage from "../pages/SeriAIPage";
 import UsersPage from "../pages/UsersPage";
 
-type Page =
-  | "dashboard"
-  | "analytics"
-  | "projects"
-  | "bills"
-  | "payments"
-  | "clients"
-  | "users"
-  | "reports"
-  | "seri-ai";
-
 export default function MainLayout() {
-  const [currentPage, setCurrentPage] = useState<Page>("dashboard");
+  const { currentPage, setCurrentPage } = useNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [currentDateTime, setCurrentDateTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   const { clear } = useInternetIdentity();
   const queryClient = useQueryClient();
   const { data: userProfile } = useGetCallerUserProfile();
@@ -205,9 +201,19 @@ export default function MainLayout() {
         {/* Page Content */}
         <main className="flex-1 overflow-auto bg-gray-50">{renderPage()}</main>
 
-        {/* Footer */}
-        <footer className="bg-white border-t border-border px-6 py-3 text-center text-sm text-[#555555] font-normal">
-          © 2025 ClearPay. Powered by Seri AI.
+        {/* Footer — 3-column: empty left | center copyright | right date/time */}
+        <footer className="bg-white border-t border-border px-6 py-3 flex items-center text-sm text-[#555555] font-normal">
+          <div className="flex-1" />
+          <span className="flex-1 text-center">
+            © 2025 ClearPay. Powered by Seri AI.
+          </span>
+          <span
+            className="flex-1 text-right"
+            style={{ fontFamily: "'Consolas', monospace" }}
+          >
+            {currentDateTime.toLocaleDateString("en-GB").replace(/\//g, "/")}{" "}
+            {currentDateTime.toLocaleTimeString("en-GB")}
+          </span>
         </footer>
       </div>
     </div>

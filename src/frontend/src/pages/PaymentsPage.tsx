@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { canManageData } from "@/lib/authAdmin";
 import { formatINR } from "@/utils/money";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowDown,
@@ -51,6 +52,7 @@ import { BulkDeleteButton } from "../components/BulkDeleteButton";
 import { DateInput } from "../components/DateInput";
 import { MultiSelectFilter } from "../components/MultiSelectFilter";
 import { PasswordConfirmModal } from "../components/PasswordConfirmModal";
+import { usePageShortcuts } from "../hooks/usePageShortcuts";
 import {
   useAddPayment,
   useBulkDeletePayments,
@@ -821,6 +823,46 @@ export default function PaymentsPage() {
     setEndDateFilter("");
   };
 
+  // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
+  const queryClient = useQueryClient();
+  usePageShortcuts({
+    newForm: () => {
+      if (canManage) setIsFormOpen(true);
+    },
+    importCSV: () => {
+      if (canManage) handleImportCSV();
+    },
+    exportCSV: handleExportCSV,
+    exportPDF: handleExportPDF,
+    downloadFormat: () => {
+      if (canManage) handleDownloadTemplate();
+    },
+    clearFilters: handleClearFilters,
+    resetFilters: handleClearFilters,
+    refreshList: () =>
+      queryClient.invalidateQueries({ queryKey: ["payments"] }),
+    focusSearch: () => {
+      const input =
+        document.querySelector<HTMLInputElement>("input[placeholder]");
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    },
+    print: handlePrint,
+    selectAll: () => {
+      if (canManage) setSelectedPayments(filteredPayments.map((p) => p.id));
+    },
+    deleteSelected: () => {
+      if (canManage && selectedPayments.length > 0)
+        setShowBulkDeleteDialog(true);
+    },
+    bulkDelete: () => {
+      if (canManage && selectedPayments.length > 0)
+        setShowBulkDeleteDialog(true);
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       paymentDate: "",
@@ -1347,170 +1389,165 @@ export default function PaymentsPage() {
       </Dialog>
 
       {/* Payment Form Dialog */}
-      {canManage && (
-        <Dialog
-          open={isFormOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setIsFormOpen(false);
-              resetForm();
-            }
-          }}
-        >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="font-bold text-xl">
-                {editingPayment ? "Edit Payment" : "New Payment"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <Label className="font-bold">Project *</Label>
-                  <Select
-                    value={formData.projectId}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, projectId: value })
-                    }
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+      <Dialog
+        open={isFormOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsFormOpen(false);
+            resetForm();
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-bold text-xl">
+              {editingPayment ? "Edit Payment" : "New Payment"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-4">
+              <div>
+                <Label className="font-bold">Project *</Label>
+                <Select
+                  value={formData.projectId}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, projectId: value })
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div>
-                  <Label className="font-bold">Date *</Label>
-                  <DateInput
-                    value={formData.paymentDate}
-                    onChange={(value) =>
-                      setFormData({ ...formData, paymentDate: value })
-                    }
-                    placeholder="dd-mm-yyyy"
-                    className="mt-1"
-                  />
-                </div>
+              <div>
+                <Label className="font-bold">Date *</Label>
+                <DateInput
+                  value={formData.paymentDate}
+                  onChange={(value) =>
+                    setFormData({ ...formData, paymentDate: value })
+                  }
+                  placeholder="dd-mm-yyyy"
+                  className="mt-1"
+                />
+              </div>
 
-                <div>
-                  <Label className="font-bold">Amount (₹) *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.paymentAmount || ""}
-                    onChange={(e) =>
+              <div>
+                <Label className="font-bold">Amount (₹) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.paymentAmount || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      paymentAmount: Number.parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  placeholder="0.00"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label className="font-bold">Payment Mode *</Label>
+                <div className="flex gap-4 mt-2">
+                  <Button
+                    type="button"
+                    variant={
+                      formData.paymentMode === PaymentMode.account
+                        ? "default"
+                        : "outline"
+                    }
+                    onClick={() =>
                       setFormData({
                         ...formData,
-                        paymentAmount: Number.parseFloat(e.target.value) || 0,
+                        paymentMode: PaymentMode.account,
                       })
                     }
-                    placeholder="0.00"
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <Label className="font-bold">Payment Mode *</Label>
-                  <div className="flex gap-4 mt-2">
-                    <Button
-                      type="button"
-                      variant={
-                        formData.paymentMode === PaymentMode.account
-                          ? "default"
-                          : "outline"
-                      }
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          paymentMode: PaymentMode.account,
-                        })
-                      }
-                      className={
-                        formData.paymentMode === PaymentMode.account
-                          ? "bg-[#28A745] hover:bg-[#218838]"
-                          : ""
-                      }
-                    >
-                      Account
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={
-                        formData.paymentMode === PaymentMode.cash
-                          ? "default"
-                          : "outline"
-                      }
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          paymentMode: PaymentMode.cash,
-                        })
-                      }
-                      className={
-                        formData.paymentMode === PaymentMode.cash
-                          ? "bg-[#555555] hover:bg-[#333333]"
-                          : ""
-                      }
-                    >
-                      Cash
-                    </Button>
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="font-normal">Reference</Label>
-                  <Input
-                    value={formData.reference}
-                    onChange={(e) =>
-                      setFormData({ ...formData, reference: e.target.value })
+                    className={
+                      formData.paymentMode === PaymentMode.account
+                        ? "bg-[#28A745] hover:bg-[#218838]"
+                        : ""
                     }
-                    placeholder="Enter reference"
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <Label className="font-normal">Remarks</Label>
-                  <Textarea
-                    value={formData.remarks}
-                    onChange={(e) =>
-                      setFormData({ ...formData, remarks: e.target.value })
+                  >
+                    Account
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={
+                      formData.paymentMode === PaymentMode.cash
+                        ? "default"
+                        : "outline"
                     }
-                    placeholder="Enter remarks (optional)"
-                    className="mt-1"
-                    rows={3}
-                  />
+                    onClick={() =>
+                      setFormData({
+                        ...formData,
+                        paymentMode: PaymentMode.cash,
+                      })
+                    }
+                    className={
+                      formData.paymentMode === PaymentMode.cash
+                        ? "bg-[#555555] hover:bg-[#333333]"
+                        : ""
+                    }
+                  >
+                    Cash
+                  </Button>
                 </div>
               </div>
 
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsFormOpen(false);
-                    resetForm();
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="bg-[#28A745] hover:bg-[#218838]"
-                >
-                  {editingPayment ? "Update Payment" : "Save Payment"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      )}
+              <div>
+                <Label className="font-normal">Reference</Label>
+                <Input
+                  value={formData.reference}
+                  onChange={(e) =>
+                    setFormData({ ...formData, reference: e.target.value })
+                  }
+                  placeholder="Enter reference"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label className="font-normal">Remarks</Label>
+                <Textarea
+                  value={formData.remarks}
+                  onChange={(e) =>
+                    setFormData({ ...formData, remarks: e.target.value })
+                  }
+                  placeholder="Enter remarks (optional)"
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsFormOpen(false);
+                  resetForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" className="bg-[#28A745] hover:bg-[#218838]">
+                {editingPayment ? "Update Payment" : "Save Payment"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Password Modal */}
       {canManage && (

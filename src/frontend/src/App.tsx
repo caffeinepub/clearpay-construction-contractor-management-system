@@ -2,6 +2,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import MainLayout from "./components/MainLayout";
+import { NavigationProvider } from "./context/NavigationContext";
+import { ShortcutProvider } from "./context/ShortcutContext";
 import { useActor } from "./hooks/useActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { useMasterAdmin } from "./hooks/useMasterAdmin";
@@ -289,10 +291,12 @@ function App() {
   }
 
   return (
-    <>
-      <MainLayout />
-      <Toaster />
-    </>
+    <NavigationProvider>
+      <ShortcutProvider>
+        <MainLayout />
+        <Toaster />
+      </ShortcutProvider>
+    </NavigationProvider>
   );
 }
 

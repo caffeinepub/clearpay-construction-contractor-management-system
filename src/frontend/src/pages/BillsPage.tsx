@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { canManageData } from "@/lib/authAdmin";
 import { formatINR } from "@/utils/money";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowDown,
@@ -51,6 +52,7 @@ import { BulkDeleteButton } from "../components/BulkDeleteButton";
 import { DateInput } from "../components/DateInput";
 import { MultiSelectFilter } from "../components/MultiSelectFilter";
 import { PasswordConfirmModal } from "../components/PasswordConfirmModal";
+import { usePageShortcuts } from "../hooks/usePageShortcuts";
 import {
   useAddBill,
   useBulkDeleteBills,
@@ -85,6 +87,7 @@ type SortDirection = "asc" | "desc" | null;
 
 export default function BillsPage() {
   const _navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
@@ -926,6 +929,54 @@ export default function BillsPage() {
     setEndDateFilter("");
   };
 
+  // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
+  usePageShortcuts({
+    newForm: () => {
+      if (canManage) setIsFormOpen(true);
+    },
+    saveForm: () => {
+      const form = document.querySelector<HTMLFormElement>(
+        "form[data-bill-form]",
+      );
+      if (form) form.requestSubmit();
+    },
+    importCSV: () => {
+      if (canManage) handleImportCSV();
+    },
+    exportCSV: handleExportCSV,
+    exportPDF: handleExportPDF,
+    downloadFormat: () => {
+      if (canManage) handleDownloadTemplate();
+    },
+    clearFilters: handleClearFilters,
+    resetFilters: handleClearFilters,
+    refreshList: () => queryClient.invalidateQueries({ queryKey: ["bills"] }),
+    focusSearch: () => {
+      const input =
+        document.querySelector<HTMLInputElement>("input[placeholder]");
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    },
+    print: handlePrint,
+    selectAll: () => {
+      if (canManage) {
+        const allKeys = filteredBills.map((b) => ({
+          projectId: b.projectId,
+          billNumber: b.billNumber,
+        }));
+        setSelectedBills(allKeys);
+      }
+    },
+    deleteSelected: () => {
+      if (canManage && selectedBills.length > 0) setShowBulkDeleteDialog(true);
+    },
+    bulkDelete: () => {
+      if (canManage && selectedBills.length > 0) setShowBulkDeleteDialog(true);
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       date: "",
@@ -1573,189 +1624,184 @@ export default function BillsPage() {
       </Dialog>
 
       {/* Bill Form Dialog */}
-      {canManage && (
-        <Dialog
-          open={isFormOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setIsFormOpen(false);
-              resetForm();
-            }
-          }}
-        >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="font-bold text-xl">
-                {editingBill ? "Edit Bill" : "New Bill"}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <Label className="font-bold">Date *</Label>
-                  <DateInput
-                    value={formData.date}
-                    onChange={(value) =>
-                      setFormData({ ...formData, date: value })
-                    }
-                    placeholder="dd-mm-yyyy"
-                    className="mt-1"
-                  />
-                </div>
+      <Dialog
+        open={isFormOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsFormOpen(false);
+            resetForm();
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-bold text-xl">
+              {editingBill ? "Edit Bill" : "New Bill"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-4">
+              <div>
+                <Label className="font-bold">Date *</Label>
+                <DateInput
+                  value={formData.date}
+                  onChange={(value) =>
+                    setFormData({ ...formData, date: value })
+                  }
+                  placeholder="dd-mm-yyyy"
+                  className="mt-1"
+                />
+              </div>
 
-                <div>
-                  <Label className="font-bold">Project *</Label>
-                  <Select
-                    value={formData.projectId}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, projectId: value })
-                    }
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div>
+                <Label className="font-bold">Project *</Label>
+                <Select
+                  value={formData.projectId}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, projectId: value })
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div>
-                  <Label className="font-normal">Block ID</Label>
-                  <Input
-                    value={formData.blockId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, blockId: e.target.value })
-                    }
-                    placeholder="Enter block ID (optional)"
-                    className="mt-1"
-                  />
-                </div>
+              <div>
+                <Label className="font-normal">Block ID</Label>
+                <Input
+                  value={formData.blockId}
+                  onChange={(e) =>
+                    setFormData({ ...formData, blockId: e.target.value })
+                  }
+                  placeholder="Enter block ID (optional)"
+                  className="mt-1"
+                />
+              </div>
 
-                <div>
-                  <Label className="font-bold">Bill No *</Label>
-                  <Input
-                    value={formData.billNumber}
-                    onChange={(e) =>
-                      setFormData({ ...formData, billNumber: e.target.value })
-                    }
-                    placeholder="Enter bill number"
-                    className="mt-1"
-                  />
-                </div>
+              <div>
+                <Label className="font-bold">Bill No *</Label>
+                <Input
+                  value={formData.billNumber}
+                  onChange={(e) =>
+                    setFormData({ ...formData, billNumber: e.target.value })
+                  }
+                  placeholder="Enter bill number"
+                  className="mt-1"
+                />
+              </div>
 
-                <div>
-                  <Label className="font-bold">Description of Item *</Label>
-                  <Input
-                    value={formData.description}
-                    onChange={(e) =>
-                      setFormData({ ...formData, description: e.target.value })
-                    }
-                    placeholder="Enter description"
-                    className="mt-1"
-                  />
-                </div>
+              <div>
+                <Label className="font-bold">Description of Item *</Label>
+                <Input
+                  value={formData.description}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  placeholder="Enter description"
+                  className="mt-1"
+                />
+              </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="font-bold">Quantity *</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.quantity}
-                      onChange={(e) =>
-                        setFormData({ ...formData, quantity: e.target.value })
-                      }
-                      placeholder="0.00"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="font-bold">Unit *</Label>
-                    <Select
-                      value={formData.unit}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, unit: value })
-                      }
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Rft">Rft</SelectItem>
-                        <SelectItem value="Sft">Sft</SelectItem>
-                        <SelectItem value="Cuft">Cuft</SelectItem>
-                        <SelectItem value="Rmt">Rmt</SelectItem>
-                        <SelectItem value="Smt">Smt</SelectItem>
-                        <SelectItem value="Cumt">Cumt</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="font-bold">Unit Price (₹) *</Label>
+                  <Label className="font-bold">Quantity *</Label>
                   <Input
                     type="number"
                     step="0.01"
-                    value={formData.unitPrice}
+                    value={formData.quantity}
                     onChange={(e) =>
-                      setFormData({ ...formData, unitPrice: e.target.value })
+                      setFormData({ ...formData, quantity: e.target.value })
                     }
                     placeholder="0.00"
                     className="mt-1"
                   />
                 </div>
-
                 <div>
-                  <Label className="font-bold">Total Amount</Label>
-                  <Input
-                    value={formatINR(totalAmountCalculated)}
-                    disabled
-                    className="mt-1 bg-gray-100"
-                  />
-                </div>
-
-                <div>
-                  <Label className="font-normal">Remarks</Label>
-                  <Textarea
-                    value={formData.remarks}
-                    onChange={(e) =>
-                      setFormData({ ...formData, remarks: e.target.value })
+                  <Label className="font-bold">Unit *</Label>
+                  <Select
+                    value={formData.unit}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, unit: value })
                     }
-                    placeholder="Enter remarks (optional)"
-                    className="mt-1"
-                    rows={3}
-                  />
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Rft">Rft</SelectItem>
+                      <SelectItem value="Sft">Sft</SelectItem>
+                      <SelectItem value="Cuft">Cuft</SelectItem>
+                      <SelectItem value="Rmt">Rmt</SelectItem>
+                      <SelectItem value="Smt">Smt</SelectItem>
+                      <SelectItem value="Cumt">Cumt</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsFormOpen(false);
-                    resetForm();
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="bg-[#28A745] hover:bg-[#218838]"
-                >
-                  {editingBill ? "Update Bill" : "Save Bill"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      )}
+              <div>
+                <Label className="font-bold">Unit Price (₹) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.unitPrice}
+                  onChange={(e) =>
+                    setFormData({ ...formData, unitPrice: e.target.value })
+                  }
+                  placeholder="0.00"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label className="font-bold">Total Amount</Label>
+                <Input
+                  value={formatINR(totalAmountCalculated)}
+                  disabled
+                  className="mt-1 bg-gray-100"
+                />
+              </div>
+
+              <div>
+                <Label className="font-normal">Remarks</Label>
+                <Textarea
+                  value={formData.remarks}
+                  onChange={(e) =>
+                    setFormData({ ...formData, remarks: e.target.value })
+                  }
+                  placeholder="Enter remarks (optional)"
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsFormOpen(false);
+                  resetForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" className="bg-[#28A745] hover:bg-[#218838]">
+                {editingBill ? "Update Bill" : "Save Bill"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Password Modal */}
       {canManage && (

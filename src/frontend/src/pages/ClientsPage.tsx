@@ -18,11 +18,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useQueryClient } from "@tanstack/react-query";
 import { FileDown, FileUp, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { type Client, UserRole } from "../backend";
 import { ActionButton } from "../components/ActionButton";
+import { usePageShortcuts } from "../hooks/usePageShortcuts";
 import {
   useAddClient,
   useDeleteClient,
@@ -191,6 +193,26 @@ export default function ClientsPage() {
     setFilterCompany("");
     setFilterContact("");
   };
+
+  // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
+  const queryClient = useQueryClient();
+  usePageShortcuts({
+    newForm: () => {
+      if (isAdmin) setIsFormOpen(true);
+    },
+    clearFilters,
+    resetFilters: clearFilters,
+    refreshList: () => queryClient.invalidateQueries({ queryKey: ["clients"] }),
+    focusSearch: () => {
+      const input =
+        document.querySelector<HTMLInputElement>("input[placeholder]");
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    },
+    print: () => window.print(),
+  });
 
   return (
     <div className="p-6 space-y-6 bg-[#F5F5F5] min-h-screen">

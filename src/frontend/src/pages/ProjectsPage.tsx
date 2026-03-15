@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronUp,
@@ -55,6 +56,7 @@ import { ActionButton } from "../components/ActionButton";
 import { DateInput } from "../components/DateInput";
 import { useActor } from "../hooks/useActor";
 import { useMasterAdmin } from "../hooks/useMasterAdmin";
+import { usePageShortcuts } from "../hooks/usePageShortcuts";
 import {
   useAddProject,
   useDeleteProject,
@@ -512,6 +514,32 @@ export default function ProjectsPage() {
     exportToPDF("Projects Report");
     window.print();
   };
+
+  // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
+  const queryClient = useQueryClient();
+  usePageShortcuts({
+    newForm: () => {
+      if (isAdmin) setIsFormOpen(true);
+    },
+    clearFilters,
+    resetFilters: clearFilters,
+    refreshList: () =>
+      queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    focusSearch: () => {
+      const input =
+        document.querySelector<HTMLInputElement>("input[placeholder]");
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    },
+    exportCSV: handleExportCSV,
+    exportPDF: handleExportPDF,
+    importCSV: () => {
+      if (isAdmin) fileInputRef.current?.click();
+    },
+    print: () => window.print(),
+  });
 
   const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

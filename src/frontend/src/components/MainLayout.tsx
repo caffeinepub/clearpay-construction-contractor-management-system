@@ -10,12 +10,15 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
+  Sun,
   UserCog,
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppHeader } from "../components/AppHeader";
 import { type Page, useNavigation } from "../context/NavigationContext";
+import { useTheme } from "../context/ThemeContext";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useMasterAdmin } from "../hooks/useMasterAdmin";
 import { useGetCallerUserProfile } from "../hooks/useQueries";
@@ -33,6 +36,7 @@ export default function MainLayout() {
   const { currentPage, setCurrentPage } = useNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
@@ -188,6 +192,7 @@ export default function MainLayout() {
               variant="ghost"
               size="icon"
               onClick={() => setSidebarOpen(!sidebarOpen)}
+              data-ocid="nav.toggle"
             >
               <Menu className="h-5 w-5" />
             </Button>
@@ -195,7 +200,26 @@ export default function MainLayout() {
               {getPageTitle()}
             </h1>
           </div>
-          <AppHeader />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              title={
+                theme === "dark"
+                  ? "Switch to Light Mode"
+                  : "Switch to Dark Mode"
+              }
+              data-ocid="nav.toggle"
+            >
+              {theme === "dark" ? (
+                <Sun className="h-5 w-5 text-yellow-500" />
+              ) : (
+                <Moon className="h-5 w-5 text-[#555555]" />
+              )}
+            </Button>
+            <AppHeader />
+          </div>
         </header>
 
         {/* Page Content */}

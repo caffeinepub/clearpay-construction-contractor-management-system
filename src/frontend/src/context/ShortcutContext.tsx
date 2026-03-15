@@ -5,7 +5,6 @@ import {
   useContext,
   useEffect,
   useRef,
-  useState,
 } from "react";
 import { useMasterAdmin } from "../hooks/useMasterAdmin";
 import { useGetCallerUserProfile } from "../hooks/useQueries";
@@ -53,7 +52,6 @@ const isInputFocused = (): boolean => {
 export function ShortcutProvider({ children }: { children: React.ReactNode }) {
   const handlersRef = useRef<PageShortcutHandlers>({});
   const isFormOpenRef = useRef(false);
-  const [, forceUpdate] = useState(0);
 
   const { setCurrentPage } = useNavigation();
   const { data: userProfile } = useGetCallerUserProfile();
@@ -77,9 +75,13 @@ export function ShortcutProvider({ children }: { children: React.ReactNode }) {
     };
   }, [setCurrentPage]);
 
+  // FIXED: removed forceUpdate() call — handlers are stored in a ref and read
+  // directly by the keydown listener, so no re-render is ever needed here.
+  // The old forceUpdate() was causing an infinite re-render loop:
+  // page renders → usePageShortcuts fires → registerHandlers → forceUpdate
+  // → ShortcutProvider re-renders → page re-renders → loop → React crash.
   const registerHandlers = useCallback((handlers: PageShortcutHandlers) => {
     handlersRef.current = handlers;
-    forceUpdate((n) => n + 1);
   }, []);
 
   const unregisterHandlers = useCallback(() => {

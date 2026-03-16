@@ -569,6 +569,8 @@ export const idlFactory = ({ IDL }) => {
     'getCompletedProjectIds' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
     'setProjectMapLocation' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'getProjectMapLocations' : IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], ['query']),
+    'saveTickerMessages' : IDL.Func([IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], [], []),
+    'getTickerMessages' : IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], ['query']),
   });
 };
 

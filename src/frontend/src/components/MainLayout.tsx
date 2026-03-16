@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
   Bot,
@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Page, useNavigation } from "../context/NavigationContext";
+import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useMasterAdmin } from "../hooks/useMasterAdmin";
 import { useGetCallerUserProfile } from "../hooks/useQueries";
@@ -39,30 +40,7 @@ import SeriAIPage from "../pages/SeriAIPage";
 import UsersPage from "../pages/UsersPage";
 import { AppHeader } from "./AppHeader";
 
-const TICKER_STORAGE_KEY = "clearpay_ticker_messages_v2";
-
 type TickerMessage = { id: string; html: string };
-
-function loadTickerMessages(): TickerMessage[] {
-  try {
-    const stored = localStorage.getItem(TICKER_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch (_) {
-    /* ignore */
-  }
-  return [];
-}
-
-function saveTickerMessages(messages: TickerMessage[]) {
-  try {
-    localStorage.setItem(TICKER_STORAGE_KEY, JSON.stringify(messages));
-  } catch (_) {
-    /* ignore */
-  }
-}
 
 const FONT_NAMES = [
   "Century Gothic",
@@ -88,9 +66,50 @@ const FONT_SIZES = [
   "48",
 ];
 
+/**
+ * Applies an inline CSS property to the currently selected text inside
+ * the editor by wrapping it in a <span style="...">.
+ * Falls back to execCommand for bold/italic/underline/color.
+ */
+function applyStyleToSelection(
+  property: "fontFamily" | "fontSize" | "color",
+  value: string,
+) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+
+  const range = sel.getRangeAt(0);
+  const span = document.createElement("span");
+  if (property === "fontFamily") span.style.fontFamily = value;
+  else if (property === "fontSize") span.style.fontSize = `${value}px`;
+  else if (property === "color") span.style.color = value;
+
+  try {
+    // surroundContents fails if selection crosses element boundaries;
+    // in that case extract + re-insert
+    range.surroundContents(span);
+  } catch {
+    const fragment = range.extractContents();
+    span.appendChild(fragment);
+    range.insertNode(span);
+  }
+
+  // Re-select the wrapped span so further formatting stacks
+  const newRange = document.createRange();
+  newRange.selectNodeContents(span);
+  sel.removeAllRanges();
+  sel.addRange(newRange);
+}
+
 function RichToolbar({
   editorRef,
-}: { editorRef: React.RefObject<HTMLDivElement | null> }) {
+  bgColor,
+  onBgColorChange,
+}: {
+  editorRef: React.RefObject<HTMLDivElement | null>;
+  bgColor: string;
+  onBgColorChange: (color: string) => void;
+}) {
   const [fontName, setFontName] = useState("Century Gothic");
   const [fontSize, setFontSize] = useState("14");
   const [textColor, setTextColor] = useState("#000000");
@@ -104,31 +123,24 @@ function RichToolbar({
   );
 
   const handleFontName = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFontName(e.target.value);
-    exec("fontName", e.target.value);
+    const val = e.target.value;
+    setFontName(val);
+    editorRef.current?.focus();
+    applyStyleToSelection("fontFamily", val);
   };
 
   const handleFontSize = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFontSize(e.target.value);
-    // execCommand fontSize uses 1-7, use inline style instead
-    exec("fontSize", "7");
-    // override with actual px via selection
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      const span = document.createElement("span");
-      span.style.fontSize = `${e.target.value}px`;
-      try {
-        range.surroundContents(span);
-      } catch (_) {
-        /* ignore partial selections */
-      }
-    }
+    const val = e.target.value;
+    setFontSize(val);
+    editorRef.current?.focus();
+    applyStyleToSelection("fontSize", val);
   };
 
   const handleColor = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTextColor(e.target.value);
-    exec("foreColor", e.target.value);
+    const val = e.target.value;
+    setTextColor(val);
+    editorRef.current?.focus();
+    applyStyleToSelection("color", val);
   };
 
   const toolbarBtnStyle: React.CSSProperties = {
@@ -155,12 +167,17 @@ function RichToolbar({
         alignItems: "center",
       }}
     >
-      {/* Font Name */}
+      {/* Font Name — applies inline fontFamily via span */}
       <select
         value={fontName}
         onChange={handleFontName}
-        style={{ ...toolbarBtnStyle, padding: "2px 4px", minWidth: "130px" }}
-        title="Font Name"
+        style={{
+          ...toolbarBtnStyle,
+          padding: "2px 4px",
+          minWidth: "140px",
+          fontFamily: fontName,
+        }}
+        title="Font Name (select text first)"
       >
         {FONT_NAMES.map((f) => (
           <option key={f} value={f} style={{ fontFamily: f }}>
@@ -169,12 +186,12 @@ function RichToolbar({
         ))}
       </select>
 
-      {/* Font Size */}
+      {/* Font Size — applies inline fontSize via span */}
       <select
         value={fontSize}
         onChange={handleFontSize}
         style={{ ...toolbarBtnStyle, padding: "2px 4px", minWidth: "60px" }}
-        title="Font Size"
+        title="Font Size (select text first)"
       >
         {FONT_SIZES.map((s) => (
           <option key={s} value={s}>
@@ -194,7 +211,7 @@ function RichToolbar({
           exec("bold");
         }}
         style={{ ...toolbarBtnStyle, fontWeight: "bold" }}
-        title="Bold (Ctrl+B)"
+        title="Bold"
       >
         B
       </button>
@@ -207,7 +224,7 @@ function RichToolbar({
           exec("italic");
         }}
         style={{ ...toolbarBtnStyle, fontStyle: "italic" }}
-        title="Italic (Ctrl+I)"
+        title="Italic"
       >
         I
       </button>
@@ -220,7 +237,7 @@ function RichToolbar({
           exec("underline");
         }}
         style={{ ...toolbarBtnStyle, textDecoration: "underline" }}
-        title="Underline (Ctrl+U)"
+        title="Underline"
       >
         U
       </button>
@@ -228,7 +245,7 @@ function RichToolbar({
       {/* Separator */}
       <span style={{ width: "1px", height: "20px", background: "#ccc" }} />
 
-      {/* Text Color */}
+      {/* Text Color — applies inline color via span */}
       <label
         style={{
           display: "flex",
@@ -236,9 +253,19 @@ function RichToolbar({
           gap: "3px",
           cursor: "pointer",
         }}
-        title="Text Color"
+        title="Text Color (select text first)"
       >
-        <span style={{ fontSize: "12px", color: "#555" }}>A</span>
+        <span
+          style={{
+            fontSize: "13px",
+            fontWeight: "bold",
+            color: textColor,
+            textDecoration: "underline",
+            textDecorationColor: textColor,
+          }}
+        >
+          A
+        </span>
         <input
           type="color"
           value={textColor}
@@ -251,7 +278,44 @@ function RichToolbar({
             cursor: "pointer",
             padding: "0",
           }}
-          title="Text Color"
+        />
+      </label>
+
+      {/* Background Color — whole message background */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "3px",
+          cursor: "pointer",
+        }}
+        title="Message Background Color"
+      >
+        <span
+          style={{
+            fontSize: "11px",
+            color: "#333",
+            background: bgColor,
+            border: "1px solid #ccc",
+            padding: "1px 4px",
+            borderRadius: "2px",
+            fontWeight: "bold",
+          }}
+        >
+          BG
+        </span>
+        <input
+          type="color"
+          value={bgColor}
+          onChange={(e) => onBgColorChange(e.target.value)}
+          style={{
+            width: "22px",
+            height: "22px",
+            border: "1px solid #ccc",
+            borderRadius: "2px",
+            cursor: "pointer",
+            padding: "0",
+          }}
         />
       </label>
 
@@ -274,18 +338,30 @@ function RichToolbar({
   );
 }
 
+// Helper: extract bgColor from stored html wrapper
+function extractBgColor(html: string): string {
+  const match = html.match(/data-ticker-bg="([^"]+)"/);
+  return match ? match[1] : "#FFF8E1";
+}
+
+// Helper: extract inner html from stored html (strip wrapper if present)
+function extractInnerHtml(html: string): string {
+  const match = html.match(/<span[^>]*data-ticker-bg[^>]*>(.*)<\/span>$/s);
+  return match ? match[1] : html;
+}
+
 export default function MainLayout() {
   const { currentPage, setCurrentPage } = useNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   // Ticker state
-  const [messages, setMessages] = useState<TickerMessage[]>(loadTickerMessages);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const [editingMessage, setEditingMessage] = useState<TickerMessage | null>(
     null,
   );
+  const [msgBgColor, setMsgBgColor] = useState("#FFF8E1");
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -297,6 +373,30 @@ export default function MainLayout() {
   const queryClient = useQueryClient();
   const { data: userProfile } = useGetCallerUserProfile();
   const { isMasterAdmin } = useMasterAdmin();
+  const { actor } = useActor();
+
+  const { data: tickerData, refetch: refetchTicker } = useQuery({
+    queryKey: ["tickerMessages"],
+    queryFn: async () => {
+      if (!actor) return [];
+      const entries = await actor.getTickerMessages();
+      return entries.map(([id, html]: [string, string]) => ({ id, html }));
+    },
+    enabled: !!actor,
+    staleTime: 30000,
+  });
+
+  const saveTickerMutation = useMutation({
+    mutationFn: async (msgs: TickerMessage[]) => {
+      if (!actor) return;
+      await actor.saveTickerMessages(
+        msgs.map((m) => [m.id, m.html] as [string, string]),
+      );
+    },
+    onSuccess: () => refetchTicker(),
+  });
+
+  const messages: TickerMessage[] = tickerData || [];
 
   const handleLogout = async () => {
     await clear();
@@ -318,15 +418,12 @@ export default function MainLayout() {
   ];
 
   const navItems = allNavItems.filter((item) => {
-    if (item.adminOnly) {
-      return isAdmin;
-    }
+    if (item.adminOnly) return isAdmin;
     return true;
   });
 
   const handlePageChange = (pageId: Page) => {
     if (pageId === "users" && !isAdmin) {
-      console.warn("Unauthorized access attempt to Users module");
       setCurrentPage("dashboard");
       return;
     }
@@ -335,19 +432,21 @@ export default function MainLayout() {
 
   const openAddDialog = (msg?: TickerMessage) => {
     setEditingMessage(msg || null);
+    const bg = msg ? extractBgColor(msg.html) : "#FFF8E1";
+    setMsgBgColor(bg);
     setAddDialogOpen(true);
-    // Pre-fill editor after dialog mounts
     setTimeout(() => {
       if (editorRef.current) {
-        editorRef.current.innerHTML = msg?.html || "";
+        editorRef.current.innerHTML = msg ? extractInnerHtml(msg.html) : "";
         editorRef.current.focus();
       }
     }, 80);
   };
 
   const handleSaveMessage = () => {
-    const html = editorRef.current?.innerHTML?.trim() || "";
-    if (!html || html === "<br>") return;
+    const innerHtml = editorRef.current?.innerHTML?.trim() || "";
+    if (!innerHtml || innerHtml === "<br>") return;
+    const html = `<span style="background-color:${msgBgColor};padding:2px 8px;border-radius:3px;display:inline-block;" data-ticker-bg="${msgBgColor}">${innerHtml}</span>`;
     let updated: TickerMessage[];
     if (editingMessage) {
       updated = messages.map((m) =>
@@ -356,26 +455,22 @@ export default function MainLayout() {
     } else {
       updated = [...messages, { id: Date.now().toString(), html }];
     }
-    setMessages(updated);
-    saveTickerMessages(updated);
+    saveTickerMutation.mutate(updated);
     setAddDialogOpen(false);
     setEditingMessage(null);
+    setMsgBgColor("#FFF8E1");
     if (editorRef.current) editorRef.current.innerHTML = "";
   };
 
   const handleDeleteMessage = (id: string) => {
     const updated = messages.filter((m) => m.id !== id);
-    setMessages(updated);
-    saveTickerMessages(updated);
+    saveTickerMutation.mutate(updated);
   };
 
-  const tickerHtml = messages.map((m) => m.html).join(" &nbsp;|&nbsp; ");
+  const tickerHtml = messages.map((m) => m.html).join("  &nbsp;&nbsp;  ");
 
   const renderPage = () => {
-    if (currentPage === "users" && !isAdmin) {
-      return <DashboardPage />;
-    }
-
+    if (currentPage === "users" && !isAdmin) return <DashboardPage />;
     switch (currentPage) {
       case "dashboard":
         return <DashboardPage />;
@@ -400,11 +495,8 @@ export default function MainLayout() {
     }
   };
 
-  const getPageTitle = () => {
-    return (
-      navItems.find((item) => item.id === currentPage)?.label || "Dashboard"
-    );
-  };
+  const getPageTitle = () =>
+    navItems.find((item) => item.id === currentPage)?.label || "Dashboard";
 
   const iconBtnStyle: React.CSSProperties = {
     background: "#0078D7",
@@ -423,7 +515,6 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Marquee keyframe style */}
       <style>{`
         @keyframes marquee-rtl {
           from { transform: translateX(100%); }
@@ -499,7 +590,6 @@ export default function MainLayout() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="bg-white border-b border-border px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -519,16 +609,14 @@ export default function MainLayout() {
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="flex-1 overflow-auto bg-gray-50">{renderPage()}</main>
 
-        {/* Footer — ticker + date/time */}
+        {/* Footer */}
         <footer className="bg-white border-t border-border px-4 py-2 flex items-center gap-3 text-sm text-[#555555] font-normal overflow-hidden">
-          {/* Scrolling ticker area */}
           <div className="flex items-center gap-2 flex-1 overflow-hidden">
+            {/* + and pencil: ONLY master admin */}
             {isMasterAdmin && (
               <>
-                {/* Add message button */}
                 <button
                   type="button"
                   onClick={() => openAddDialog()}
@@ -538,7 +626,6 @@ export default function MainLayout() {
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </button>
-                {/* Manage messages button */}
                 <button
                   type="button"
                   onClick={() => setManageDialogOpen(true)}
@@ -550,13 +637,21 @@ export default function MainLayout() {
                 </button>
               </>
             )}
+            {/* Scrolling ticker — visible to ALL users */}
             <div
               className="overflow-hidden flex-1"
-              style={{ position: "relative" }}
+              style={{
+                position: "relative",
+                background: "#f9f9f9",
+                borderRadius: "4px",
+                padding: "2px 8px",
+                border: "1px solid #e0e0e0",
+                minHeight: "24px",
+              }}
             >
               {tickerHtml && (
                 <span
-                  className="ticker-track text-[#555555]"
+                  className="ticker-track"
                   style={{ fontSize: "0.8rem" }}
                   // biome-ignore lint/security/noDangerouslySetInnerHtml: rich text ticker content from admin only
                   dangerouslySetInnerHTML={{ __html: tickerHtml }}
@@ -565,24 +660,24 @@ export default function MainLayout() {
             </div>
           </div>
 
-          {/* Fixed date/time */}
           <span
             className="flex-shrink-0 text-right"
             style={{ fontFamily: "'Consolas', monospace", fontSize: "0.8rem" }}
           >
-            {currentDateTime.toLocaleDateString("en-GB").replace(/\//g, "/")}{" "}
+            {currentDateTime.toLocaleDateString("en-GB")}{" "}
             {currentDateTime.toLocaleTimeString("en-GB")}
           </span>
         </footer>
       </div>
 
-      {/* Add / Edit Scrolling Message Dialog */}
+      {/* Add / Edit Dialog */}
       <Dialog
         open={addDialogOpen}
         onOpenChange={(open) => {
           if (!open) {
             setAddDialogOpen(false);
             setEditingMessage(null);
+            setMsgBgColor("#FFF8E1");
             if (editorRef.current) editorRef.current.innerHTML = "";
           }
         }}
@@ -597,16 +692,16 @@ export default function MainLayout() {
           </DialogHeader>
 
           <div className="py-2">
-            {/* MS Word-style toolbar */}
-            <RichToolbar editorRef={editorRef} />
-
-            {/* ContentEditable editor area */}
+            <RichToolbar
+              editorRef={editorRef}
+              bgColor={msgBgColor}
+              onBgColorChange={setMsgBgColor}
+            />
             <div
               ref={editorRef}
               contentEditable
               suppressContentEditableWarning
               data-ocid="ticker.editor"
-              data-placeholder="Type your message here…"
               style={{
                 minHeight: "80px",
                 border: "1px solid #ccc",
@@ -618,10 +713,12 @@ export default function MainLayout() {
                 lineHeight: "1.5",
                 fontFamily: "Century Gothic, sans-serif",
                 color: "#333",
+                backgroundColor: msgBgColor,
               }}
             />
             <p className="text-xs text-gray-400 mt-1">
-              Select text first, then apply formatting from the toolbar above.
+              Select text first, then apply font / size / color from the toolbar
+              above.
             </p>
           </div>
 
@@ -631,6 +728,7 @@ export default function MainLayout() {
               onClick={() => {
                 setAddDialogOpen(false);
                 setEditingMessage(null);
+                setMsgBgColor("#FFF8E1");
                 if (editorRef.current) editorRef.current.innerHTML = "";
               }}
               data-ocid="ticker.cancel_button"
@@ -662,16 +760,17 @@ export default function MainLayout() {
               </p>
             ) : (
               messages.map((msg, idx) => {
-                // Strip HTML tags for preview text
                 const div = document.createElement("div");
-                div.innerHTML = msg.html;
+                div.innerHTML = extractInnerHtml(msg.html);
                 const preview =
                   (div.textContent || "").slice(0, 60) +
                   ((div.textContent || "").length > 60 ? "…" : "");
+                const bg = extractBgColor(msg.html);
                 return (
                   <div
                     key={msg.id}
                     className="flex items-center justify-between gap-2 p-2 border border-gray-200 rounded"
+                    style={{ backgroundColor: bg }}
                   >
                     <span
                       className="flex-1 text-sm text-[#333] truncate"

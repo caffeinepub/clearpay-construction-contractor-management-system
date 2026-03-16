@@ -193,6 +193,8 @@ export interface _SERVICE {
   'toggleProjectCompleted' : ActorMethod<[string], undefined>,
   'setProjectMapLocation' : ActorMethod<[string, string], undefined>,
   'getProjectMapLocations' : ActorMethod<[], Array<[string, string]>>,
+  'saveTickerMessages' : ActorMethod<[Array<[string, string]>], undefined>,
+  'getTickerMessages' : ActorMethod<[], Array<[string, string]>>,
   'getBillDetails' : ActorMethod<[string, string], [] | [Bill]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,

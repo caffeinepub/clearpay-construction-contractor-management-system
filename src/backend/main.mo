@@ -97,6 +97,7 @@ actor {
   stable var projects = Map.empty<Text, Project>();
   stable var completedProjectIds = Map.empty<Text, Bool>();
   stable var projectMapLocations = Map.empty<Text, Text>();
+  stable var tickerMessages : [(Text, Text)] = [];
 
   type Bill = {
     projectId : Text;
@@ -1815,5 +1816,14 @@ actor {
   public query ({ caller }) func getProjectMapLocations() : async [(Text, Text)] {
     requireAuthenticated(caller);
     projectMapLocations.entries().toArray();
+  };
+
+  public shared ({ caller }) func saveTickerMessages(msgs : [(Text, Text)]) : async () {
+    requireAdmin(caller);
+    tickerMessages := msgs;
+  };
+
+  public query func getTickerMessages() : async [(Text, Text)] {
+    tickerMessages;
   };
 };

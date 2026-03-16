@@ -303,6 +303,8 @@ export interface backendInterface {
     toggleProjectCompleted(id: string): Promise<void>;
     setProjectMapLocation(projectId: string, location: string): Promise<void>;
     getProjectMapLocations(): Promise<Array<[string, string]>>;
+    saveTickerMessages(msgs: Array<[string, string]>): Promise<void>;
+    getTickerMessages(): Promise<Array<[string, string]>>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
     updateBill(bill: Bill, password: string): Promise<void>;
     updateClient(client: Client, password: string): Promise<void>;
@@ -1132,6 +1134,12 @@ export class Backend implements backendInterface {
     }
     async getProjectMapLocations(): Promise<Array<[string, string]>> {
         return (await this.actor).getProjectMapLocations();
+    }
+    async saveTickerMessages(msgs: Array<[string, string]>): Promise<void> {
+        return (await this.actor).saveTickerMessages(msgs);
+    }
+    async getTickerMessages(): Promise<Array<[string, string]>> {
+        return (await this.actor).getTickerMessages();
     }
     async transform(arg0: TransformationInput): Promise<TransformationOutput> {
         if (this.processError) {

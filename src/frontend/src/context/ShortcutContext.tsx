@@ -125,7 +125,7 @@ export function ShortcutProvider({ children }: { children: React.ReactNode }) {
           b: "bills",
           m: "payments",
           u: "users",
-          c: "clients",
+          c: "contractors",
           a: "analytics",
           r: "reports",
           s: "seri-ai",

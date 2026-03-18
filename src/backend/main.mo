@@ -1826,4 +1826,154 @@ actor {
   public query func getTickerMessages() : async [(Text, Text)] {
     tickerMessages;
   };
+
+  // ==================== CONTRACTORS MODULE ====================
+  // Completely isolated - NOT shown in Dashboard, Analytics, Reports, or Seri AI
+
+  stable var contractors = Map.empty<Text, {
+    id: Text; name: Text; trades: [Text]; projectId: Text; date: Text;
+    contractingPrice: Float; unit: Text; contact1: Text; contact2: Text;
+    email: Text; address: Text; link1: Text; link2: Text; note: Text;
+  }>();
+
+  stable var contractorBills = Map.empty<Text, {
+    id: Text; contractorId: Text; projectId: Text; billNo: Text; date: Text;
+    item: Text; area: Float; unit: Text; unitPrice: Float; amount: Float; remarks: Text;
+  }>();
+
+  stable var contractorPayments = Map.empty<Text, {
+    id: Text; contractorId: Text; projectId: Text; paymentNo: Text; date: Text;
+    amount: Float; paymentMode: Text; remarks: Text;
+  }>();
+
+  stable var contractorIdCounter : Nat = 0;
+
+  func generateCId(prefix : Text) : Text {
+    contractorIdCounter += 1;
+    let ts = Time.now();
+    prefix # "-" # (ts / 1_000_000_000).toText() # "-" # contractorIdCounter.toText();
+  };
+
+  public shared ({ caller }) func addContractor(
+    name: Text, trades: [Text], projectId: Text, date: Text,
+    contractingPrice: Float, unit: Text, contact1: Text, contact2: Text,
+    email: Text, address: Text, link1: Text, link2: Text, note: Text
+  ) : async Text {
+    requireAdmin(caller);
+    let id = generateCId("CON");
+    contractors.add(id, { id; name; trades; projectId; date; contractingPrice; unit; contact1; contact2; email; address; link1; link2; note; });
+    id;
+  };
+
+  public shared ({ caller }) func updateContractor(
+    id: Text, name: Text, trades: [Text], projectId: Text, date: Text,
+    contractingPrice: Float, unit: Text, contact1: Text, contact2: Text,
+    email: Text, address: Text, link1: Text, link2: Text, note: Text, password: Text
+  ) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+    switch (contractors.get(id)) {
+      case (null) { Runtime.trap("Contractor not found") };
+      case (?_) { contractors.add(id, { id; name; trades; projectId; date; contractingPrice; unit; contact1; contact2; email; address; link1; link2; note; }); };
+    };
+  };
+
+  public shared ({ caller }) func deleteContractors(ids: [Text], password: Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+    for (id in ids.vals()) { contractors.remove(id) };
+  };
+
+  public query ({ caller }) func listContractors() : async [{
+    id: Text; name: Text; trades: [Text]; projectId: Text; date: Text;
+    contractingPrice: Float; unit: Text; contact1: Text; contact2: Text;
+    email: Text; address: Text; link1: Text; link2: Text; note: Text;
+  }] {
+    requireAuthenticated(caller);
+    contractors.values().toArray();
+  };
+
+  public shared ({ caller }) func addContractorBill(
+    contractorId: Text, projectId: Text, billNo: Text, date: Text,
+    item: Text, area: Float, unit: Text, unitPrice: Float, remarks: Text
+  ) : async Text {
+    requireAdmin(caller);
+    for ((_, b) in contractorBills.entries()) {
+      if (Text.equal(b.contractorId, contractorId) and Text.equal(b.billNo, billNo)) {
+        Runtime.trap("This bill number already entered for this contractor.");
+      };
+    };
+    let id = generateCId("CBILL");
+    let amount = area * unitPrice;
+    contractorBills.add(id, { id; contractorId; projectId; billNo; date; item; area; unit; unitPrice; amount; remarks; });
+    id;
+  };
+
+  public shared ({ caller }) func updateContractorBill(
+    id: Text, contractorId: Text, projectId: Text, billNo: Text, date: Text,
+    item: Text, area: Float, unit: Text, unitPrice: Float, remarks: Text, password: Text
+  ) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+    switch (contractorBills.get(id)) {
+      case (null) { Runtime.trap("Contractor bill not found") };
+      case (?_) {
+        let amount = area * unitPrice;
+        contractorBills.add(id, { id; contractorId; projectId; billNo; date; item; area; unit; unitPrice; amount; remarks; });
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteContractorBills(ids: [Text], password: Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+    for (id in ids.vals()) { contractorBills.remove(id) };
+  };
+
+  public query ({ caller }) func listContractorBills() : async [{
+    id: Text; contractorId: Text; projectId: Text; billNo: Text; date: Text;
+    item: Text; area: Float; unit: Text; unitPrice: Float; amount: Float; remarks: Text;
+  }] {
+    requireAuthenticated(caller);
+    contractorBills.values().toArray();
+  };
+
+  public shared ({ caller }) func addContractorPayment(
+    contractorId: Text, projectId: Text, paymentNo: Text, date: Text,
+    amount: Float, paymentMode: Text, remarks: Text
+  ) : async Text {
+    requireAdmin(caller);
+    let id = generateCId("CPAY");
+    contractorPayments.add(id, { id; contractorId; projectId; paymentNo; date; amount; paymentMode; remarks; });
+    id;
+  };
+
+  public shared ({ caller }) func updateContractorPayment(
+    id: Text, contractorId: Text, projectId: Text, paymentNo: Text, date: Text,
+    amount: Float, paymentMode: Text, remarks: Text, password: Text
+  ) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+    switch (contractorPayments.get(id)) {
+      case (null) { Runtime.trap("Contractor payment not found") };
+      case (?_) {
+        contractorPayments.add(id, { id; contractorId; projectId; paymentNo; date; amount; paymentMode; remarks; });
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteContractorPayments(ids: [Text], password: Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+    for (id in ids.vals()) { contractorPayments.remove(id) };
+  };
+
+  public query ({ caller }) func listContractorPayments() : async [{
+    id: Text; contractorId: Text; projectId: Text; paymentNo: Text; date: Text;
+    amount: Float; paymentMode: Text; remarks: Text;
+  }] {
+    requireAuthenticated(caller);
+    contractorPayments.values().toArray();
+  };
+
 };

@@ -14,6 +14,7 @@ import {
   FileBarChart,
   FileText,
   FolderKanban,
+  Keyboard,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -31,7 +32,7 @@ import { useMasterAdmin } from "../hooks/useMasterAdmin";
 import { useGetCallerUserProfile } from "../hooks/useQueries";
 import AnalyticsPage from "../pages/AnalyticsPage";
 import BillsPage from "../pages/BillsPage";
-import ClientsPage from "../pages/ClientsPage";
+import ContractorsPage from "../pages/ContractorsPage";
 import DashboardPage from "../pages/DashboardPage";
 import PaymentsPage from "../pages/PaymentsPage";
 import ProjectsPage from "../pages/ProjectsPage";
@@ -39,6 +40,7 @@ import ReportsPage from "../pages/ReportsPage";
 import SeriAIPage from "../pages/SeriAIPage";
 import UsersPage from "../pages/UsersPage";
 import { AppHeader } from "./AppHeader";
+import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 
 type TickerMessage = { id: string; html: string };
 
@@ -353,6 +355,7 @@ function extractInnerHtml(html: string): string {
 export default function MainLayout() {
   const { currentPage, setCurrentPage } = useNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   // Ticker state
@@ -367,6 +370,23 @@ export default function MainLayout() {
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      const isEditable =
+        tag === "input" ||
+        tag === "textarea" ||
+        tag === "select" ||
+        (e.target as HTMLElement)?.isContentEditable;
+      if (!isEditable && e.key === "?") {
+        e.preventDefault();
+        setShowShortcuts((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const { clear } = useInternetIdentity();
@@ -406,15 +426,51 @@ export default function MainLayout() {
   const isAdmin = isMasterAdmin || userProfile?.role === "admin";
 
   const allNavItems = [
-    { id: "dashboard" as Page, label: "Dashboard", icon: LayoutDashboard },
-    { id: "analytics" as Page, label: "Analytics", icon: BarChart3 },
-    { id: "projects" as Page, label: "Projects", icon: FolderKanban },
-    { id: "bills" as Page, label: "Bills", icon: FileText },
-    { id: "payments" as Page, label: "Payments", icon: CreditCard },
-    { id: "clients" as Page, label: "Clients", icon: Users },
-    { id: "users" as Page, label: "Users", icon: UserCog, adminOnly: true },
-    { id: "reports" as Page, label: "Reports", icon: FileBarChart },
-    { id: "seri-ai" as Page, label: "Seri AI", icon: Bot },
+    {
+      id: "dashboard" as Page,
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      shortcut: "Alt+D",
+    },
+    {
+      id: "analytics" as Page,
+      label: "Analytics",
+      icon: BarChart3,
+      shortcut: "Alt+A",
+    },
+    {
+      id: "projects" as Page,
+      label: "Projects",
+      icon: FolderKanban,
+      shortcut: "Alt+P",
+    },
+    { id: "bills" as Page, label: "Bills", icon: FileText, shortcut: "Alt+B" },
+    {
+      id: "payments" as Page,
+      label: "Payments",
+      icon: CreditCard,
+      shortcut: "Alt+M",
+    },
+    {
+      id: "contractors" as Page,
+      label: "Contractors",
+      icon: Users,
+      shortcut: "Alt+C",
+    },
+    {
+      id: "users" as Page,
+      label: "Users",
+      icon: UserCog,
+      adminOnly: true,
+      shortcut: "Alt+U",
+    },
+    {
+      id: "reports" as Page,
+      label: "Reports",
+      icon: FileBarChart,
+      shortcut: "Alt+R",
+    },
+    { id: "seri-ai" as Page, label: "Seri AI", icon: Bot, shortcut: "Alt+S" },
   ];
 
   const navItems = allNavItems.filter((item) => {
@@ -482,8 +538,8 @@ export default function MainLayout() {
         return <BillsPage />;
       case "payments":
         return <PaymentsPage />;
-      case "clients":
-        return <ClientsPage />;
+      case "contractors":
+        return <ContractorsPage />;
       case "users":
         return <UsersPage />;
       case "reports":
@@ -566,7 +622,28 @@ export default function MainLayout() {
                 }`}
               >
                 <Icon className="h-5 w-5" />
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
+                {item.shortcut && (
+                  <kbd
+                    style={{
+                      fontSize: "9px",
+                      padding: "1px 4px",
+                      borderRadius: "3px",
+                      border: isActive
+                        ? "1px solid rgba(255,255,255,0.5)"
+                        : "1px solid #ccc",
+                      background: isActive
+                        ? "rgba(255,255,255,0.15)"
+                        : "#F2F2F2",
+                      color: isActive ? "rgba(255,255,255,0.9)" : "#777",
+                      fontFamily: "Consolas, monospace",
+                      flexShrink: 0,
+                      letterSpacing: "0.3px",
+                    }}
+                  >
+                    {item.shortcut}
+                  </kbd>
+                )}
               </button>
             );
           })}
@@ -605,6 +682,28 @@ export default function MainLayout() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowShortcuts(true)}
+              title="Keyboard Shortcuts (?)"
+              data-ocid="shortcuts.open_modal_button"
+              style={{
+                background: "transparent",
+                border: "1px solid #ddd",
+                borderRadius: "6px",
+                padding: "4px 8px",
+                cursor: "pointer",
+                color: "#555555",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                fontSize: "12px",
+                fontFamily: "'Century Gothic', Arial, sans-serif",
+              }}
+            >
+              <Keyboard size={15} />
+              <span style={{ fontWeight: 600 }}>?</span>
+            </button>
             <AppHeader />
           </div>
         </header>
@@ -837,6 +936,10 @@ export default function MainLayout() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <KeyboardShortcutsModal
+        open={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
+      />
     </div>
   );
 }

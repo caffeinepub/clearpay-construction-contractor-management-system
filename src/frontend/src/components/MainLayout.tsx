@@ -623,27 +623,6 @@ export default function MainLayout() {
               >
                 <Icon className="h-5 w-5" />
                 <span className="flex-1">{item.label}</span>
-                {item.shortcut && (
-                  <kbd
-                    style={{
-                      fontSize: "9px",
-                      padding: "1px 4px",
-                      borderRadius: "3px",
-                      border: isActive
-                        ? "1px solid rgba(255,255,255,0.5)"
-                        : "1px solid #ccc",
-                      background: isActive
-                        ? "rgba(255,255,255,0.15)"
-                        : "#F2F2F2",
-                      color: isActive ? "rgba(255,255,255,0.9)" : "#777",
-                      fontFamily: "Consolas, monospace",
-                      flexShrink: 0,
-                      letterSpacing: "0.3px",
-                    }}
-                  >
-                    {item.shortcut}
-                  </kbd>
-                )}
               </button>
             );
           })}

@@ -571,6 +571,19 @@ export const idlFactory = ({ IDL }) => {
     'getProjectMapLocations' : IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], ['query']),
     'saveTickerMessages' : IDL.Func([IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], [], []),
     'getTickerMessages' : IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], ['query']),
+    'addContractor' : IDL.Func([IDL.Text, IDL.Vec(IDL.Text), IDL.Text, IDL.Text, IDL.Float64, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text], [IDL.Text], []),
+    'updateContractor' : IDL.Func([IDL.Text, IDL.Text, IDL.Vec(IDL.Text), IDL.Text, IDL.Text, IDL.Float64, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text], [], []),
+    'toggleContractorCompleted' : IDL.Func([IDL.Text], [], []),
+    'deleteContractors' : IDL.Func([IDL.Vec(IDL.Text), IDL.Text], [], []),
+    'listContractors' : IDL.Func([], [IDL.Vec(IDL.Record({ 'id': IDL.Text, 'name': IDL.Text, 'trades': IDL.Vec(IDL.Text), 'projectId': IDL.Text, 'date': IDL.Text, 'contractingPrice': IDL.Float64, 'unit': IDL.Text, 'contact1': IDL.Text, 'contact2': IDL.Text, 'email': IDL.Text, 'address': IDL.Text, 'link1': IDL.Text, 'link2': IDL.Text, 'note': IDL.Text, 'woNo': IDL.Text, 'completed': IDL.Bool }))], ['query']),
+    'addContractorBill' : IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Float64, IDL.Text, IDL.Float64, IDL.Text, IDL.Text, IDL.Float64, IDL.Float64], [IDL.Text], []),
+    'updateContractorBill' : IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Float64, IDL.Text, IDL.Float64, IDL.Text, IDL.Text, IDL.Text, IDL.Float64, IDL.Float64], [], []),
+    'deleteContractorBills' : IDL.Func([IDL.Vec(IDL.Text), IDL.Text], [], []),
+    'listContractorBills' : IDL.Func([], [IDL.Vec(IDL.Record({ 'id': IDL.Text, 'contractorId': IDL.Text, 'projectId': IDL.Text, 'billNo': IDL.Text, 'date': IDL.Text, 'item': IDL.Text, 'area': IDL.Float64, 'unit': IDL.Text, 'unitPrice': IDL.Float64, 'amount': IDL.Float64, 'remarks': IDL.Text, 'blockId': IDL.Text, 'workRetention': IDL.Float64, 'workRetentionAmount': IDL.Float64 }))], ['query']),
+    'addContractorPayment' : IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Float64, IDL.Text, IDL.Text], [IDL.Text], []),
+    'updateContractorPayment' : IDL.Func([IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Float64, IDL.Text, IDL.Text, IDL.Text], [], []),
+    'deleteContractorPayments' : IDL.Func([IDL.Vec(IDL.Text), IDL.Text], [], []),
+    'listContractorPayments' : IDL.Func([], [IDL.Vec(IDL.Record({ 'id': IDL.Text, 'contractorId': IDL.Text, 'projectId': IDL.Text, 'paymentNo': IDL.Text, 'date': IDL.Text, 'amount': IDL.Float64, 'paymentMode': IDL.Text, 'remarks': IDL.Text }))], ['query']),
   });
 };
 

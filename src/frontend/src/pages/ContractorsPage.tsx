@@ -29,6 +29,7 @@ import { useMasterAdmin } from "../hooks/useMasterAdmin";
 import {
   useGetAllProjects,
   useGetCallerUserProfile,
+  useGetCompletedProjectIds,
 } from "../hooks/useQueries";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ type ContractorRecord = {
   trades: string[];
   projectId: string;
   date: string;
+  woNo: string;
   contractingPrice: number;
   unit: string;
   contact1: string;
@@ -47,6 +49,7 @@ type ContractorRecord = {
   link1: string;
   link2: string;
   note: string;
+  completed?: boolean;
 };
 
 type ContractorBillRecord = {
@@ -54,12 +57,16 @@ type ContractorBillRecord = {
   contractorId: string;
   projectId: string;
   billNo: string;
+  blockId: string;
   date: string;
   item: string;
   area: number;
   unit: string;
   unitPrice: number;
+  workRetention: number;
+  workRetentionAmount: number;
   amount: number;
+  grossAmount: number;
   remarks: string;
 };
 
@@ -75,9 +82,63 @@ type ContractorPaymentRecord = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function fmtDate(d: string): string {
+  if (!d) return "";
+  const parts = d.split("-");
+  if (parts.length === 3 && parts[0].length === 4)
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  return d;
+}
+
+function printReceipt(
+  type: "contractor" | "bill" | "payment",
+  data: Record<string, string>,
+) {
+  const borderColor =
+    type === "contractor" ? "#0078D7" : type === "bill" ? "#FFA500" : "#28A745";
+  const title =
+    type === "contractor"
+      ? "Contractor Receipt"
+      : type === "bill"
+        ? "Bill Receipt"
+        : "Payment Receipt";
+  const rows = Object.entries(data)
+    .filter(([, v]) => v)
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:4px 8px;font-weight:600;color:#555;width:45%;border-bottom:1px solid #f0f0f0">${k}</td><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${v}</td></tr>`,
+    )
+    .join("");
+  const win = window.open("", "_blank", "width=600,height=800");
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>
+    @page{size:A5;margin:10mm}
+    body{font-family:'Century Gothic',Arial,sans-serif;margin:0;padding:0;width:148mm;min-height:210mm;background:#fff}
+    .header{background:#0078D7;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+    .header h1{margin:0;font-size:18px;font-weight:700}
+    .header small{font-size:11px;opacity:.85}
+    .body{border-left:5px solid ${borderColor};margin:12px;padding:12px;background:#fafafa;border-radius:4px}
+    .body h2{margin:0 0 10px;color:${borderColor};font-size:14px;font-weight:700;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    .footer{text-align:center;font-size:10px;color:#888;padding:10px;margin-top:10px;border-top:1px solid #eee}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+    <div class="header"><h1>ClearPay</h1><small>MKT Constructions</small></div>
+    <div class="body">
+      <h2>${title}</h2>
+      <table>${rows}</table>
+    </div>
+    <div class="footer">© 2025 ClearPay. Powered by Seri AI.</div>
+  </body></html>`);
+  win.document.close();
+  setTimeout(() => win.print(), 300);
+}
+
 const TRADES = [
   "NMR",
-  "Form work",
+  "M S",
+  "Plywood",
+  "Cup Lock",
   "Bar bending",
   "Scaffolding",
   "Buffing",
@@ -192,6 +253,28 @@ export default function ContractorsPage() {
     staleTime: 30000,
   });
 
+  // ── Completed contractors (derived from backend data) ──
+  const completedContractorIds = useMemo(
+    () => new Set(contractors.filter((c) => c.completed).map((c) => c.id)),
+    [contractors],
+  );
+
+  const { data: completedProjectIds = [] } = useGetCompletedProjectIds();
+  const completedProjectIdSet = useMemo(
+    () => new Set(completedProjectIds as string[]),
+    [completedProjectIds],
+  );
+
+  const toggleCompletedMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await (actor as any).toggleContractorCompleted(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["contractorsList"] });
+    },
+    onError: (e: any) => toast.error(e?.message || "Failed to update status"),
+  });
+
   const { data: cBills = [], refetch: refetchCBills } = useQuery<
     ContractorBillRecord[]
   >({
@@ -253,6 +336,7 @@ export default function ContractorsPage() {
     trades: [],
     projectId: "",
     date: "",
+    woNo: "",
     contractingPrice: 0,
     unit: "Sft",
     contact1: "",
@@ -281,17 +365,20 @@ export default function ContractorsPage() {
     ids?: string[];
     data?: ContractorBillRecord;
   }>(null);
-  const [bForm, setBForm] = useState<
-    Omit<ContractorBillRecord, "id" | "amount">
-  >({
+  const [bForm, setBForm] = useState<Omit<ContractorBillRecord, "id">>({
     contractorId: "",
     projectId: "",
     billNo: "",
+    blockId: "",
     date: "",
     item: "",
     area: 0,
     unit: "Sft",
     unitPrice: 0,
+    workRetention: 0,
+    workRetentionAmount: 0,
+    amount: 0,
+    grossAmount: 0,
     remarks: "",
   });
 
@@ -356,6 +443,8 @@ export default function ContractorsPage() {
   const filteredBills = useMemo(
     () =>
       cBills.filter((b) => {
+        if (completedContractorIds.has(b.contractorId)) return false;
+        if (completedProjectIdSet.has(b.projectId)) return false;
         if (bFilter.contractorId && b.contractorId !== bFilter.contractorId)
           return false;
         if (bFilter.projectId && b.projectId !== bFilter.projectId)
@@ -364,12 +453,14 @@ export default function ContractorsPage() {
         if (bFilter.dateTo && b.date > bFilter.dateTo) return false;
         return true;
       }),
-    [cBills, bFilter],
+    [cBills, bFilter, completedContractorIds, completedProjectIdSet],
   );
 
   const filteredPayments = useMemo(
     () =>
       cPayments.filter((p) => {
+        if (completedContractorIds.has(p.contractorId)) return false;
+        if (completedProjectIdSet.has(p.projectId)) return false;
         if (pFilter.contractorId && p.contractorId !== pFilter.contractorId)
           return false;
         if (pFilter.projectId && p.projectId !== pFilter.projectId)
@@ -380,12 +471,14 @@ export default function ContractorsPage() {
         if (pFilter.dateTo && p.date > pFilter.dateTo) return false;
         return true;
       }),
-    [cPayments, pFilter],
+    [cPayments, pFilter, completedContractorIds, completedProjectIdSet],
   );
 
   const rFilteredBills = useMemo(
     () =>
       cBills.filter((b) => {
+        if (completedContractorIds.has(b.contractorId)) return false;
+        if (completedProjectIdSet.has(b.projectId)) return false;
         if (rFilter.contractorId && b.contractorId !== rFilter.contractorId)
           return false;
         if (rFilter.projectId && b.projectId !== rFilter.projectId)
@@ -394,12 +487,14 @@ export default function ContractorsPage() {
         if (rFilter.dateTo && b.date > rFilter.dateTo) return false;
         return true;
       }),
-    [cBills, rFilter],
+    [cBills, rFilter, completedContractorIds, completedProjectIdSet],
   );
 
   const rFilteredPayments = useMemo(
     () =>
       cPayments.filter((p) => {
+        if (completedContractorIds.has(p.contractorId)) return false;
+        if (completedProjectIdSet.has(p.projectId)) return false;
         if (rFilter.contractorId && p.contractorId !== rFilter.contractorId)
           return false;
         if (rFilter.projectId && p.projectId !== rFilter.projectId)
@@ -408,7 +503,7 @@ export default function ContractorsPage() {
         if (rFilter.dateTo && p.date > rFilter.dateTo) return false;
         return true;
       }),
-    [cPayments, rFilter],
+    [cPayments, rFilter, completedContractorIds, completedProjectIdSet],
   );
 
   // ── Helpers ──
@@ -416,6 +511,23 @@ export default function ContractorsPage() {
     contractors.find((c) => c.id === id)?.name || id;
   const getProjectName = (id: string) =>
     projects.find((p) => p.id === id)?.name || id;
+
+  // ── W.O. No Auto-generator ──
+  const generateWoNo = (
+    projectId: string,
+    date: string,
+    serial: number,
+  ): string => {
+    const proj = projects.find((p) => p.id === projectId);
+    if (!proj || !date) return "";
+    const prefix = proj.name.substring(0, 2).toUpperCase();
+    const [year, month, day] = date.split("-");
+    const dd = (day || "").padStart(2, "0");
+    const mm = (month || "").padStart(2, "0");
+    const yy = (year || "").slice(-2);
+    const ser = String(serial).padStart(2, "0");
+    return `${prefix}${dd}${mm}${yy}${ser}`;
+  };
 
   // ── Contractor CRUD ──
   const openAddContractor = () => {
@@ -425,6 +537,7 @@ export default function ContractorsPage() {
       trades: [],
       projectId: "",
       date: "",
+      woNo: "",
       contractingPrice: 0,
       unit: "Sft",
       contact1: "",
@@ -451,6 +564,7 @@ export default function ContractorsPage() {
       trades: c.trades,
       projectId: c.projectId,
       date: c.date,
+      woNo: c.woNo || "",
       contractingPrice: c.contractingPrice,
       unit: c.unit,
       contact1: c.contact1,
@@ -465,7 +579,9 @@ export default function ContractorsPage() {
     return pwd; // password will be used on save
   };
 
-  const [cEditPwd, setCEditPwd] = useState("");
+  const cEditPwdRef = useRef("");
+  const bEditPwdRef = useRef("");
+  const pEditPwdRef = useRef("");
 
   const saveContractor = async () => {
     if (!cForm.name.trim()) {
@@ -489,7 +605,8 @@ export default function ContractorsPage() {
           cForm.link1,
           cForm.link2,
           cForm.note,
-          cEditPwd,
+          cEditPwdRef.current,
+          cForm.woNo || "",
         );
         toast.success("Contractor updated");
       } else {
@@ -507,12 +624,13 @@ export default function ContractorsPage() {
           cForm.link1,
           cForm.link2,
           cForm.note,
+          cForm.woNo || "",
         );
         toast.success("Contractor added");
       }
       setCFormOpen(false);
       setCEditing(null);
-      setCEditPwd("");
+      cEditPwdRef.current = "";
       queryClient.invalidateQueries({ queryKey: ["contractorsList"] });
     } catch (e: any) {
       toast.error(e?.message || "Failed to save contractor");
@@ -549,11 +667,16 @@ export default function ContractorsPage() {
       contractorId: "",
       projectId: "",
       billNo: "",
+      blockId: "",
       date: "",
       item: "",
       area: 0,
       unit: "Sft",
       unitPrice: 0,
+      workRetention: 0,
+      workRetentionAmount: 0,
+      amount: 0,
+      grossAmount: 0,
       remarks: "",
     });
     setBFormOpen(true);
@@ -574,7 +697,6 @@ export default function ContractorsPage() {
       toast.error("This bill number already entered for this contractor.");
       return;
     }
-    const amount = bForm.area * bForm.unitPrice;
     try {
       if (bEditing) {
         await (actor as any).updateContractorBill(
@@ -588,9 +710,13 @@ export default function ContractorsPage() {
           bForm.unit,
           bForm.unitPrice,
           bForm.remarks,
-          "",
+          bEditPwdRef.current,
+          bForm.blockId || "",
+          bForm.workRetention || 0,
+          bForm.area * bForm.unitPrice * (bForm.workRetention / 100),
         );
         toast.success("Bill updated");
+        bEditPwdRef.current = "";
       } else {
         await (actor as any).addContractorBill(
           bForm.contractorId,
@@ -602,6 +728,9 @@ export default function ContractorsPage() {
           bForm.unit,
           bForm.unitPrice,
           bForm.remarks,
+          bForm.blockId || "",
+          bForm.workRetention || 0,
+          bForm.area * bForm.unitPrice * (bForm.workRetention / 100),
         );
         toast.success("Bill added");
       }
@@ -611,8 +740,6 @@ export default function ContractorsPage() {
     } catch (e: any) {
       toast.error(e?.message || "Failed to save bill");
     }
-    // keep amount in scope to avoid unused warning
-    void amount;
   };
 
   const deleteBill = async (id: string, pwd: string) => {
@@ -640,10 +767,11 @@ export default function ContractorsPage() {
   // ── Payment CRUD ──
   const openAddPayment = () => {
     setPEditing(null);
+    const nextNo = String(cPayments.length + 1).padStart(4, "0");
     setPForm({
       contractorId: "",
       projectId: "",
-      paymentNo: "",
+      paymentNo: nextNo,
       date: "",
       amount: 0,
       paymentMode: "Account",
@@ -664,9 +792,10 @@ export default function ContractorsPage() {
           pForm.amount,
           pForm.paymentMode,
           pForm.remarks,
-          "",
+          pEditPwdRef.current,
         );
         toast.success("Payment updated");
+        pEditPwdRef.current = "";
       } else {
         await (actor as any).addContractorPayment(
           pForm.contractorId,
@@ -733,11 +862,54 @@ export default function ContractorsPage() {
     a.click();
   };
 
-  const printContent = (html: string) => {
+  const printContent = (
+    title: string,
+    summaryHtml: string,
+    tableHtml: string,
+  ) => {
     const w = window.open("", "_blank")!;
-    w.document.write(
-      `<html><head><title>ClearPay Report</title><style>body{font-family:'Century Gothic',Arial,sans-serif;font-size:13px;padding:20px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}th{background:#0078D7;color:#fff}.summary{display:flex;gap:16px;margin-bottom:16px}.s-card{background:#f0f8ff;border:1px solid #0078D7;border-radius:6px;padding:10px 16px;min-width:150px}.s-card h4{margin:0 0 4px;font-size:11px;color:#555}.s-card p{margin:0;font-size:15px;font-weight:bold;color:#0078D7}</style></head><body>${html}</body></html>`,
-    );
+    const dateStr = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    const timeStr = new Date().toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    w.document.write(`<html><head><title>${title}</title>
+    <style>
+      body { font-family: 'Century Gothic', Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+      .header { background: linear-gradient(135deg, #0078D7 0%, #005a9e 100%); color: white; padding: 20px 24px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+      .header h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 1px; }
+      .header .sub { margin: 4px 0 0; font-size: 13px; opacity: 0.85; }
+      .header .right { text-align: right; }
+      .header .right .dt { font-size: 14px; font-weight: 600; }
+      .summary { display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+      .s-card { flex: 1; min-width: 140px; border-radius: 8px; padding: 12px 16px; }
+      .s-card .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; opacity: 0.7; margin-bottom: 4px; }
+      .s-card .val { font-size: 17px; font-weight: 700; }
+      .s-blue { background: #e3f2fd; border: 1px solid #90caf9; color: #1565c0; }
+      .s-green { background: #e8f5e9; border: 1px solid #a5d6a7; color: #2e7d32; }
+      .s-orange { background: #fff3e0; border: 1px solid #ffcc80; color: #e65100; }
+      .s-purple { background: #f3e5f5; border: 1px solid #ce93d8; color: #6a1b9a; }
+      .s-red { background: #ffebee; border: 1px solid #ef9a9a; color: #c62828; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+      th { background: #0078D7; color: white; padding: 9px 11px; text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+      tr:nth-child(even) td { background: #f8f9fa; }
+      td { padding: 7px 11px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }
+      .footer { margin-top: 28px; text-align: center; color: #999; font-size: 11px; border-top: 1px solid #eee; padding-top: 10px; }
+      @media print { body { padding: 8px; } .header { border-radius: 4px; } }
+    </style></head>
+    <body>
+      <div class="header">
+        <div><h1>ClearPay</h1><div class="sub">${title}</div></div>
+        <div class="right"><div class="dt">${dateStr} ${timeStr}</div></div>
+      </div>
+      ${summaryHtml}
+      ${tableHtml}
+      <div class="footer">© ${new Date().getFullYear()} ClearPay. Powered by Seri AI.</div>
+    </body></html>`);
     w.document.close();
     w.focus();
     setTimeout(() => w.print(), 400);
@@ -785,6 +957,7 @@ export default function ContractorsPage() {
       desc: string;
       debit: number;
       credit: number;
+      workRetentionAmount: number;
     }[] = [
       ...rFilteredBills.map((b) => ({
         date: b.date,
@@ -793,6 +966,7 @@ export default function ContractorsPage() {
         desc: `Bill #${b.billNo} – ${b.item}`,
         debit: b.amount,
         credit: 0,
+        workRetentionAmount: b.workRetentionAmount || 0,
       })),
       ...rFilteredPayments.map((p) => ({
         date: p.date,
@@ -801,12 +975,13 @@ export default function ContractorsPage() {
         desc: `Payment #${p.paymentNo} (${p.paymentMode})`,
         debit: 0,
         credit: p.amount,
+        workRetentionAmount: 0,
       })),
     ].sort((a, b) => a.date.localeCompare(b.date));
     let balance = 0;
     return entries.map((e) => {
       balance += e.debit - e.credit;
-      return { ...e, balance };
+      return { ...e, balance, workRetentionAmount: e.workRetentionAmount || 0 };
     });
   }, [rFilteredBills, rFilteredPayments]);
 
@@ -819,12 +994,20 @@ export default function ContractorsPage() {
     [filteredPayments],
   );
   const rTotalBills = useMemo(
-    () => rFilteredBills.reduce((s, b) => s + b.amount, 0),
+    () =>
+      rFilteredBills.reduce(
+        (s, b) => s + (b.grossAmount ?? b.area * b.unitPrice),
+        0,
+      ),
     [rFilteredBills],
   );
   const rTotalPayments = useMemo(
     () => rFilteredPayments.reduce((s, p) => s + p.amount, 0),
     [rFilteredPayments],
+  );
+  const rTotalWorkRetention = useMemo(
+    () => rFilteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0),
+    [rFilteredBills],
   );
 
   // ── Style helpers ──
@@ -922,19 +1105,60 @@ export default function ContractorsPage() {
             padding: "0 20px",
           }}
         >
-          <TabsList style={{ background: "transparent", gap: "4px" }}>
-            {["contractors", "bills", "payments", "reports"].map((t) => (
+          <TabsList
+            style={{ background: "transparent", gap: "6px", padding: "6px 0" }}
+          >
+            {(
+              [
+                {
+                  value: "contractors",
+                  label: "Contractors",
+                  bg: "#E3F2FD",
+                  active: "#0078D7",
+                  text: "#0055A5",
+                },
+                {
+                  value: "bills",
+                  label: "Bills",
+                  bg: "#FFF3E0",
+                  active: "#FFA500",
+                  text: "#C17600",
+                },
+                {
+                  value: "payments",
+                  label: "Payments",
+                  bg: "#E8F5E9",
+                  active: "#28A745",
+                  text: "#1A7A32",
+                },
+                {
+                  value: "reports",
+                  label: "Reports",
+                  bg: "#FCE4EC",
+                  active: "#D32F2F",
+                  text: "#A82323",
+                },
+              ] as const
+            ).map((t) => (
               <TabsTrigger
-                key={t}
-                value={t}
-                data-ocid={`contractors.${t}.tab`}
+                key={t.value}
+                value={t.value}
+                data-ocid={`contractors.${t.value}.tab`}
                 style={{
-                  textTransform: "capitalize",
                   fontFamily: "'Century Gothic',Arial,sans-serif",
                   fontWeight: 600,
+                  fontSize: "13px",
+                  padding: "6px 20px",
+                  borderRadius: "6px",
+                  border: "2px solid transparent",
+                  background: t.bg,
+                  color: t.text,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
                 }}
+                className={`contractor-tab-${t.value}`}
               >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {t.label}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -971,8 +1195,9 @@ export default function ContractorsPage() {
                     type="button"
                     style={ribbonBtn("#555")}
                     onClick={() => {
-                      const html = `<h2>Contractors List</h2><table><thead><tr><th>#</th><th>Name</th><th>Trades</th><th>Project</th><th>Date</th><th>Price</th><th>Unit</th><th>Contact</th></tr></thead><tbody>${filteredContractors.map((c, i) => `<tr><td>${i + 1}</td><td>${c.name}</td><td>${c.trades.join(", ")}</td><td>${getProjectName(c.projectId)}</td><td>${c.date}</td><td>${fmtINR(c.contractingPrice)}</td><td>${c.unit}</td><td>${c.contact1}</td></tr>`).join("")}</tbody></table>`;
-                      printContent(html);
+                      const summaryHtml = `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Contractors</div><div class="val">${filteredContractors.length}</div></div></div>`;
+                      const tableHtml = `<table><thead><tr><th>#</th><th>Name</th><th>Trades</th><th>Project</th><th>Date</th><th>Price</th><th>Unit</th><th>Contact</th></tr></thead><tbody>${filteredContractors.map((c, i) => `<tr><td>${i + 1}</td><td>${c.name}</td><td>${c.trades.join(", ")}</td><td>${getProjectName(c.projectId)}</td><td>${c.date}</td><td>${fmtINR(c.contractingPrice)}</td><td>${c.unit}</td><td>${c.contact1}</td></tr>`).join("")}</tbody></table>`;
+                      printContent("Contractors List", summaryHtml, tableHtml);
                     }}
                     title="Export PDF"
                     data-ocid="contractors.secondary_button"
@@ -1239,11 +1464,15 @@ export default function ContractorsPage() {
                       />
                     </th>
                   )}
+                  <th style={{ ...thStyle, width: 60, textAlign: "center" }}>
+                    Status
+                  </th>
                   <th style={thStyle}>#</th>
                   <th style={thStyle}>Name</th>
                   <th style={thStyle}>Trade(s)</th>
                   <th style={thStyle}>Project</th>
                   <th style={thStyle}>Date</th>
+                  <th style={thStyle}>W.O. No</th>
                   <th style={thStyle}>Price (INR)</th>
                   <th style={thStyle}>Unit</th>
                   <th style={thStyle}>Contact</th>
@@ -1254,7 +1483,7 @@ export default function ContractorsPage() {
                 {filteredContractors.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       style={{
                         textAlign: "center",
                         padding: "32px",
@@ -1283,6 +1512,40 @@ export default function ContractorsPage() {
                           />
                         </td>
                       )}
+                      <td
+                        style={{ ...tdStyle(i % 2 === 0), textAlign: "center" }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleCompletedMutation.mutate(c.id)}
+                          title={
+                            completedContractorIds.has(c.id)
+                              ? "Mark as Active"
+                              : "Mark as Completed"
+                          }
+                          style={{
+                            width: 22,
+                            height: 22,
+                            border: completedContractorIds.has(c.id)
+                              ? "2px solid #28A745"
+                              : "2px solid #aaa",
+                            borderRadius: "3px",
+                            background: completedContractorIds.has(c.id)
+                              ? "#28A745"
+                              : "#fff",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#fff",
+                            fontSize: "13px",
+                            fontWeight: 700,
+                            padding: 0,
+                          }}
+                        >
+                          {completedContractorIds.has(c.id) ? "✓" : ""}
+                        </button>
+                      </td>
                       <td style={tdStyle(i % 2 === 0)}>{i + 1}</td>
                       <td style={{ ...tdStyle(i % 2 === 0), fontWeight: 600 }}>
                         {c.name}
@@ -1294,6 +1557,15 @@ export default function ContractorsPage() {
                         {getProjectName(c.projectId)}
                       </td>
                       <td style={tdStyle(i % 2 === 0)}>{c.date}</td>
+                      <td
+                        style={{
+                          ...tdStyle(i % 2 === 0),
+                          fontWeight: 700,
+                          color: "#0078D7",
+                        }}
+                      >
+                        {c.woNo || "—"}
+                      </td>
                       <td style={tdStyle(i % 2 === 0)}>
                         {fmtINR(c.contractingPrice)}
                       </td>
@@ -1373,7 +1645,9 @@ export default function ContractorsPage() {
                     style={ribbonBtn()}
                     onClick={() =>
                       printContent(
-                        `<h2>Contractor Bills</h2><p>Total: ${fmtINR(totalBillsAmt)}</p><table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Date</th><th>Item</th><th>Area</th><th>Unit</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.date}</td><td>${b.item}</td><td>${b.area}</td><td>${b.unit}</td><td>${fmtINR(b.unitPrice)}</td><td>${fmtINR(b.amount)}</td></tr>`).join("")}</tbody></table>`,
+                        "Contractor Bills",
+                        `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
+                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>Item</th><th>Area</th><th>Unit</th><th>Unit Price</th><th>WR%</th><th>WR Amt ₹</th><th>Amount</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${b.date}</td><td>${b.item}</td><td>${b.area}</td><td>${b.unit}</td><td>${fmtINR(b.unitPrice)}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td></tr>`).join("")}</tbody></table>`,
                       )
                     }
                     title="Print"
@@ -1387,7 +1661,9 @@ export default function ContractorsPage() {
                     style={ribbonBtn("#555")}
                     onClick={() =>
                       printContent(
-                        `<h2>Contractor Bills – PDF</h2><div class='summary'><div class='s-card'><h4>Total Bills</h4><p>${fmtINR(totalBillsAmt)}</p></div></div><table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Date</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.date}</td><td>${fmtINR(b.amount)}</td><td>${b.remarks}</td></tr>`).join("")}</tbody></table>`,
+                        "Contractor Bills – Export PDF",
+                        `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
+                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>WR%</th><th>WR Amt ₹</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${b.date}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td><td>${b.remarks}</td></tr>`).join("")}</tbody></table>`,
                       )
                     }
                     title="PDF"
@@ -1442,19 +1718,37 @@ export default function ContractorsPage() {
                     style={ribbonBtn("#FFA500")}
                     onClick={() =>
                       exportCSV(
-                        filteredBills,
+                        filteredBills.map((b) => ({
+                          Contractor: getContractorName(b.contractorId),
+                          Project: getProjectName(b.projectId),
+                          "Bill No": b.billNo,
+                          "Block ID": b.blockId || "",
+                          Date: fmtDate(b.date),
+                          Item: b.item,
+                          Area: b.area,
+                          Unit: b.unit,
+                          "Unit Price": b.unitPrice,
+                          "Gross Amount": b.grossAmount ?? b.area * b.unitPrice,
+                          "WR %": b.workRetention || 0,
+                          "WR Amount ₹": b.workRetentionAmount || 0,
+                          "Net Amount (INR)": b.amount,
+                          Remarks: b.remarks,
+                        })),
                         [
-                          "id",
-                          "contractorId",
-                          "projectId",
-                          "billNo",
-                          "date",
-                          "item",
-                          "area",
-                          "unit",
-                          "unitPrice",
-                          "amount",
-                          "remarks",
+                          "Contractor",
+                          "Project",
+                          "Bill No",
+                          "Block ID",
+                          "Date",
+                          "Item",
+                          "Area",
+                          "Unit",
+                          "Unit Price",
+                          "Gross Amount",
+                          "WR %",
+                          "WR Amount ₹",
+                          "Net Amount (INR)",
+                          "Remarks",
                         ],
                         "contractor-bills.csv",
                       )
@@ -1470,14 +1764,18 @@ export default function ContractorsPage() {
                     onClick={() =>
                       downloadFormat(
                         [
-                          "ContractorId",
-                          "ProjectId",
-                          "BillNo",
+                          "Contractor",
+                          "Project",
+                          "Bill No",
+                          "Block ID",
                           "Date",
                           "Item",
                           "Area",
                           "Unit",
-                          "UnitPrice",
+                          "Unit Price",
+                          "WR %",
+                          "WR Amount ₹",
+                          "Amount (INR)",
                           "Remarks",
                         ],
                         "contractor-bills-format.csv",
@@ -1548,11 +1846,13 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Contractors</option>
-              {contractors.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {contractors
+                .filter((c) => !completedContractorIds.has(c.id))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
             </select>
             <select
               style={filterStyle}
@@ -1563,11 +1863,13 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+              {projects
+                .filter((p) => !completedProjectIdSet.has(p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
             </select>
             <input
               type="date"
@@ -1636,6 +1938,9 @@ export default function ContractorsPage() {
                   </th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Project</th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Bill No</th>
+                  <th style={{ ...thStyle, background: "#D32F2F" }}>
+                    Block ID
+                  </th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Date</th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Item</th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Area</th>
@@ -1643,8 +1948,15 @@ export default function ContractorsPage() {
                   <th style={{ ...thStyle, background: "#D32F2F" }}>
                     Unit Price
                   </th>
+                  <th style={{ ...thStyle, background: "#1565c0" }}>
+                    Gross Amt
+                  </th>
+                  <th style={{ ...thStyle, background: "#9c27b0" }}>WR %</th>
+                  <th style={{ ...thStyle, background: "#9c27b0" }}>
+                    WR Amt ₹
+                  </th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>
-                    Amount (INR)
+                    Net Amount (INR)
                   </th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Remarks</th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Actions</th>
@@ -1726,7 +2038,15 @@ export default function ContractorsPage() {
                           background: i % 2 === 0 ? ZEBRA_BILL : "#fff",
                         }}
                       >
-                        {b.date}
+                        {b.blockId || "—"}
+                      </td>
+                      <td
+                        style={{
+                          ...tdStyle(i % 2 === 0),
+                          background: i % 2 === 0 ? ZEBRA_BILL : "#fff",
+                        }}
+                      >
+                        {fmtDate(b.date)}
                       </td>
                       <td
                         style={{
@@ -1759,6 +2079,36 @@ export default function ContractorsPage() {
                         }}
                       >
                         {fmtINR(b.unitPrice)}
+                      </td>
+                      <td
+                        style={{
+                          ...tdStyle(i % 2 === 0),
+                          background: i % 2 === 0 ? "#e3f0ff" : "#f0f7ff",
+                          color: "#1565c0",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {fmtINR(b.grossAmount ?? b.area * b.unitPrice)}
+                      </td>
+                      <td
+                        style={{
+                          ...tdStyle(i % 2 === 0),
+                          background: i % 2 === 0 ? "#f9f0ff" : "#fdf5ff",
+                          color: "#9c27b0",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {b.workRetention || 0}%
+                      </td>
+                      <td
+                        style={{
+                          ...tdStyle(i % 2 === 0),
+                          background: i % 2 === 0 ? "#f9f0ff" : "#fdf5ff",
+                          color: "#9c27b0",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {fmtINR(b.workRetentionAmount || 0)}
                       </td>
                       <td
                         style={{
@@ -1853,7 +2203,9 @@ export default function ContractorsPage() {
                     style={ribbonBtn()}
                     onClick={() =>
                       printContent(
-                        `<h2>Contractor Payments</h2><p>Total: ${fmtINR(totalPaymentsAmt)}</p><table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Payment No</th><th>Date</th><th>Amount</th><th>Mode</th><th>Remarks</th></tr></thead><tbody>${filteredPayments.map((p, i) => `<tr><td>${i + 1}</td><td>${getContractorName(p.contractorId)}</td><td>${getProjectName(p.projectId)}</td><td>${p.paymentNo}</td><td>${p.date}</td><td>${fmtINR(p.amount)}</td><td>${p.paymentMode}</td><td>${p.remarks}</td></tr>`).join("")}</tbody></table>`,
+                        "Contractor Payments",
+                        `<div class="summary"><div class="s-card s-green"><div class="lbl">Total Payments</div><div class="val">${fmtINR(totalPaymentsAmt)}</div></div></div>`,
+                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Payment No</th><th>Date</th><th>Amount</th><th>Mode</th><th>Remarks</th></tr></thead><tbody>${filteredPayments.map((p, i) => `<tr><td>${i + 1}</td><td>${getContractorName(p.contractorId)}</td><td>${getProjectName(p.projectId)}</td><td>${p.paymentNo}</td><td>${p.date}</td><td>${fmtINR(p.amount)}</td><td>${p.paymentMode}</td><td>${p.remarks}</td></tr>`).join("")}</tbody></table>`,
                       )
                     }
                     title="Print"
@@ -1867,7 +2219,9 @@ export default function ContractorsPage() {
                     style={ribbonBtn("#555")}
                     onClick={() =>
                       printContent(
-                        `<h2>Contractor Payments – PDF</h2><div class='summary'><div class='s-card'><h4>Total Payments</h4><p>${fmtINR(totalPaymentsAmt)}</p></div></div><table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Date</th><th>Amount</th><th>Mode</th></tr></thead><tbody>${filteredPayments.map((p, i) => `<tr><td>${i + 1}</td><td>${getContractorName(p.contractorId)}</td><td>${getProjectName(p.projectId)}</td><td>${p.date}</td><td>${fmtINR(p.amount)}</td><td>${p.paymentMode}</td></tr>`).join("")}</tbody></table>`,
+                        "Contractor Payments – Export PDF",
+                        `<div class="summary"><div class="s-card s-green"><div class="lbl">Total Payments</div><div class="val">${fmtINR(totalPaymentsAmt)}</div></div></div>`,
+                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Payment No</th><th>Date</th><th>Amount</th><th>Mode</th></tr></thead><tbody>${filteredPayments.map((p, i) => `<tr><td>${i + 1}</td><td>${getContractorName(p.contractorId)}</td><td>${getProjectName(p.projectId)}</td><td>${p.paymentNo}</td><td>${p.date}</td><td>${fmtINR(p.amount)}</td><td>${p.paymentMode}</td></tr>`).join("")}</tbody></table>`,
                       )
                     }
                     title="PDF"
@@ -2021,11 +2375,13 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Contractors</option>
-              {contractors.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {contractors
+                .filter((c) => !completedContractorIds.has(c.id))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
             </select>
             <select
               style={filterStyle}
@@ -2036,11 +2392,13 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+              {projects
+                .filter((p) => !completedProjectIdSet.has(p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
             </select>
             <select
               style={filterStyle}
@@ -2137,7 +2495,7 @@ export default function ContractorsPage() {
                 {filteredPayments.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       style={{
                         textAlign: "center",
                         padding: "32px",
@@ -2330,11 +2688,13 @@ export default function ContractorsPage() {
                   const rows = ledgerEntries
                     .map(
                       (e, i) =>
-                        `<tr style="background:${e.credit < 0 ? "#FFF8E1" : i % 2 === 0 ? "#f9f9f9" : "#fff"}"><td>${i + 1}</td><td>${e.date}</td><td>${getContractorName(e.contractorId)}</td><td>${getProjectName(e.projectId)}</td><td>${e.desc}</td><td>${e.debit > 0 ? fmtINR(e.debit) : ""}</td><td style="color:${e.credit < 0 ? "#D32F2F" : "#333"}">${e.credit > 0 ? fmtINR(e.credit) : ""}</td><td style="color:${e.balance < 0 ? "#D32F2F" : "#28A745"};font-weight:bold">${fmtINR(e.balance)}</td></tr>`,
+                        `<tr><td>${i + 1}</td><td>${fmtDate(e.date)}</td><td>${getContractorName(e.contractorId)}</td><td>${getProjectName(e.projectId)}</td><td>${e.desc}</td><td>${e.debit > 0 ? fmtINR(e.debit) : ""}</td><td style="color:${e.workRetentionAmount > 0 ? "#9c27b0" : "#333"}">${e.workRetentionAmount > 0 ? fmtINR(e.workRetentionAmount) : ""}</td><td style="color:${e.credit < 0 ? "#D32F2F" : "#333"}">${e.credit > 0 ? fmtINR(e.credit) : ""}</td><td style="color:${e.balance < 0 ? "#D32F2F" : "#28A745"};font-weight:bold">${fmtINR(e.balance)}</td></tr>`,
                     )
                     .join("");
                   printContent(
-                    `<h2>Contractor Ledger Report</h2><div class='summary'><div class='s-card'><h4>Total Bills</h4><p>${fmtINR(rTotalBills)}</p></div><div class='s-card'><h4>Total Payments</h4><p>${fmtINR(rTotalPayments)}</p></div><div class='s-card'><h4>Outstanding</h4><p style="color:${(rTotalBills - rTotalPayments) < 0 ? "#D32F2F" : "#28A745"}>${fmtINR(rTotalBills - rTotalPayments)}</p></div></div><table><thead><tr><th>#</th><th>Date</th><th>Contractor</th><th>Project</th><th>Description</th><th>Debit (Bills)</th><th>Credit (Payments)</th><th>Balance</th></tr></thead><tbody>${rows}</tbody></table>`,
+                    "Contractor Ledger Report",
+                    `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills</div><div class="val">${fmtINR(rTotalBills)}</div></div><div class="s-card s-green"><div class="lbl">Total Payments</div><div class="val">${fmtINR(rTotalPayments)}</div></div><div class="s-card ${(rTotalBills - rTotalPayments) < 0 ? "s-red" : "s-orange"}"><div class="lbl">Outstanding</div><div class="val">${fmtINR(rTotalBills - rTotalPayments)}</div></div><div class="s-card s-purple"><div class="lbl">Work Retention</div><div class="val">${fmtINR(rTotalWorkRetention)}</div></div></div>`,
+                    `<table><thead><tr><th>#</th><th>Date</th><th>Contractor</th><th>Project</th><th>Description</th><th>Debit (Bills)</th><th>Work Retention ₹</th><th>Credit (Payments)</th><th>Balance</th></tr></thead><tbody>${rows}</tbody></table>`,
                   );
                 }}
                 data-ocid="contractors.print_button"
@@ -2346,14 +2706,16 @@ export default function ContractorsPage() {
                 type="button"
                 style={ribbonBtn("#555")}
                 onClick={() => {
-                  const rows = ledgerEntries
+                  const pdfRows = ledgerEntries
                     .map(
                       (e, i) =>
-                        `<tr><td>${i + 1}</td><td>${e.date}</td><td>${getContractorName(e.contractorId)}</td><td>${getProjectName(e.projectId)}</td><td>${e.desc}</td><td>${e.debit > 0 ? fmtINR(e.debit) : ""}</td><td>${e.credit > 0 ? fmtINR(e.credit) : ""}</td><td>${fmtINR(e.balance)}</td></tr>`,
+                        `<tr><td>${i + 1}</td><td>${fmtDate(e.date)}</td><td>${getContractorName(e.contractorId)}</td><td>${getProjectName(e.projectId)}</td><td>${e.desc}</td><td>${e.debit > 0 ? fmtINR(e.debit) : ""}</td><td style="color:#9c27b0">${e.workRetentionAmount > 0 ? fmtINR(e.workRetentionAmount) : ""}</td><td>${e.credit > 0 ? fmtINR(e.credit) : ""}</td><td style="color:${e.balance < 0 ? "#D32F2F" : "#28A745"};font-weight:bold">${fmtINR(e.balance)}</td></tr>`,
                     )
                     .join("");
                   printContent(
-                    `<h2>Contractor Ledger – PDF</h2><div class='summary'><div class='s-card'><h4>Total Bills</h4><p>${fmtINR(rTotalBills)}</p></div><div class='s-card'><h4>Total Payments</h4><p>${fmtINR(rTotalPayments)}</p></div><div class='s-card'><h4>Outstanding</h4><p>${fmtINR(rTotalBills - rTotalPayments)}</p></div></div><table><thead><tr><th>#</th><th>Date</th><th>Contractor</th><th>Project</th><th>Description</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead><tbody>${rows}</tbody></table>`,
+                    "Contractor Ledger – PDF",
+                    `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills</div><div class="val">${fmtINR(rTotalBills)}</div></div><div class="s-card s-green"><div class="lbl">Total Payments</div><div class="val">${fmtINR(rTotalPayments)}</div></div><div class="s-card s-orange"><div class="lbl">Outstanding</div><div class="val">${fmtINR(rTotalBills - rTotalPayments)}</div></div><div class="s-card s-purple"><div class="lbl">Work Retention</div><div class="val">${fmtINR(rTotalWorkRetention)}</div></div></div>`,
+                    `<table><thead><tr><th>#</th><th>Date</th><th>Contractor</th><th>Project</th><th>Description</th><th>Debit</th><th>Work Retention ₹</th><th>Credit</th><th>Balance</th></tr></thead><tbody>${pdfRows}</tbody></table>`,
                   );
                 }}
                 data-ocid="contractors.secondary_button"
@@ -2407,7 +2769,20 @@ export default function ContractorsPage() {
                   color: "#D32F2F",
                 }}
               >
-                Bills: {fmtINR(rTotalBills)}
+                Bills (Gross): {fmtINR(rTotalBills)}
+              </div>
+              <div
+                style={{
+                  background: "#F3E5F5",
+                  border: "1px solid #9c27b0",
+                  borderRadius: "6px",
+                  padding: "6px 12px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  color: "#9c27b0",
+                }}
+              >
+                Work Retention: {fmtINR(rTotalWorkRetention)}
               </div>
               <div
                 style={{
@@ -2433,7 +2808,8 @@ export default function ContractorsPage() {
                   color: "#FFA500",
                 }}
               >
-                Outstanding: {fmtINR(rTotalBills - rTotalPayments)}
+                Outstanding:{" "}
+                {fmtINR(rTotalBills - (rTotalWorkRetention + rTotalPayments))}
               </div>
             </div>
           </div>
@@ -2459,11 +2835,13 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Contractors</option>
-              {contractors.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              {contractors
+                .filter((c) => !completedContractorIds.has(c.id))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
             </select>
             <select
               style={filterStyle}
@@ -2474,11 +2852,13 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+              {projects
+                .filter((p) => !completedProjectIdSet.has(p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
             </select>
             <input
               type="date"
@@ -2524,6 +2904,9 @@ export default function ContractorsPage() {
                   <th style={thStyle}>Project</th>
                   <th style={thStyle}>Description</th>
                   <th style={thStyle}>Debit (Bills)</th>
+                  <th style={{ ...thStyle, background: "#9c27b0" }}>
+                    Work Retention ₹
+                  </th>
                   <th style={thStyle}>Credit (Payments)</th>
                   <th style={thStyle}>Balance</th>
                 </tr>
@@ -2532,7 +2915,7 @@ export default function ContractorsPage() {
                 {ledgerEntries.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       style={{
                         textAlign: "center",
                         padding: "32px",
@@ -2574,7 +2957,7 @@ export default function ContractorsPage() {
                           borderBottom: "1px solid #e0e0e0",
                         }}
                       >
-                        {e.date}
+                        {fmtDate(e.date)}
                       </td>
                       <td
                         style={{
@@ -2617,6 +3000,20 @@ export default function ContractorsPage() {
                         }}
                       >
                         {e.debit > 0 ? fmtINR(e.debit) : ""}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          fontSize: "12px",
+                          fontFamily: "'Century Gothic',Arial,sans-serif",
+                          borderBottom: "1px solid #e0e0e0",
+                          color: e.workRetentionAmount > 0 ? "#9c27b0" : "#999",
+                          fontWeight: e.workRetentionAmount > 0 ? 700 : 400,
+                        }}
+                      >
+                        {e.workRetentionAmount > 0
+                          ? fmtINR(e.workRetentionAmount)
+                          : ""}
                       </td>
                       <td
                         style={{
@@ -2713,9 +3110,19 @@ export default function ContractorsPage() {
               <select
                 style={{ ...filterStyle, width: "100%" }}
                 value={cForm.projectId}
-                onChange={(e) =>
-                  setCForm((f) => ({ ...f, projectId: e.target.value }))
-                }
+                onChange={(e) => {
+                  const newProjectId = e.target.value;
+                  setCForm((f) => {
+                    const woNo = !cEditing
+                      ? generateWoNo(
+                          newProjectId,
+                          f.date,
+                          contractors.length + 1,
+                        )
+                      : f.woNo;
+                    return { ...f, projectId: newProjectId, woNo };
+                  });
+                }}
                 data-ocid="contractors.select"
               >
                 <option value="">Select project...</option>
@@ -2731,11 +3138,42 @@ export default function ContractorsPage() {
               <Input
                 type="date"
                 value={cForm.date}
-                onChange={(e) =>
-                  setCForm((f) => ({ ...f, date: e.target.value }))
-                }
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setCForm((f) => {
+                    const woNo = !cEditing
+                      ? generateWoNo(
+                          f.projectId,
+                          newDate,
+                          contractors.length + 1,
+                        )
+                      : f.woNo;
+                    return { ...f, date: newDate, woNo };
+                  });
+                }}
                 data-ocid="contractors.input"
               />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">
+                W.O No (Work Order Number)
+              </Label>
+              <Input
+                value={cForm.woNo}
+                onChange={(e) =>
+                  setCForm((f) => ({ ...f, woNo: e.target.value }))
+                }
+                placeholder="Auto-generated"
+                style={{
+                  background: "#f0f8ff",
+                  fontWeight: 700,
+                  color: "#0078D7",
+                }}
+                data-ocid="contractors.input"
+              />
+              <p style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}>
+                Format: [Project 2 Letters][DD][MM][YY][Serial]. Auto-generated.
+              </p>
             </div>
             <div>
               <Label className="text-xs mb-1 block">Contracting Price</Label>
@@ -2800,7 +3238,7 @@ export default function ContractorsPage() {
               />
             </div>
             <div>
-              <Label className="text-xs mb-1 block">Link 1</Label>
+              <Label className="text-xs mb-1 block">Link 1 - W.O.</Label>
               <Input
                 value={cForm.link1}
                 onChange={(e) =>
@@ -2872,7 +3310,48 @@ export default function ContractorsPage() {
       >
         <DialogContent className="max-w-lg" data-ocid="contractors.modal">
           <DialogHeader>
-            <DialogTitle>Contractor Details</DialogTitle>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <DialogTitle>Contractor Details</DialogTitle>
+              {cViewItem && (
+                <button
+                  type="button"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#0078D7",
+                    padding: "4px",
+                  }}
+                  title="Print Receipt"
+                  onClick={() =>
+                    printReceipt("contractor", {
+                      Name: cViewItem.name,
+                      "Trade(s)": cViewItem.trades.join(", "),
+                      Project: getProjectName(cViewItem.projectId),
+                      Date: fmtDate(cViewItem.date),
+                      "W.O No": cViewItem.woNo || "",
+                      "Contracting Price": fmtINR(cViewItem.contractingPrice),
+                      Unit: cViewItem.unit,
+                      "Contact 1": cViewItem.contact1,
+                      "Contact 2": cViewItem.contact2,
+                      Email: cViewItem.email,
+                      Address: cViewItem.address,
+                      Note: cViewItem.note,
+                      "Link 1 - W.O": cViewItem.link1,
+                      "Link 2": cViewItem.link2,
+                    })
+                  }
+                >
+                  <Printer size={16} />
+                </button>
+              )}
+            </div>
           </DialogHeader>
           {cViewItem && (
             <div className="space-y-2 text-sm py-2">
@@ -2964,11 +3443,13 @@ export default function ContractorsPage() {
                 data-ocid="contractors.select"
               >
                 <option value="">Select contractor...</option>
-                {contractors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                {contractors
+                  .filter((c) => !completedContractorIds.has(c.id))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div>
@@ -2982,11 +3463,13 @@ export default function ContractorsPage() {
                 data-ocid="contractors.select"
               >
                 <option value="">Select project...</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+                {projects
+                  .filter((p) => !completedProjectIdSet.has(p.id))
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div>
@@ -2996,6 +3479,17 @@ export default function ContractorsPage() {
                 onChange={(e) =>
                   setBForm((f) => ({ ...f, billNo: e.target.value }))
                 }
+                data-ocid="contractors.input"
+              />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Block ID</Label>
+              <Input
+                value={bForm.blockId}
+                onChange={(e) =>
+                  setBForm((f) => ({ ...f, blockId: e.target.value }))
+                }
+                placeholder="Block ID (optional)"
                 data-ocid="contractors.input"
               />
             </div>
@@ -3025,9 +3519,19 @@ export default function ContractorsPage() {
               <Input
                 type="number"
                 value={bForm.area}
-                onChange={(e) =>
-                  setBForm((f) => ({ ...f, area: Number(e.target.value) }))
-                }
+                onChange={(e) => {
+                  const area = Number.parseFloat(e.target.value) || 0;
+                  const grossAmt = area * bForm.unitPrice;
+                  const amt = grossAmt * (1 - bForm.workRetention / 100);
+                  const wrAmt = grossAmt * (bForm.workRetention / 100);
+                  setBForm((f) => ({
+                    ...f,
+                    area,
+                    grossAmount: grossAmt,
+                    amount: amt,
+                    workRetentionAmount: wrAmt,
+                  }));
+                }}
                 data-ocid="contractors.input"
               />
             </div>
@@ -3053,14 +3557,49 @@ export default function ContractorsPage() {
               <Input
                 type="number"
                 value={bForm.unitPrice}
-                onChange={(e) =>
-                  setBForm((f) => ({ ...f, unitPrice: Number(e.target.value) }))
-                }
+                onChange={(e) => {
+                  const up = Number.parseFloat(e.target.value) || 0;
+                  const grossAmt = bForm.area * up;
+                  const amt = grossAmt * (1 - bForm.workRetention / 100);
+                  const wrAmt = grossAmt * (bForm.workRetention / 100);
+                  setBForm((f) => ({
+                    ...f,
+                    unitPrice: up,
+                    grossAmount: grossAmt,
+                    amount: amt,
+                    workRetentionAmount: wrAmt,
+                  }));
+                }}
                 data-ocid="contractors.input"
               />
             </div>
             <div>
-              <Label className="text-xs mb-1 block">Amount (auto)</Label>
+              <Label className="text-xs mb-1 block">Work Retention %</Label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                placeholder="0"
+                value={bForm.workRetention}
+                onChange={(e) => {
+                  const wr = Number.parseFloat(e.target.value) || 0;
+                  const grossAmt = bForm.area * bForm.unitPrice;
+                  const amt = grossAmt * (1 - wr / 100);
+                  const wrAmt = grossAmt * (wr / 100);
+                  setBForm((f) => ({
+                    ...f,
+                    workRetention: wr,
+                    grossAmount: grossAmt,
+                    amount: amt,
+                    workRetentionAmount: wrAmt,
+                  }));
+                }}
+                data-ocid="contractors.input"
+              />
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">Amount (Auto) ₹</Label>
               <div
                 style={{
                   padding: "8px 12px",
@@ -3072,8 +3611,38 @@ export default function ContractorsPage() {
                   fontSize: "13px",
                 }}
               >
-                {fmtINR(bForm.area * bForm.unitPrice)}
+                {fmtINR(
+                  bForm.area *
+                    bForm.unitPrice *
+                    (1 - bForm.workRetention / 100),
+                )}
               </div>
+              <p style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}>
+                Area × Unit Price × (1 − WR% / 100)
+              </p>
+            </div>
+            <div>
+              <Label className="text-xs mb-1 block">
+                Work Retention Amount (Auto) ₹
+              </Label>
+              <div
+                style={{
+                  padding: "8px 12px",
+                  background: "#faf0ff",
+                  border: "1px solid #9c27b0",
+                  borderRadius: "4px",
+                  fontWeight: 700,
+                  color: "#9c27b0",
+                  fontSize: "13px",
+                }}
+              >
+                {fmtINR(
+                  bForm.area * bForm.unitPrice * (bForm.workRetention / 100),
+                )}
+              </div>
+              <p style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}>
+                Amount to deduct = Area × Unit Price × (WR% / 100)
+              </p>
             </div>
             <div className="col-span-2">
               <Label className="text-xs mb-1 block">Remarks</Label>
@@ -3114,7 +3683,53 @@ export default function ContractorsPage() {
       >
         <DialogContent className="max-w-md" data-ocid="contractors.modal">
           <DialogHeader>
-            <DialogTitle>Bill Details</DialogTitle>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <DialogTitle>Bill Details</DialogTitle>
+              {bViewItem && (
+                <button
+                  type="button"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#FFA500",
+                    padding: "4px",
+                  }}
+                  title="Print Receipt"
+                  onClick={() =>
+                    printReceipt("bill", {
+                      Contractor: getContractorName(bViewItem.contractorId),
+                      Project: getProjectName(bViewItem.projectId),
+                      "Bill No": bViewItem.billNo,
+                      "Block ID": bViewItem.blockId || "—",
+                      Date: fmtDate(bViewItem.date),
+                      Item: bViewItem.item,
+                      Area: String(bViewItem.area),
+                      Unit: bViewItem.unit,
+                      "Unit Price": fmtINR(bViewItem.unitPrice),
+                      "Gross Amount": fmtINR(
+                        bViewItem.grossAmount ??
+                          bViewItem.area * bViewItem.unitPrice,
+                      ),
+                      "Work Retention %": `${bViewItem.workRetention || 0}%`,
+                      "Work Retention Amount": fmtINR(
+                        bViewItem.workRetentionAmount || 0,
+                      ),
+                      "Net Amount (INR)": fmtINR(bViewItem.amount),
+                      Remarks: bViewItem.remarks,
+                    })
+                  }
+                >
+                  <Printer size={16} />
+                </button>
+              )}
+            </div>
           </DialogHeader>
           {bViewItem && (
             <div className="space-y-2 text-sm py-2">
@@ -3125,12 +3740,21 @@ export default function ContractorsPage() {
                 },
                 { k: "Project", v: getProjectName(bViewItem.projectId) },
                 { k: "Bill No", v: bViewItem.billNo },
+                { k: "Block ID", v: bViewItem.blockId || "—" },
                 { k: "Date", v: bViewItem.date },
                 { k: "Item", v: bViewItem.item },
                 { k: "Area", v: String(bViewItem.area) },
                 { k: "Unit", v: bViewItem.unit },
                 { k: "Unit Price", v: fmtINR(bViewItem.unitPrice) },
-                { k: "Amount", v: fmtINR(bViewItem.amount) },
+                {
+                  k: "Work Retention %",
+                  v: `${bViewItem.workRetention || 0}%`,
+                },
+                {
+                  k: "Work Retention Amount",
+                  v: fmtINR(bViewItem.workRetentionAmount || 0),
+                },
+                { k: "Amount (Net)", v: fmtINR(bViewItem.amount) },
                 { k: "Remarks", v: bViewItem.remarks },
               ].map(({ k, v }) =>
                 v ? (
@@ -3179,11 +3803,13 @@ export default function ContractorsPage() {
                 data-ocid="contractors.select"
               >
                 <option value="">Select contractor...</option>
-                {contractors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                {contractors
+                  .filter((c) => !completedContractorIds.has(c.id))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div>
@@ -3197,22 +3823,37 @@ export default function ContractorsPage() {
                 data-ocid="contractors.select"
               >
                 <option value="">Select project...</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+                {projects
+                  .filter((p) => !completedProjectIdSet.has(p.id))
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
               </select>
             </div>
             <div>
               <Label className="text-xs mb-1 block">Payment No</Label>
               <Input
                 value={pForm.paymentNo}
+                readOnly={!pEditing}
                 onChange={(e) =>
                   setPForm((f) => ({ ...f, paymentNo: e.target.value }))
                 }
+                style={{
+                  background: pEditing ? undefined : "#f0f8ff",
+                  fontWeight: 700,
+                  color: "#0078D7",
+                }}
                 data-ocid="contractors.input"
               />
+              {!pEditing && (
+                <p
+                  style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}
+                >
+                  Auto-generated serial number
+                </p>
+              )}
             </div>
             <div>
               <Label className="text-xs mb-1 block">Date</Label>
@@ -3289,7 +3930,41 @@ export default function ContractorsPage() {
       >
         <DialogContent className="max-w-md" data-ocid="contractors.modal">
           <DialogHeader>
-            <DialogTitle>Payment Details</DialogTitle>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <DialogTitle>Payment Details</DialogTitle>
+              {pViewItem && (
+                <button
+                  type="button"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#28A745",
+                    padding: "4px",
+                  }}
+                  title="Print Receipt"
+                  onClick={() =>
+                    printReceipt("payment", {
+                      Contractor: getContractorName(pViewItem.contractorId),
+                      Project: getProjectName(pViewItem.projectId),
+                      "Payment No": pViewItem.paymentNo,
+                      Date: fmtDate(pViewItem.date),
+                      Amount: fmtINR(pViewItem.amount),
+                      Mode: pViewItem.paymentMode,
+                      Remarks: pViewItem.remarks,
+                    })
+                  }
+                >
+                  <Printer size={16} />
+                </button>
+              )}
+            </div>
           </DialogHeader>
           {pViewItem && (
             <div className="space-y-2 text-sm py-2">
@@ -3346,7 +4021,7 @@ export default function ContractorsPage() {
             await bulkDeleteContractors(pwd);
             setCPwdAction(null);
           } else if (cPwdAction?.type === "edit") {
-            setCEditPwd(pwd);
+            cEditPwdRef.current = pwd;
             await handleContractorEditPwd(pwd);
           }
         }}
@@ -3371,17 +4046,23 @@ export default function ContractorsPage() {
             await bulkDeleteBills(pwd);
             setBPwdAction(null);
           } else if (bPwdAction?.type === "edit") {
+            bEditPwdRef.current = pwd;
             const b = bPwdAction.data as ContractorBillRecord;
             setBEditing(b);
             setBForm({
               contractorId: b.contractorId,
               projectId: b.projectId,
               billNo: b.billNo,
+              blockId: b.blockId || "",
               date: b.date,
               item: b.item,
               area: b.area,
               unit: b.unit,
               unitPrice: b.unitPrice,
+              workRetention: b.workRetention || 0,
+              workRetentionAmount: b.workRetentionAmount || 0,
+              amount: b.amount,
+              grossAmount: b.grossAmount ?? b.area * b.unitPrice,
               remarks: b.remarks,
             });
             setBPwdAction(null);
@@ -3409,6 +4090,7 @@ export default function ContractorsPage() {
             await bulkDeletePayments(pwd);
             setPPwdAction(null);
           } else if (pPwdAction?.type === "edit") {
+            pEditPwdRef.current = pwd;
             const p = pPwdAction.data as ContractorPaymentRecord;
             setPEditing(p);
             setPForm({

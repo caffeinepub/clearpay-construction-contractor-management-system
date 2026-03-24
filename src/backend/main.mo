@@ -1836,10 +1836,19 @@ actor {
     email: Text; address: Text; link1: Text; link2: Text; note: Text;
   }>();
 
+  // Extension maps for new fields (separate for upgrade safety)
+  stable var contractorCompletedMap = Map.empty<Text, Bool>();
+  stable var contractorWoNoMap = Map.empty<Text, Text>();
+
   stable var contractorBills = Map.empty<Text, {
     id: Text; contractorId: Text; projectId: Text; billNo: Text; date: Text;
     item: Text; area: Float; unit: Text; unitPrice: Float; amount: Float; remarks: Text;
   }>();
+
+  // Extension maps for bill new fields
+  stable var cBillBlockIdMap = Map.empty<Text, Text>();
+  stable var cBillWorkRetentionMap = Map.empty<Text, Float>();
+  stable var cBillWorkRetentionAmtMap = Map.empty<Text, Float>();
 
   stable var contractorPayments = Map.empty<Text, {
     id: Text; contractorId: Text; projectId: Text; paymentNo: Text; date: Text;
@@ -1857,45 +1866,66 @@ actor {
   public shared ({ caller }) func addContractor(
     name: Text, trades: [Text], projectId: Text, date: Text,
     contractingPrice: Float, unit: Text, contact1: Text, contact2: Text,
-    email: Text, address: Text, link1: Text, link2: Text, note: Text
+    email: Text, address: Text, link1: Text, link2: Text, note: Text, woNo: Text
   ) : async Text {
     requireAdmin(caller);
     let id = generateCId("CON");
     contractors.add(id, { id; name; trades; projectId; date; contractingPrice; unit; contact1; contact2; email; address; link1; link2; note; });
+    contractorWoNoMap.add(id, woNo);
     id;
   };
 
   public shared ({ caller }) func updateContractor(
     id: Text, name: Text, trades: [Text], projectId: Text, date: Text,
     contractingPrice: Float, unit: Text, contact1: Text, contact2: Text,
-    email: Text, address: Text, link1: Text, link2: Text, note: Text, password: Text
+    email: Text, address: Text, link1: Text, link2: Text, note: Text, password: Text, woNo: Text
   ) : async () {
     requireAdmin(caller);
     validateAdminPassword(password);
     switch (contractors.get(id)) {
       case (null) { Runtime.trap("Contractor not found") };
-      case (?_) { contractors.add(id, { id; name; trades; projectId; date; contractingPrice; unit; contact1; contact2; email; address; link1; link2; note; }); };
+      case (?_) {
+        contractors.add(id, { id; name; trades; projectId; date; contractingPrice; unit; contact1; contact2; email; address; link1; link2; note; });
+        contractorWoNoMap.add(id, woNo);
+      };
     };
+  };
+
+  public shared ({ caller }) func toggleContractorCompleted(id: Text) : async () {
+    requireAdmin(caller);
+    let current = switch (contractorCompletedMap.get(id)) { case null false; case (?v) v };
+    contractorCompletedMap.add(id, not current);
   };
 
   public shared ({ caller }) func deleteContractors(ids: [Text], password: Text) : async () {
     requireAdmin(caller);
     validateAdminPassword(password);
-    for (id in ids.vals()) { contractors.remove(id) };
+    for (id in ids.vals()) {
+      contractors.remove(id);
+      contractorCompletedMap.remove(id);
+      contractorWoNoMap.remove(id);
+    };
   };
 
   public query ({ caller }) func listContractors() : async [{
     id: Text; name: Text; trades: [Text]; projectId: Text; date: Text;
     contractingPrice: Float; unit: Text; contact1: Text; contact2: Text;
     email: Text; address: Text; link1: Text; link2: Text; note: Text;
+    woNo: Text; completed: Bool;
   }] {
     requireAuthenticated(caller);
-    contractors.values().toArray();
+    let arr = contractors.values().toArray();
+    arr.map(func(c : { id: Text; name: Text; trades: [Text]; projectId: Text; date: Text; contractingPrice: Float; unit: Text; contact1: Text; contact2: Text; email: Text; address: Text; link1: Text; link2: Text; note: Text; }) : { id: Text; name: Text; trades: [Text]; projectId: Text; date: Text; contractingPrice: Float; unit: Text; contact1: Text; contact2: Text; email: Text; address: Text; link1: Text; link2: Text; note: Text; woNo: Text; completed: Bool; } {
+      let woNo = switch (contractorWoNoMap.get(c.id)) { case null ""; case (?v) v };
+      let completed = switch (contractorCompletedMap.get(c.id)) { case null false; case (?v) v };
+      { id = c.id; name = c.name; trades = c.trades; projectId = c.projectId; date = c.date; contractingPrice = c.contractingPrice; unit = c.unit; contact1 = c.contact1; contact2 = c.contact2; email = c.email; address = c.address; link1 = c.link1; link2 = c.link2; note = c.note; woNo; completed; }
+    });
   };
 
   public shared ({ caller }) func addContractorBill(
     contractorId: Text, projectId: Text, billNo: Text, date: Text,
-    item: Text, area: Float, unit: Text, unitPrice: Float, remarks: Text
+    item: Text, area: Float, unit: Text, unitPrice: Float, remarks: Text,
+    blockId: Text, workRetention: Float, workRetentionAmount: Float
   ) : async Text {
     requireAdmin(caller);
     for ((_, b) in contractorBills.entries()) {
@@ -1904,22 +1934,29 @@ actor {
       };
     };
     let id = generateCId("CBILL");
-    let amount = area * unitPrice;
+    let amount = area * unitPrice * (1.0 - workRetention / 100.0);
     contractorBills.add(id, { id; contractorId; projectId; billNo; date; item; area; unit; unitPrice; amount; remarks; });
+    cBillBlockIdMap.add(id, blockId);
+    cBillWorkRetentionMap.add(id, workRetention);
+    cBillWorkRetentionAmtMap.add(id, workRetentionAmount);
     id;
   };
 
   public shared ({ caller }) func updateContractorBill(
     id: Text, contractorId: Text, projectId: Text, billNo: Text, date: Text,
-    item: Text, area: Float, unit: Text, unitPrice: Float, remarks: Text, password: Text
+    item: Text, area: Float, unit: Text, unitPrice: Float, remarks: Text, password: Text,
+    blockId: Text, workRetention: Float, workRetentionAmount: Float
   ) : async () {
     requireAdmin(caller);
     validateAdminPassword(password);
     switch (contractorBills.get(id)) {
       case (null) { Runtime.trap("Contractor bill not found") };
       case (?_) {
-        let amount = area * unitPrice;
+        let amount = area * unitPrice * (1.0 - workRetention / 100.0);
         contractorBills.add(id, { id; contractorId; projectId; billNo; date; item; area; unit; unitPrice; amount; remarks; });
+        cBillBlockIdMap.add(id, blockId);
+        cBillWorkRetentionMap.add(id, workRetention);
+        cBillWorkRetentionAmtMap.add(id, workRetentionAmount);
       };
     };
   };
@@ -1927,16 +1964,29 @@ actor {
   public shared ({ caller }) func deleteContractorBills(ids: [Text], password: Text) : async () {
     requireAdmin(caller);
     validateAdminPassword(password);
-    for (id in ids.vals()) { contractorBills.remove(id) };
+    for (id in ids.vals()) {
+      contractorBills.remove(id);
+      cBillBlockIdMap.remove(id);
+      cBillWorkRetentionMap.remove(id);
+      cBillWorkRetentionAmtMap.remove(id);
+    };
   };
 
   public query ({ caller }) func listContractorBills() : async [{
     id: Text; contractorId: Text; projectId: Text; billNo: Text; date: Text;
     item: Text; area: Float; unit: Text; unitPrice: Float; amount: Float; remarks: Text;
+    blockId: Text; workRetention: Float; workRetentionAmount: Float;
   }] {
     requireAuthenticated(caller);
-    contractorBills.values().toArray();
+    let arr = contractorBills.values().toArray();
+    arr.map(func(b : { id: Text; contractorId: Text; projectId: Text; billNo: Text; date: Text; item: Text; area: Float; unit: Text; unitPrice: Float; amount: Float; remarks: Text; }) : { id: Text; contractorId: Text; projectId: Text; billNo: Text; date: Text; item: Text; area: Float; unit: Text; unitPrice: Float; amount: Float; remarks: Text; blockId: Text; workRetention: Float; workRetentionAmount: Float; } {
+      let blockId = switch (cBillBlockIdMap.get(b.id)) { case null ""; case (?v) v };
+      let workRetention = switch (cBillWorkRetentionMap.get(b.id)) { case null 0.0; case (?v) v };
+      let workRetentionAmount = switch (cBillWorkRetentionAmtMap.get(b.id)) { case null 0.0; case (?v) v };
+      { id = b.id; contractorId = b.contractorId; projectId = b.projectId; billNo = b.billNo; date = b.date; item = b.item; area = b.area; unit = b.unit; unitPrice = b.unitPrice; amount = b.amount; remarks = b.remarks; blockId; workRetention; workRetentionAmount; }
+    });
   };
+
 
   public shared ({ caller }) func addContractorPayment(
     contractorId: Text, projectId: Text, paymentNo: Text, date: Text,

@@ -301,6 +301,7 @@ export interface backendInterface {
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     setHintQuestionAndAnswer(question: string, answer: string): Promise<void>;
     toggleProjectCompleted(id: string): Promise<void>;
+    toggleContractorCompleted(id: string): Promise<void>;
     setProjectMapLocation(projectId: string, location: string): Promise<void>;
     getProjectMapLocations(): Promise<Array<[string, string]>>;
     saveTickerMessages(msgs: Array<[string, string]>): Promise<void>;
@@ -428,6 +429,84 @@ export class Backend implements backendInterface {
             const result = await this.actor.addClient(arg0);
             return result;
         }
+    }
+    async addContractor(arg0: string, arg1: string[], arg2: string, arg3: string, arg4: number, arg5: string, arg6: string, arg7: string, arg8: string, arg9: string, arg10: string, arg11: string, arg12: string, arg13: string): Promise<string> {
+        if (this.processError) {
+            try { return await this.actor.addContractor(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.addContractor(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13); }
+    }
+    async updateContractor(arg0: string, arg1: string[], arg2: string[], arg3: string, arg4: string, arg5: number, arg6: string, arg7: string, arg8: string, arg9: string, arg10: string, arg11: string, arg12: string, arg13: string, arg14: string, arg15: string): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.updateContractor(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.updateContractor(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15); }
+    }
+    async deleteContractors(arg0: string[], arg1: string): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.deleteContractors(arg0, arg1); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.deleteContractors(arg0, arg1); }
+    }
+    async toggleContractorCompleted(id: string): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.toggleContractorCompleted(id); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.toggleContractorCompleted(id); }
+    }
+    async listContractors(): Promise<any[]> {
+        if (this.processError) {
+            try { return await this.actor.listContractors(); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.listContractors(); }
+    }
+    async addContractorBill(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: number, arg6: string, arg7: number, arg8: string, arg9: string, arg10: number, arg11: number): Promise<string> {
+        if (this.processError) {
+            try { return await this.actor.addContractorBill(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.addContractorBill(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11); }
+    }
+    async updateContractorBill(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: number, arg7: string, arg8: number, arg9: string, arg10: string, arg11: string, arg12: number, arg13: number): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.updateContractorBill(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.updateContractorBill(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13); }
+    }
+    async deleteContractorBills(arg0: string[], arg1: string): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.deleteContractorBills(arg0, arg1); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.deleteContractorBills(arg0, arg1); }
+    }
+    async listContractorBills(): Promise<any[]> {
+        if (this.processError) {
+            try { return await this.actor.listContractorBills(); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.listContractorBills(); }
+    }
+    async addContractorPayment(arg0: string, arg1: string, arg2: string, arg3: string, arg4: number, arg5: string, arg6: string): Promise<string> {
+        if (this.processError) {
+            try { return await this.actor.addContractorPayment(arg0, arg1, arg2, arg3, arg4, arg5, arg6); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.addContractorPayment(arg0, arg1, arg2, arg3, arg4, arg5, arg6); }
+    }
+    async updateContractorPayment(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: number, arg6: string, arg7: string, arg8: string): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.updateContractorPayment(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.updateContractorPayment(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8); }
+    }
+    async deleteContractorPayments(arg0: string[], arg1: string): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.deleteContractorPayments(arg0, arg1); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.deleteContractorPayments(arg0, arg1); }
+    }
+    async listContractorPayments(): Promise<any[]> {
+        if (this.processError) {
+            try { return await this.actor.listContractorPayments(); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.listContractorPayments(); }
     }
     async addPayment(arg0: Payment): Promise<void> {
         if (this.processError) {

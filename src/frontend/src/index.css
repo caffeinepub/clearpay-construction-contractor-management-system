@@ -337,3 +337,29 @@
 .animate-in {
   animation: slideInFromTop 0.3s ease-out;
 }
+
+/* Contractors page tab highlight */
+.contractor-tab-contractors[data-state="active"] {
+  background: #0078d7 !important;
+  color: #fff !important;
+  border-color: #005fa3 !important;
+  box-shadow: 0 2px 8px rgba(0, 120, 215, 0.35);
+}
+.contractor-tab-bills[data-state="active"] {
+  background: #ffa500 !important;
+  color: #fff !important;
+  border-color: #cc8400 !important;
+  box-shadow: 0 2px 8px rgba(255, 165, 0, 0.35);
+}
+.contractor-tab-payments[data-state="active"] {
+  background: #28a745 !important;
+  color: #fff !important;
+  border-color: #1e7e34 !important;
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.35);
+}
+.contractor-tab-reports[data-state="active"] {
+  background: #d32f2f !important;
+  color: #fff !important;
+  border-color: #a82323 !important;
+  box-shadow: 0 2px 8px rgba(211, 47, 47, 0.35);
+}

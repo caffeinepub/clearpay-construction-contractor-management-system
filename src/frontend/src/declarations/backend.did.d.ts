@@ -245,6 +245,19 @@ export interface _SERVICE {
   'updateUser' : ActorMethod<[Principal, UserProfile], undefined>,
   'validateActiveUser' : ActorMethod<[string], undefined>,
   'verifyHintAnswer' : ActorMethod<[string], string>,
+  'addContractor' : ActorMethod<[string, string[], string, string, number, string, string, string, string, string, string, string, string, string], string>,
+  'updateContractor' : ActorMethod<[string, string, string[], string, string, number, string, string, string, string, string, string, string, string, string, string], undefined>,
+  'toggleContractorCompleted' : ActorMethod<[string], undefined>,
+  'deleteContractors' : ActorMethod<[string[], string], undefined>,
+  'listContractors' : ActorMethod<[], Array<{ id: string; name: string; trades: string[]; projectId: string; date: string; contractingPrice: number; unit: string; contact1: string; contact2: string; email: string; address: string; link1: string; link2: string; note: string; woNo: string; completed: boolean; }>>,
+  'addContractorBill' : ActorMethod<[string, string, string, string, string, number, string, number, string, string, number, number], string>,
+  'updateContractorBill' : ActorMethod<[string, string, string, string, string, string, number, string, number, string, string, string, number, number], undefined>,
+  'deleteContractorBills' : ActorMethod<[string[], string], undefined>,
+  'listContractorBills' : ActorMethod<[], Array<{ id: string; contractorId: string; projectId: string; billNo: string; date: string; item: string; area: number; unit: string; unitPrice: number; amount: number; remarks: string; blockId: string; workRetention: number; workRetentionAmount: number; }>>,
+  'addContractorPayment' : ActorMethod<[string, string, string, string, number, string, string], string>,
+  'updateContractorPayment' : ActorMethod<[string, string, string, string, string, number, string, string, string], undefined>,
+  'deleteContractorPayments' : ActorMethod<[string[], string], undefined>,
+  'listContractorPayments' : ActorMethod<[], Array<{ id: string; contractorId: string; projectId: string; paymentNo: string; date: string; amount: number; paymentMode: string; remarks: string; }>>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

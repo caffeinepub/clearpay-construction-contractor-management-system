@@ -1,30 +1,49 @@
-# ClearPay – Contractors Module
+# ClearPay – Contractors Module Updates
 
 ## Current State
-The app has a Clients module (ClientsPage.tsx) accessible via Alt+C. Dashboard, Analytics, Reports, and Seri AI only use Projects/Bills/Payments data.
+ContractorsPage.tsx has:
+- Dates displayed raw (YYYY-MM-DD) in all lists
+- Bills list has no Gross Amount column; Amount (INR) not renamed to Net Amount (INR)
+- Bills CSV download format missing BlockId, WR%, WR Amount, Gross Amount columns
+- Reports summary boxes use Net Amount for Bills total, not Gross Amount
+- Outstanding = Bills - Payments (should be Gross - (WR + Payments))
+- View modals (Contractor, Bill, Payment) have no print icon
+- No A5 receipt print functionality
 
 ## Requested Changes (Diff)
 
 ### Add
-- Contractors Module replacing Clients module (same sidebar slot, same Alt+C shortcut)
-- Backend: Contractor, ContractorBill, ContractorPayment types and CRUD functions
-- Frontend: ContractorsPage.tsx with 4 tabs: Contractors | Bills | Payments | Reports
-- Contractors tab: list with view/edit/delete/multi-select/bulk delete, ribbon with Print/PDF/Import CSV/Export CSV/Download Format/New Contractor
-- Contractor Form fields: Name, Trade (multi: NMR, Form work, Bar bending, Scaffolding, Buffing, Mason), Project (dropdown from projects list), Date (calendar), Contracting Price, Unit (Rft/Sft/Cft/Rmtr/Smtr/Cumtr/Lumsum), Contact 1, Contact 2, Email, Address, Link 1, Link 2, Note
-- Bills tab: list with view/edit/delete/multi-select/bulk delete, ribbon with Print/PDF/Import CSV/Export CSV/Download Format/New Bill
-- Contractor Bill Form: Contractor Name (dropdown), Project Name (dropdown), Bill No (unique per project), Date, Item, Area, Unit, Unit Price, Amount (Area*Unit Price auto-calculated in INR), Remarks
-- Payments tab: list with view/edit/delete/multi-select/bulk delete, ribbon with Print/PDF/Import CSV/Export CSV/Download Format/New Payment
-- Contractor Payment Form: Contractor Name (dropdown), Project Name (dropdown), Payment No, Date, Amount, Payment Mode (Account/Cash), Remarks
-- Reports (Ledger) tab: contractor ledger with filters (Contractor, Project, Date From, Date To), Print/PDF/Export CSV
+- Gross Amount column in Bills list (after Unit Price): value = Area × Unit Price
+- grossAmount field to ContractorBillRecord type and bill form state
+- Print icon button in top-right of all 3 view modals (Contractor, Bill, Payment)
+- A5-formatted print receipt window triggered by print icon
 
 ### Modify
-- MainLayout.tsx: replace "Clients" with "Contractors" (same position, same Alt+C shortcut)
+- All date displays in Contractors/Bills/Payments lists and Reports ledger: format YYYY-MM-DD → DD-MM-YYYY
+- Bills list column "Amount (INR)" → renamed to "Net Amount (INR)"
+- Bills CSV download format template: add Contractor, Project, Bill No, Block ID, Date, Item, Area, Unit, Unit Price, WR %, WR Amount ₹, Amount (INR), Remarks as columns
+- Bills export CSV: include blockId, workRetention, workRetentionAmount, grossAmount
+- Reports summary boxes:
+  - Box 1: Bills = sum of grossAmount (Area × Unit Price)
+  - Box 2: Work Retention = sum of workRetentionAmount
+  - Box 3: Payments = sum of payments
+  - Box 4: Outstanding = Gross Amount − (Work Retention + Payments)
+- When saving a bill: also calculate and store grossAmount = area × unitPrice
 
 ### Remove
-- ClientsPage.tsx usage (replaced by ContractorsPage.tsx)
+- Nothing
 
 ## Implementation Plan
-1. Add Contractor, ContractorBill, ContractorPayment types + stable storage + CRUD backend functions
-2. Create ContractorsPage.tsx with 4 tabs, all ribbon actions, forms, filters, ledger
-3. Update MainLayout.tsx to import/use ContractorsPage instead of ClientsPage
-4. Contractors data must NOT appear in Dashboard, Analytics, Reports (main), or Seri AI
+1. Add helper function formatDateDDMMYYYY(dateStr) in ContractorsPage or utils
+2. Apply date formatter to all {c.date}, {b.date}, {p.date}, {e.date} in list tables
+3. Add grossAmount to ContractorBillRecord type interface
+4. Add grossAmount to bill form state and auto-calculate on area/unitPrice change
+5. Pass grossAmount when calling addContractorBill/updateContractorBill
+6. Add Gross Amount column in Bills list table (after Unit Price)
+7. Rename Amount (INR) header to Net Amount (INR)
+8. Update Download Format CSV template to include all required columns
+9. Update Export CSV to include all fields
+10. Fix Reports summary calculations to use grossAmount for Bills box
+11. Fix Outstanding formula to Gross - (WorkRetention + Payments)
+12. Add print icon button to each view modal
+13. Add printReceipt() function that opens an A5 window with styled receipt and auto-triggers print dialog

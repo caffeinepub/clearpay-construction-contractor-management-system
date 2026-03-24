@@ -142,6 +142,18 @@ export enum UserRole {
 export interface backendInterface {
     addBill(bill: Bill): Promise<void>;
     addClient(client: Client): Promise<void>;
+    addContractor(name: string, trades: string[], projectId: string, date: string, contractingPrice: number, unit: string, contact1: string, contact2: string, email: string, address: string, link1: string, link2: string, note: string): Promise<string>;
+    updateContractor(id: string, name: string, trades: string[], projectId: string, date: string, contractingPrice: number, unit: string, contact1: string, contact2: string, email: string, address: string, link1: string, link2: string, note: string, password: string): Promise<void>;
+    deleteContractors(ids: string[], password: string): Promise<void>;
+    listContractors(): Promise<Array<{id: string; name: string; trades: string[]; projectId: string; date: string; contractingPrice: number; unit: string; contact1: string; contact2: string; email: string; address: string; link1: string; link2: string; note: string;}>>;
+    addContractorBill(contractorId: string, projectId: string, billNo: string, date: string, item: string, area: number, unit: string, unitPrice: number, remarks: string): Promise<string>;
+    updateContractorBill(id: string, contractorId: string, projectId: string, billNo: string, date: string, item: string, area: number, unit: string, unitPrice: number, remarks: string, password: string): Promise<void>;
+    deleteContractorBills(ids: string[], password: string): Promise<void>;
+    listContractorBills(): Promise<Array<{id: string; contractorId: string; projectId: string; billNo: string; date: string; item: string; area: number; unit: string; unitPrice: number; amount: number; remarks: string;}>>;
+    addContractorPayment(contractorId: string, projectId: string, paymentNo: string, date: string, amount: number, paymentMode: string, remarks: string): Promise<string>;
+    updateContractorPayment(id: string, contractorId: string, projectId: string, paymentNo: string, date: string, amount: number, paymentMode: string, remarks: string, password: string): Promise<void>;
+    deleteContractorPayments(ids: string[], password: string): Promise<void>;
+    listContractorPayments(): Promise<Array<{id: string; contractorId: string; projectId: string; paymentNo: string; date: string; amount: number; paymentMode: string; remarks: string;}>>;
     addPayment(payment: Payment): Promise<void>;
     addProject(project: Project): Promise<void>;
     addUser(profile: UserProfile): Promise<Principal>;

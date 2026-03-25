@@ -13,6 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Download,
   Eye,
   FileText,
@@ -422,6 +425,16 @@ export default function ContractorsPage() {
     dateTo: "",
   });
 
+  // ── Sort states for each tab ──
+  const [cSortField, setCSort] = useState<string | null>(null);
+  const [cSortDir, setCDir] = useState<"asc" | "desc" | null>(null);
+  const [bSortField, setBSort] = useState<string | null>(null);
+  const [bSortDir, setBDir] = useState<"asc" | "desc" | null>(null);
+  const [pSortField, setPSort] = useState<string | null>(null);
+  const [pSortDir, setPDir] = useState<"asc" | "desc" | null>(null);
+  const [rSortField, setRSort] = useState<string | null>(null);
+  const [rSortDir, setRDir] = useState<"asc" | "desc" | null>(null);
+
   // ── Filtered lists ──
   const filteredContractors = useMemo(
     () =>
@@ -511,6 +524,92 @@ export default function ContractorsPage() {
     contractors.find((c) => c.id === id)?.name || id;
   const getProjectName = (id: string) =>
     projects.find((p) => p.id === id)?.name || id;
+
+  // ── Sort helpers ──
+  const mkHandleSort =
+    (
+      field: string | null,
+      setField: (f: string | null) => void,
+      dir: "asc" | "desc" | null,
+      setDir: (d: "asc" | "desc" | null) => void,
+    ) =>
+    (col: string) => {
+      if (field === col) {
+        if (dir === "asc") setDir("desc");
+        else if (dir === "desc") {
+          setField(null);
+          setDir(null);
+        } else setDir("asc");
+      } else {
+        setField(col);
+        setDir("asc");
+      }
+    };
+
+  const mkGetSortIcon =
+    (field: string | null, dir: "asc" | "desc" | null, activeColor: string) =>
+    (col: string) => {
+      if (field !== col)
+        return (
+          <ArrowUpDown
+            style={{
+              display: "inline",
+              width: 11,
+              height: 11,
+              marginLeft: 3,
+              opacity: 0.45,
+            }}
+          />
+        );
+      if (dir === "asc")
+        return (
+          <ArrowUp
+            style={{
+              display: "inline",
+              width: 11,
+              height: 11,
+              marginLeft: 3,
+              color: activeColor,
+            }}
+          />
+        );
+      return (
+        <ArrowDown
+          style={{
+            display: "inline",
+            width: 11,
+            height: 11,
+            marginLeft: 3,
+            color: activeColor,
+          }}
+        />
+      );
+    };
+
+  const handleCSort = mkHandleSort(cSortField, setCSort, cSortDir, setCDir);
+  const handleBSort = mkHandleSort(bSortField, setBSort, bSortDir, setBDir);
+  const handlePSort = mkHandleSort(pSortField, setPSort, pSortDir, setPDir);
+  const handleRSort = mkHandleSort(rSortField, setRSort, rSortDir, setRDir);
+  const getCIcon = mkGetSortIcon(cSortField, cSortDir, "#88CDF6");
+  const getBIcon = mkGetSortIcon(bSortField, bSortDir, "#FFBE88");
+  const getPIcon = mkGetSortIcon(pSortField, pSortDir, "#56C596");
+  const getRIcon = mkGetSortIcon(rSortField, rSortDir, "#ffb74d");
+
+  const applySortStr = <T,>(
+    arr: T[],
+    field: string | null,
+    dir: "asc" | "desc" | null,
+    getVal: (item: T, f: string) => any,
+  ): T[] => {
+    if (!field || !dir) return arr;
+    return [...arr].sort((a, b) => {
+      const av = getVal(a, field);
+      const bv = getVal(b, field);
+      if (av < bv) return dir === "asc" ? -1 : 1;
+      if (av > bv) return dir === "asc" ? 1 : -1;
+      return 0;
+    });
+  };
 
   // ── W.O. No Auto-generator ──
   const generateWoNo = (
@@ -964,7 +1063,7 @@ export default function ContractorsPage() {
         contractorId: b.contractorId,
         projectId: b.projectId,
         desc: `Bill #${b.billNo} – ${b.item}`,
-        debit: b.amount,
+        debit: b.grossAmount ?? b.area * b.unitPrice,
         credit: 0,
         workRetentionAmount: b.workRetentionAmount || 0,
       })),
@@ -1468,12 +1567,84 @@ export default function ContractorsPage() {
                     Status
                   </th>
                   <th style={thStyle}>#</th>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Trade(s)</th>
-                  <th style={thStyle}>Project</th>
-                  <th style={thStyle}>Date</th>
-                  <th style={thStyle}>W.O. No</th>
-                  <th style={thStyle}>Price (INR)</th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleCSort("name")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCSort("name");
+                    }}
+                  >
+                    Name{getCIcon("name")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleCSort("trade")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCSort("trade");
+                    }}
+                  >
+                    Trade(s){getCIcon("trade")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleCSort("project")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCSort("project");
+                    }}
+                  >
+                    Project{getCIcon("project")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleCSort("date")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCSort("date");
+                    }}
+                  >
+                    Date{getCIcon("date")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleCSort("woNo")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCSort("woNo");
+                    }}
+                  >
+                    W.O. No{getCIcon("woNo")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleCSort("price")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCSort("price");
+                    }}
+                  >
+                    Price (INR){getCIcon("price")}
+                  </th>
                   <th style={thStyle}>Unit</th>
                   <th style={thStyle}>Contact</th>
                   <th style={thStyle}>Actions</th>
@@ -1495,7 +1666,24 @@ export default function ContractorsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredContractors.map((c, i) => (
+                  applySortStr(
+                    filteredContractors,
+                    cSortField,
+                    cSortDir,
+                    (c, f) => {
+                      if (f === "name") return c.name.toLowerCase();
+                      if (f === "trade")
+                        return c.trades.join(",").toLowerCase();
+                      if (f === "project")
+                        return (
+                          getProjectName(c.projectId) ?? ""
+                        ).toLowerCase();
+                      if (f === "date") return c.date;
+                      if (f === "woNo") return c.woNo.toLowerCase();
+                      if (f === "price") return c.contractingPrice;
+                      return "";
+                    },
+                  ).map((c, i) => (
                     <tr key={c.id} data-ocid={`contractors.item.${i + 1}`}>
                       {canManage && (
                         <td style={tdStyle(i % 2 === 0)}>
@@ -1646,8 +1834,8 @@ export default function ContractorsPage() {
                     onClick={() =>
                       printContent(
                         "Contractor Bills",
-                        `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
-                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>Item</th><th>Area</th><th>Unit</th><th>Unit Price</th><th>WR%</th><th>WR Amt ₹</th><th>Amount</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${b.date}</td><td>${b.item}</td><td>${b.area}</td><td>${b.unit}</td><td>${fmtINR(b.unitPrice)}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td></tr>`).join("")}</tbody></table>`,
+                        `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
+                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>Item</th><th>Area</th><th>Unit</th><th>Unit Price</th><th>Gross Amt</th><th>WR%</th><th>WR Amt ₹</th><th>Net Amt</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${b.date}</td><td>${b.item}</td><td>${b.area}</td><td>${b.unit}</td><td>${fmtINR(b.unitPrice)}</td><td style="color:#1565c0">${fmtINR(b.grossAmount ?? b.area * b.unitPrice)}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td></tr>`).join("")}</tbody></table>`,
                       )
                     }
                     title="Print"
@@ -1662,8 +1850,8 @@ export default function ContractorsPage() {
                     onClick={() =>
                       printContent(
                         "Contractor Bills – Export PDF",
-                        `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
-                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>WR%</th><th>WR Amt ₹</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${b.date}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td><td>${b.remarks}</td></tr>`).join("")}</tbody></table>`,
+                        `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
+                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>Gross Amt</th><th>WR%</th><th>WR Amt ₹</th><th>Net Amt</th><th>Remarks</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${b.date}</td><td style="color:#1565c0">${fmtINR(b.grossAmount ?? b.area * b.unitPrice)}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td><td>${b.remarks}</td></tr>`).join("")}</tbody></table>`,
                       )
                     }
                     title="PDF"
@@ -1933,30 +2121,161 @@ export default function ContractorsPage() {
                     </th>
                   )}
                   <th style={{ ...thStyle, background: "#D32F2F" }}>#</th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>
-                    Contractor
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("contractor")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("contractor");
+                    }}
+                  >
+                    Contractor{getBIcon("contractor")}
                   </th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>Project</th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>Bill No</th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>
-                    Block ID
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("project")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("project");
+                    }}
+                  >
+                    Project{getBIcon("project")}
                   </th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>Date</th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>Item</th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>Area</th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("billNo")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("billNo");
+                    }}
+                  >
+                    Bill No{getBIcon("billNo")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("blockId")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("blockId");
+                    }}
+                  >
+                    Block ID{getBIcon("blockId")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("date")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("date");
+                    }}
+                  >
+                    Date{getBIcon("date")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("item")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("item");
+                    }}
+                  >
+                    Item{getBIcon("item")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("area")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("area");
+                    }}
+                  >
+                    Area{getBIcon("area")}
+                  </th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Unit</th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>
-                    Unit Price
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("unitPrice")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("unitPrice");
+                    }}
+                  >
+                    Unit Price{getBIcon("unitPrice")}
                   </th>
-                  <th style={{ ...thStyle, background: "#1565c0" }}>
-                    Gross Amt
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#1565c0",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("grossAmount")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("grossAmount");
+                    }}
+                  >
+                    Gross Amt{getBIcon("grossAmount")}
                   </th>
                   <th style={{ ...thStyle, background: "#9c27b0" }}>WR %</th>
-                  <th style={{ ...thStyle, background: "#9c27b0" }}>
-                    WR Amt ₹
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#9c27b0",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("workRetention")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("workRetention");
+                    }}
+                  >
+                    WR Amt ₹{getBIcon("workRetention")}
                   </th>
-                  <th style={{ ...thStyle, background: "#D32F2F" }}>
-                    Net Amount (INR)
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#D32F2F",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleBSort("netAmount")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleBSort("netAmount");
+                    }}
+                  >
+                    Net Amount (INR){getBIcon("netAmount")}
                   </th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Remarks</th>
                   <th style={{ ...thStyle, background: "#D32F2F" }}>Actions</th>
@@ -1978,7 +2297,26 @@ export default function ContractorsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredBills.map((b, i) => (
+                  applySortStr(filteredBills, bSortField, bSortDir, (b, f) => {
+                    if (f === "contractor")
+                      return (
+                        getContractorName(b.contractorId) ?? ""
+                      ).toLowerCase();
+                    if (f === "project")
+                      return (getProjectName(b.projectId) ?? "").toLowerCase();
+                    if (f === "billNo") return b.billNo.toLowerCase();
+                    if (f === "blockId") return (b.blockId ?? "").toLowerCase();
+                    if (f === "date") return b.date;
+                    if (f === "item") return b.item.toLowerCase();
+                    if (f === "area") return b.area;
+                    if (f === "unitPrice") return b.unitPrice;
+                    if (f === "grossAmount")
+                      return b.grossAmount ?? b.area * b.unitPrice;
+                    if (f === "workRetention")
+                      return b.workRetentionAmount ?? 0;
+                    if (f === "netAmount") return b.amount;
+                    return "";
+                  }).map((b, i) => (
                     <tr key={b.id} data-ocid={`contractors.item.${i + 1}`}>
                       {canManage && (
                         <td
@@ -2475,18 +2813,90 @@ export default function ContractorsPage() {
                     </th>
                   )}
                   <th style={{ ...thStyle, background: "#28A745" }}>#</th>
-                  <th style={{ ...thStyle, background: "#28A745" }}>
-                    Contractor
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#28A745",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handlePSort("contractor")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handlePSort("contractor");
+                    }}
+                  >
+                    Contractor{getPIcon("contractor")}
                   </th>
-                  <th style={{ ...thStyle, background: "#28A745" }}>Project</th>
-                  <th style={{ ...thStyle, background: "#28A745" }}>
-                    Payment No
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#28A745",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handlePSort("project")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handlePSort("project");
+                    }}
+                  >
+                    Project{getPIcon("project")}
                   </th>
-                  <th style={{ ...thStyle, background: "#28A745" }}>Date</th>
-                  <th style={{ ...thStyle, background: "#28A745" }}>
-                    Amount (INR)
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#28A745",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handlePSort("paymentNo")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handlePSort("paymentNo");
+                    }}
+                  >
+                    Payment No{getPIcon("paymentNo")}
                   </th>
-                  <th style={{ ...thStyle, background: "#28A745" }}>Mode</th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#28A745",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handlePSort("date")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handlePSort("date");
+                    }}
+                  >
+                    Date{getPIcon("date")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#28A745",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handlePSort("amount")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handlePSort("amount");
+                    }}
+                  >
+                    Amount (INR){getPIcon("amount")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#28A745",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handlePSort("mode")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handlePSort("mode");
+                    }}
+                  >
+                    Mode{getPIcon("mode")}
+                  </th>
                   <th style={{ ...thStyle, background: "#28A745" }}>Remarks</th>
                   <th style={{ ...thStyle, background: "#28A745" }}>Actions</th>
                 </tr>
@@ -2507,7 +2917,26 @@ export default function ContractorsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredPayments.map((p, i) => (
+                  applySortStr(
+                    filteredPayments,
+                    pSortField,
+                    pSortDir,
+                    (p, f) => {
+                      if (f === "contractor")
+                        return (
+                          getContractorName(p.contractorId) ?? ""
+                        ).toLowerCase();
+                      if (f === "project")
+                        return (
+                          getProjectName(p.projectId) ?? ""
+                        ).toLowerCase();
+                      if (f === "paymentNo") return p.paymentNo.toLowerCase();
+                      if (f === "date") return p.date;
+                      if (f === "amount") return p.amount;
+                      if (f === "mode") return p.paymentMode.toLowerCase();
+                      return "";
+                    },
+                  ).map((p, i) => (
                     <tr key={p.id} data-ocid={`contractors.item.${i + 1}`}>
                       {canManage && (
                         <td
@@ -2688,7 +3117,7 @@ export default function ContractorsPage() {
                   const rows = ledgerEntries
                     .map(
                       (e, i) =>
-                        `<tr><td>${i + 1}</td><td>${fmtDate(e.date)}</td><td>${getContractorName(e.contractorId)}</td><td>${getProjectName(e.projectId)}</td><td>${e.desc}</td><td>${e.debit > 0 ? fmtINR(e.debit) : ""}</td><td style="color:${e.workRetentionAmount > 0 ? "#9c27b0" : "#333"}">${e.workRetentionAmount > 0 ? fmtINR(e.workRetentionAmount) : ""}</td><td style="color:${e.credit < 0 ? "#D32F2F" : "#333"}">${e.credit > 0 ? fmtINR(e.credit) : ""}</td><td style="color:${e.balance < 0 ? "#D32F2F" : "#28A745"};font-weight:bold">${fmtINR(e.balance)}</td></tr>`,
+                        `<tr style="background:${i % 2 === 0 ? "#f9f9f9" : "#fff"}"><td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${i + 1}</td><td style="padding:5px 8px;border:1px solid #ddd">${fmtDate(e.date)}</td><td style="padding:5px 8px;border:1px solid #ddd">${getContractorName(e.contractorId)}</td><td style="padding:5px 8px;border:1px solid #ddd">${getProjectName(e.projectId)}</td><td style="padding:5px 8px;border:1px solid #ddd">${e.desc}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right;color:#0078D7">${e.debit > 0 ? fmtINR(e.debit) : "—"}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right;color:#9c27b0">${fmtINR(e.workRetentionAmount || 0)}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right;color:#28A745">${e.credit > 0 ? fmtINR(e.credit) : "—"}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right;font-weight:600">${fmtINR(e.balance)}</td></tr>`,
                     )
                     .join("");
                   printContent(
@@ -2709,7 +3138,7 @@ export default function ContractorsPage() {
                   const pdfRows = ledgerEntries
                     .map(
                       (e, i) =>
-                        `<tr><td>${i + 1}</td><td>${fmtDate(e.date)}</td><td>${getContractorName(e.contractorId)}</td><td>${getProjectName(e.projectId)}</td><td>${e.desc}</td><td>${e.debit > 0 ? fmtINR(e.debit) : ""}</td><td style="color:#9c27b0">${e.workRetentionAmount > 0 ? fmtINR(e.workRetentionAmount) : ""}</td><td>${e.credit > 0 ? fmtINR(e.credit) : ""}</td><td style="color:${e.balance < 0 ? "#D32F2F" : "#28A745"};font-weight:bold">${fmtINR(e.balance)}</td></tr>`,
+                        `<tr style="background:${i % 2 === 0 ? "#f9f9f9" : "#fff"}"><td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${i + 1}</td><td style="padding:5px 8px;border:1px solid #ddd">${fmtDate(e.date)}</td><td style="padding:5px 8px;border:1px solid #ddd">${getContractorName(e.contractorId)}</td><td style="padding:5px 8px;border:1px solid #ddd">${getProjectName(e.projectId)}</td><td style="padding:5px 8px;border:1px solid #ddd">${e.desc}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right;color:#0078D7">${e.debit > 0 ? fmtINR(e.debit) : "—"}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right;color:#9c27b0">${fmtINR(e.workRetentionAmount || 0)}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right;color:#28A745">${e.credit > 0 ? fmtINR(e.credit) : "—"}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right;font-weight:600">${fmtINR(e.balance)}</td></tr>`,
                     )
                     .join("");
                   printContent(
@@ -2899,16 +3328,111 @@ export default function ContractorsPage() {
               <thead>
                 <tr>
                   <th style={thStyle}>#</th>
-                  <th style={thStyle}>Date</th>
-                  <th style={thStyle}>Contractor</th>
-                  <th style={thStyle}>Project</th>
-                  <th style={thStyle}>Description</th>
-                  <th style={thStyle}>Debit (Bills)</th>
-                  <th style={{ ...thStyle, background: "#9c27b0" }}>
-                    Work Retention ₹
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleRSort("date")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRSort("date");
+                    }}
+                  >
+                    Date{getRIcon("date")}
                   </th>
-                  <th style={thStyle}>Credit (Payments)</th>
-                  <th style={thStyle}>Balance</th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleRSort("contractor")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRSort("contractor");
+                    }}
+                  >
+                    Contractor{getRIcon("contractor")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleRSort("project")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRSort("project");
+                    }}
+                  >
+                    Project{getRIcon("project")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleRSort("desc")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRSort("desc");
+                    }}
+                  >
+                    Description{getRIcon("desc")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleRSort("debit")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRSort("debit");
+                    }}
+                  >
+                    Debit (Bills){getRIcon("debit")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      background: "#9c27b0",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleRSort("workRetention")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRSort("workRetention");
+                    }}
+                  >
+                    Work Retention ₹{getRIcon("workRetention")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleRSort("credit")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRSort("credit");
+                    }}
+                  >
+                    Credit (Payments){getRIcon("credit")}
+                  </th>
+                  <th
+                    style={{
+                      ...thStyle,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                    onClick={() => handleRSort("balance")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleRSort("balance");
+                    }}
+                  >
+                    Balance{getRIcon("balance")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -2927,7 +3451,21 @@ export default function ContractorsPage() {
                     </td>
                   </tr>
                 ) : (
-                  ledgerEntries.map((e, i) => (
+                  applySortStr(ledgerEntries, rSortField, rSortDir, (e, f) => {
+                    if (f === "date") return e.date;
+                    if (f === "contractor")
+                      return (
+                        getContractorName(e.contractorId) ?? ""
+                      ).toLowerCase();
+                    if (f === "project")
+                      return (getProjectName(e.projectId) ?? "").toLowerCase();
+                    if (f === "desc") return e.desc.toLowerCase();
+                    if (f === "debit") return e.debit;
+                    if (f === "workRetention") return e.workRetentionAmount;
+                    if (f === "credit") return e.credit;
+                    if (f === "balance") return e.balance;
+                    return "";
+                  }).map((e, i) => (
                     <tr
                       key={`${e.date}-${e.contractorId}-${e.desc.slice(0, 10)}-${i}`}
                       style={{

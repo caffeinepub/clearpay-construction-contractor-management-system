@@ -87,6 +87,36 @@ type SortField =
   | "location";
 type SortDirection = "asc" | "desc" | null;
 
+function printProjectReceipt(data: Record<string, string>) {
+  const rows = Object.entries(data)
+    .filter(([, v]) => v)
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:4px 8px;font-weight:600;color:#555;width:45%;border-bottom:1px solid #f0f0f0">${k}</td><td style="padding:4px 8px;border-bottom:1px solid #f0f0f0">${v}</td></tr>`,
+    )
+    .join("");
+  const win = window.open("", "_blank", "width=600,height=800");
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Project Details</title><style>
+    @page{size:A5;margin:10mm}
+    body{font-family:'Century Gothic',Arial,sans-serif;margin:0;padding:0;width:148mm;min-height:210mm;background:#fff}
+    .header{background:#0078D7;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+    .header h1{margin:0;font-size:18px;font-weight:700}
+    .header small{font-size:11px;opacity:.85}
+    .body{border:3px solid #0078D7;margin:12px;padding:12px;background:#E3F2FD;border-radius:4px}
+    .body h2{margin:0 0 10px;color:#0078D7;font-size:14px;font-weight:700;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    .footer{text-align:center;font-size:10px;color:#888;padding:10px;margin-top:10px;border-top:1px solid #eee}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+    <div class="header"><h1>ClearPay</h1><small>MKT Constructions</small></div>
+    <div class="body"><h2>Project Details</h2><table>${rows}</table></div>
+    <div class="footer">© 2025 ClearPay. Powered by Seri AI.</div>
+  </body></html>`);
+  win.document.close();
+  setTimeout(() => win.print(), 300);
+}
+
 export default function ProjectsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -944,14 +974,52 @@ export default function ProjectsPage() {
           data-ocid="projects.view_modal"
           className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-lg"
         >
-          <DialogHeader>
+          <DialogHeader className="flex flex-row items-center justify-between border-b pb-3">
             <DialogTitle className="text-xl font-bold text-[#333333]">
               Project Details
             </DialogTitle>
+            {viewingProject && (
+              <button
+                type="button"
+                onClick={() =>
+                  printProjectReceipt({
+                    "Project Name": viewingProject.name,
+                    Client: viewingProject.client,
+                    "Start Date": viewingProject.startDate || "—",
+                    Location: viewingProject.location || "—",
+                    Contact: viewingProject.contactNumber,
+                    "Unit Price": formatCurrency(viewingProject.unitPrice),
+                    Quantity: String(viewingProject.quantity),
+                    "Estimated Amount": formatCurrency(
+                      viewingProject.estimatedAmount,
+                    ),
+                    Address: viewingProject.address || "—",
+                    Notes: viewingProject.notes || "—",
+                    "Attachment Link 1":
+                      viewingProject.attachmentLinks[0] || "—",
+                    "Attachment Link 2":
+                      viewingProject.attachmentLinks[1] || "—",
+                  })
+                }
+                className="text-[#0078D7] hover:text-[#005a9e] transition-colors"
+                title="Print Receipt"
+              >
+                <Printer className="h-5 w-5" />
+              </button>
+            )}
           </DialogHeader>
 
           {viewingProject && (
-            <div className="space-y-4">
+            <div
+              className="space-y-4"
+              style={{
+                border: "3px solid #0078D7",
+                borderRadius: "8px",
+                padding: "16px",
+                background: "#E3F2FD",
+                margin: "8px 0",
+              }}
+            >
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs font-bold text-[#555555] uppercase tracking-wide mb-1">

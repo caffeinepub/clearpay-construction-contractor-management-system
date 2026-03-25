@@ -191,12 +191,21 @@ export default function PaymentViewPage() {
       </div>
 
       <div className="p-6">
-        <div className="max-w-5xl mx-auto bg-white rounded-lg shadow-md border-2 border-[#E8F5E9]">
+        <div className="max-w-5xl mx-auto bg-white rounded-lg shadow-md border-2 border-[#28A745]">
           {/* Header Section */}
-          <div className="bg-gradient-to-r from-[#E8F5E9] to-[#C8E6C9] p-6 rounded-t-lg border-b-2 border-[#A5D6A7]">
+          <div className="bg-gradient-to-r from-[#E8F5E9] to-[#C8E6C9] p-6 rounded-t-lg border-b-2 border-[#28A745] relative">
             <h1 className="text-2xl font-bold text-[#28A745] text-center">
               Payment Details
             </h1>
+            <button
+              type="button"
+              onClick={handlePrint}
+              title="Print Receipt"
+              className="absolute top-4 right-4 text-[#28A745] hover:text-[#1B5E20] transition-colors"
+              style={{ background: "none", border: "none", cursor: "pointer" }}
+            >
+              <Printer className="h-5 w-5" />
+            </button>
             <p className="text-center text-gray-700 font-normal mt-1">
               Payment ID: {payment.id}
             </p>

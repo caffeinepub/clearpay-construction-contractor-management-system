@@ -199,12 +199,21 @@ export default function BillViewPage() {
       </div>
 
       <div className="p-6">
-        <div className="max-w-5xl mx-auto bg-white rounded-lg shadow-md border-2 border-[#E3F2FD]">
+        <div className="max-w-5xl mx-auto bg-white rounded-lg shadow-md border-2 border-[#FFA500]">
           {/* Header Section */}
-          <div className="bg-gradient-to-r from-[#E3F2FD] to-[#BBDEFB] p-6 rounded-t-lg border-b-2 border-[#90CAF9]">
-            <h1 className="text-2xl font-bold text-[#0078D7] text-center">
+          <div className="bg-gradient-to-r from-[#FFF8E1] to-[#FFE0B2] p-6 rounded-t-lg border-b-2 border-[#FFA500] relative">
+            <h1 className="text-2xl font-bold text-[#FFA500] text-center">
               Bill Details
             </h1>
+            <button
+              type="button"
+              onClick={handlePrint}
+              title="Print Receipt"
+              className="absolute top-4 right-4 text-[#FFA500] hover:text-[#E65100] transition-colors"
+              style={{ background: "none", border: "none", cursor: "pointer" }}
+            >
+              <Printer className="h-5 w-5" />
+            </button>
             <p className="text-center text-gray-700 font-normal mt-1">
               Bill No: {bill.billNumber}
             </p>

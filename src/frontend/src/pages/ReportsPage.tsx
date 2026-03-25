@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/table";
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   CreditCard,
   Download,
   FileDown,
@@ -92,6 +95,10 @@ export default function ReportsPage() {
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const chartRef = useRef<HTMLDivElement>(null);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(
+    null,
+  );
 
   const { data: projects = [] } = useGetAllProjects();
   const { data: bills = [] } = useGetAllBills();
@@ -99,6 +106,31 @@ export default function ReportsPage() {
 
   const getProjectName = (projectId: string) =>
     projects.find((p) => p.id === projectId)?.name || projectId;
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      if (sortDirection === "asc") setSortDirection("desc");
+      else if (sortDirection === "desc") {
+        setSortField(null);
+        setSortDirection(null);
+      } else setSortDirection("asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortIcon = (field: string) => {
+    if (sortField !== field)
+      return <ArrowUpDown className="inline h-3 w-3 ml-1 opacity-50" />;
+    if (sortDirection === "asc")
+      return (
+        <ArrowUp className="inline h-3 w-3 ml-1" style={{ color: "#0078D7" }} />
+      );
+    return (
+      <ArrowDown className="inline h-3 w-3 ml-1" style={{ color: "#0078D7" }} />
+    );
+  };
 
   const billEntries: LedgerEntry[] = bills
     .filter((b) => {
@@ -153,6 +185,54 @@ export default function ReportsPage() {
     runningBalance += entry.debit - entry.credit;
     return { ...entry, balance: runningBalance };
   });
+
+  // Apply column sort to ledger
+  const sortedLedger = (() => {
+    if (!sortField || !sortDirection) return ledgerWithBalance;
+    return [...ledgerWithBalance].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+      switch (sortField) {
+        case "date":
+          aVal = a.dateSort;
+          bVal = b.dateSort;
+          break;
+        case "type":
+          aVal = a.type;
+          bVal = b.type;
+          break;
+        case "project":
+          aVal = (a.project ?? "").toLowerCase();
+          bVal = (b.project ?? "").toLowerCase();
+          break;
+        case "reference":
+          aVal = (a.reference ?? "").toLowerCase();
+          bVal = (b.reference ?? "").toLowerCase();
+          break;
+        case "description":
+          aVal = (a.description ?? "").toLowerCase();
+          bVal = (b.description ?? "").toLowerCase();
+          break;
+        case "debit":
+          aVal = a.debit;
+          bVal = b.debit;
+          break;
+        case "credit":
+          aVal = a.credit;
+          bVal = b.credit;
+          break;
+        case "balance":
+          aVal = a.balance;
+          bVal = b.balance;
+          break;
+        default:
+          return 0;
+      }
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  })();
 
   const totalDebit = allEntries.reduce((s, e) => s + e.debit, 0);
   const totalCredit = allEntries.reduce((s, e) => s + e.credit, 0);
@@ -651,29 +731,53 @@ export default function ReportsPage() {
                       <TableHead className="text-white font-bold w-10 text-center">
                         #
                       </TableHead>
-                      <TableHead className="text-white font-bold">
-                        Date
+                      <TableHead
+                        className="text-white font-bold cursor-pointer select-none"
+                        onClick={() => handleSort("date")}
+                      >
+                        Date{getSortIcon("date")}
                       </TableHead>
-                      <TableHead className="text-white font-bold">
-                        Type
+                      <TableHead
+                        className="text-white font-bold cursor-pointer select-none"
+                        onClick={() => handleSort("type")}
+                      >
+                        Type{getSortIcon("type")}
                       </TableHead>
-                      <TableHead className="text-white font-bold">
-                        Project
+                      <TableHead
+                        className="text-white font-bold cursor-pointer select-none"
+                        onClick={() => handleSort("project")}
+                      >
+                        Project{getSortIcon("project")}
                       </TableHead>
-                      <TableHead className="text-white font-bold">
-                        Bill No / Reference
+                      <TableHead
+                        className="text-white font-bold cursor-pointer select-none"
+                        onClick={() => handleSort("reference")}
+                      >
+                        Bill No / Reference{getSortIcon("reference")}
                       </TableHead>
-                      <TableHead className="text-white font-bold">
-                        Description
+                      <TableHead
+                        className="text-white font-bold cursor-pointer select-none"
+                        onClick={() => handleSort("description")}
+                      >
+                        Description{getSortIcon("description")}
                       </TableHead>
-                      <TableHead className="text-white font-bold text-right">
-                        Debit (₹)
+                      <TableHead
+                        className="text-white font-bold text-right cursor-pointer select-none"
+                        onClick={() => handleSort("debit")}
+                      >
+                        Debit (₹){getSortIcon("debit")}
                       </TableHead>
-                      <TableHead className="text-white font-bold text-right">
-                        Credit (₹)
+                      <TableHead
+                        className="text-white font-bold text-right cursor-pointer select-none"
+                        onClick={() => handleSort("credit")}
+                      >
+                        Credit (₹){getSortIcon("credit")}
                       </TableHead>
-                      <TableHead className="text-white font-bold text-right">
-                        Balance (₹)
+                      <TableHead
+                        className="text-white font-bold text-right cursor-pointer select-none"
+                        onClick={() => handleSort("balance")}
+                      >
+                        Balance (₹){getSortIcon("balance")}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -690,7 +794,7 @@ export default function ReportsPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      ledgerWithBalance.map((entry, idx) => {
+                      sortedLedger.map((entry, idx) => {
                         const isCreditNeg = entry.credit < 0;
                         const isNegBal = entry.balance < 0;
                         // Row background: negative credit = beige, negative balance = yellow, else type color

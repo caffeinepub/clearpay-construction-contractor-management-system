@@ -90,13 +90,26 @@ export default function ProjectDetailsPage() {
 
         <Card className="shadow-lg bg-white border-2 border-[#0078D7]">
           <CardContent className="p-8">
-            <div className="text-center mb-8">
+            <div className="text-center mb-8 relative">
               <h1 className="text-3xl font-bold text-[#333333] mb-2">
                 Project Details
               </h1>
               <p className="text-lg text-gray-600 font-normal">
                 {project.name}
               </p>
+              <button
+                type="button"
+                onClick={handlePrint}
+                title="Print Receipt"
+                className="absolute top-0 right-0 text-[#0078D7] hover:text-[#005A9E] transition-colors"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <Printer className="h-5 w-5" />
+              </button>
             </div>
 
             <div className="space-y-6">

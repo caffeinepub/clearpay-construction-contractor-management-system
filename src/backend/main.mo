@@ -2026,4 +2026,64 @@ actor {
     contractorPayments.values().toArray();
   };
 
+
+  // ==================== SFT MODULE ====================
+
+  stable var sftEntries = Map.empty<Text, {
+    id: Text; contractorId: Text; projectId: Text; billNo: Text; slabNo: Text;
+    footings: Float; rw: Float; columns: Float; beams: Float; slab: Float;
+    oht: Float; totalSft: Float; remarks: Text;
+  }>();
+
+  stable var sftIdCounter : Nat = 0;
+
+  func generateSftId() : Text {
+    sftIdCounter += 1;
+    let ts = Time.now();
+    "SFT-" # (ts / 1_000_000_000).toText() # "-" # sftIdCounter.toText();
+  };
+
+  public shared ({ caller }) func addSftEntry(
+    contractorId: Text, projectId: Text, billNo: Text, slabNo: Text,
+    footings: Float, rw: Float, columns: Float, beams: Float, slab: Float,
+    oht: Float, remarks: Text
+  ) : async Text {
+    requireAdmin(caller);
+    let id = generateSftId();
+    let totalSft = footings + rw + columns + beams + slab + oht;
+    sftEntries.add(id, { id; contractorId; projectId; billNo; slabNo; footings; rw; columns; beams; slab; oht; totalSft; remarks; });
+    id;
+  };
+
+  public shared ({ caller }) func updateSftEntry(
+    id: Text, contractorId: Text, projectId: Text, billNo: Text, slabNo: Text,
+    footings: Float, rw: Float, columns: Float, beams: Float, slab: Float,
+    oht: Float, remarks: Text, password: Text
+  ) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+    switch (sftEntries.get(id)) {
+      case (null) { Runtime.trap("SFT entry not found") };
+      case (?_) {
+        let totalSft = footings + rw + columns + beams + slab + oht;
+        sftEntries.add(id, { id; contractorId; projectId; billNo; slabNo; footings; rw; columns; beams; slab; oht; totalSft; remarks; });
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteSftEntries(ids: [Text], password: Text) : async () {
+    requireAdmin(caller);
+    validateAdminPassword(password);
+    for (id in ids.vals()) { sftEntries.remove(id) };
+  };
+
+  public query ({ caller }) func listSftEntries() : async [{
+    id: Text; contractorId: Text; projectId: Text; billNo: Text; slabNo: Text;
+    footings: Float; rw: Float; columns: Float; beams: Float; slab: Float;
+    oht: Float; totalSft: Float; remarks: Text;
+  }] {
+    requireAuthenticated(caller);
+    sftEntries.values().toArray();
+  };
+
 };

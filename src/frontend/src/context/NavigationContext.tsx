@@ -7,6 +7,7 @@ export type Page =
   | "bills"
   | "payments"
   | "contractors"
+  | "sft"
   | "users"
   | "reports"
   | "seri-ai";

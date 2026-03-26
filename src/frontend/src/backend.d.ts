@@ -223,4 +223,9 @@ export interface backendInterface {
     updateUser(userPrincipal: Principal, profile: UserProfile): Promise<void>;
     validateActiveUser(email: string): Promise<void>;
     verifyHintAnswer(answer: string): Promise<string>;
+    addSftEntry(contractorId: string, projectId: string, billNo: string, slabNo: string, footings: number, rw: number, columns: number, beams: number, slab: number, oht: number, remarks: string): Promise<string>;
+    updateSftEntry(id: string, contractorId: string, projectId: string, billNo: string, slabNo: string, footings: number, rw: number, columns: number, beams: number, slab: number, oht: number, remarks: string, password: string): Promise<void>;
+    deleteSftEntries(ids: string[], password: string): Promise<void>;
+    listSftEntries(): Promise<Array<{id: string; contractorId: string; projectId: string; billNo: string; slabNo: string; footings: number; rw: number; columns: number; beams: number; slab: number; oht: number; totalSft: number; remarks: string;}>>;
+
 }

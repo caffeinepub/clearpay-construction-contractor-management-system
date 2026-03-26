@@ -301,6 +301,18 @@ export interface backendInterface {
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     setHintQuestionAndAnswer(question: string, answer: string): Promise<void>;
     toggleProjectCompleted(id: string): Promise<void>;
+    addContractor(name: string, trades: string[], projectId: string, date: string, contractingPrice: number, unit: string, contact1: string, contact2: string, email: string, address: string, link1: string, link2: string, note: string, woNo: string): Promise<string>;
+    updateContractor(arg0: string, arg1: string[], arg2: string[], arg3: string, arg4: string, arg5: number, arg6: string, arg7: string, arg8: string, arg9: string, arg10: string, arg11: string, arg12: string, arg13: string, arg14: string, arg15: string): Promise<void>;
+    deleteContractors(ids: string[], password: string): Promise<void>;
+    listContractors(): Promise<any[]>;
+    addContractorBill(contractorId: string, projectId: string, billNo: string, date: string, item: string, area: number, unit: string, unitPrice: number, remarks: string, blockId: string, workRetention: number, workRetentionAmount: number): Promise<string>;
+    updateContractorBill(id: string, contractorId: string, projectId: string, billNo: string, date: string, item: string, area: number, unit: string, unitPrice: number, remarks: string, password: string, blockId: string, workRetention: number, workRetentionAmount: number): Promise<void>;
+    deleteContractorBills(ids: string[], password: string): Promise<void>;
+    listContractorBills(): Promise<any[]>;
+    addContractorPayment(contractorId: string, projectId: string, paymentNo: string, date: string, amount: number, paymentMode: string, remarks: string): Promise<string>;
+    updateContractorPayment(id: string, contractorId: string, projectId: string, paymentNo: string, date: string, amount: number, paymentMode: string, remarks: string, password: string): Promise<void>;
+    deleteContractorPayments(ids: string[], password: string): Promise<void>;
+    listContractorPayments(): Promise<any[]>;
     toggleContractorCompleted(id: string): Promise<void>;
     setProjectMapLocation(projectId: string, location: string): Promise<void>;
     getProjectMapLocations(): Promise<Array<[string, string]>>;
@@ -314,6 +326,10 @@ export interface backendInterface {
     updateUser(userPrincipal: Principal, profile: UserProfile): Promise<void>;
     validateActiveUser(email: string): Promise<void>;
     verifyHintAnswer(answer: string): Promise<string>;
+    addSftEntry(contractorId: string, projectId: string, billNo: string, slabNo: string, footings: number, rw: number, columns: number, beams: number, slab: number, oht: number, remarks: string): Promise<string>;
+    updateSftEntry(id: string, contractorId: string, projectId: string, billNo: string, slabNo: string, footings: number, rw: number, columns: number, beams: number, slab: number, oht: number, remarks: string, password: string): Promise<void>;
+    deleteSftEntries(ids: string[], password: string): Promise<void>;
+    listSftEntries(): Promise<Array<{id: string; contractorId: string; projectId: string; billNo: string; slabNo: string; footings: number; rw: number; columns: number; beams: number; slab: number; oht: number; totalSft: number; remarks: string;}>>;
 }
 import type { Bill as _Bill, BillFilters as _BillFilters, Client as _Client, ImportRequest as _ImportRequest, Payment as _Payment, PaymentFilters as _PaymentFilters, PaymentMode as _PaymentMode, Project as _Project, ProjectFilters as _ProjectFilters, UserProfile as _UserProfile, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -507,6 +523,30 @@ export class Backend implements backendInterface {
             try { return await this.actor.listContractorPayments(); }
             catch (e) { this.processError(e); throw new Error("unreachable"); }
         } else { return await this.actor.listContractorPayments(); }
+    }
+    async addSftEntry(contractorId: string, projectId: string, billNo: string, slabNo: string, footings: number, rw: number, columns: number, beams: number, slab: number, oht: number, remarks: string): Promise<string> {
+        if (this.processError) {
+            try { return await this.actor.addSftEntry(contractorId, projectId, billNo, slabNo, footings, rw, columns, beams, slab, oht, remarks); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.addSftEntry(contractorId, projectId, billNo, slabNo, footings, rw, columns, beams, slab, oht, remarks); }
+    }
+    async updateSftEntry(id: string, contractorId: string, projectId: string, billNo: string, slabNo: string, footings: number, rw: number, columns: number, beams: number, slab: number, oht: number, remarks: string, password: string): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.updateSftEntry(id, contractorId, projectId, billNo, slabNo, footings, rw, columns, beams, slab, oht, remarks, password); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.updateSftEntry(id, contractorId, projectId, billNo, slabNo, footings, rw, columns, beams, slab, oht, remarks, password); }
+    }
+    async deleteSftEntries(ids: string[], password: string): Promise<void> {
+        if (this.processError) {
+            try { return await this.actor.deleteSftEntries(ids, password); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.deleteSftEntries(ids, password); }
+    }
+    async listSftEntries(): Promise<any[]> {
+        if (this.processError) {
+            try { return await this.actor.listSftEntries(); }
+            catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else { return await this.actor.listSftEntries(); }
     }
     async addPayment(arg0: Payment): Promise<void> {
         if (this.processError) {

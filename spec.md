@@ -1,49 +1,40 @@
-# ClearPay – Contractors Module Updates
+# ClearPay – Build 1: SFT Module
 
 ## Current State
-ContractorsPage.tsx has:
-- Dates displayed raw (YYYY-MM-DD) in all lists
-- Bills list has no Gross Amount column; Amount (INR) not renamed to Net Amount (INR)
-- Bills CSV download format missing BlockId, WR%, WR Amount, Gross Amount columns
-- Reports summary boxes use Net Amount for Bills total, not Gross Amount
-- Outstanding = Bills - Payments (should be Gross - (WR + Payments))
-- View modals (Contractor, Bill, Payment) have no print icon
-- No A5 receipt print functionality
+ClearPay has Projects, Bills, Payments, Contractors, Reports, Analytics, Dashboard, Users, and Seri AI modules. The Contractors module stores bills with Area (SFT) data. There is no dedicated SFT tracking module yet.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Gross Amount column in Bills list (after Unit Price): value = Area × Unit Price
-- grossAmount field to ContractorBillRecord type and bill form state
-- Print icon button in top-right of all 3 view modals (Contractor, Bill, Payment)
-- A5-formatted print receipt window triggered by print icon
+- New `SFT` module/page with a structured table: Contractor, Bill No, Slab No, Project, Footings, R/W, Columns, Beams, Slab, OHT, Total SFT
+- Toolbar: Print, PDF, Import CSV, Export CSV, Format, + New buttons, Contractor filter, Project filter, Clear button
+- Three dynamic summary boxes:
+  - Contractor: shows selected contractor name when filtered, else empty
+  - Project: shows selected project name when filtered, else empty  
+  - Total SFT: sum of Total SFT values based on active filters
+- New form (modal): Contractor (dropdown from contractors list), Bill No, Slab No, Project (dropdown from projects), Footings, R/W, Columns, Beams, Slab, OHT, Total SFT (auto-calculated as sum of Footings+R/W+Columns+Beams+Slab+OHT), Remarks
+- Row-level actions: View, Edit, Delete with password confirmation for Edit/Delete
+- Multi-select checkboxes for bulk delete (visible only when rows selected)
+- Import CSV and Format hidden for Users role
+- View receipt: themed colored border, Print and Share icons top-right, A5 format
+- Backend: `addSftEntry`, `updateSftEntry`, `listSftEntries`, `deleteSftEntries` functions in main.mo
+- Navigation: add "sft" page to NavigationContext, MainLayout sidebar, keyboard shortcut Alt+F
 
 ### Modify
-- All date displays in Contractors/Bills/Payments lists and Reports ledger: format YYYY-MM-DD → DD-MM-YYYY
-- Bills list column "Amount (INR)" → renamed to "Net Amount (INR)"
-- Bills CSV download format template: add Contractor, Project, Bill No, Block ID, Date, Item, Area, Unit, Unit Price, WR %, WR Amount ₹, Amount (INR), Remarks as columns
-- Bills export CSV: include blockId, workRetention, workRetentionAmount, grossAmount
-- Reports summary boxes:
-  - Box 1: Bills = sum of grossAmount (Area × Unit Price)
-  - Box 2: Work Retention = sum of workRetentionAmount
-  - Box 3: Payments = sum of payments
-  - Box 4: Outstanding = Gross Amount − (Work Retention + Payments)
-- When saving a bill: also calculate and store grossAmount = area × unitPrice
+- `NavigationContext.tsx`: add `"sft"` to Page union type
+- `MainLayout.tsx`: add SFT nav item and page render case
+- `backend.d.ts`: add SFT function signatures
+- `backend.ts`: add SFT wrapper methods
 
 ### Remove
-- Nothing
+- Nothing removed
 
 ## Implementation Plan
-1. Add helper function formatDateDDMMYYYY(dateStr) in ContractorsPage or utils
-2. Apply date formatter to all {c.date}, {b.date}, {p.date}, {e.date} in list tables
-3. Add grossAmount to ContractorBillRecord type interface
-4. Add grossAmount to bill form state and auto-calculate on area/unitPrice change
-5. Pass grossAmount when calling addContractorBill/updateContractorBill
-6. Add Gross Amount column in Bills list table (after Unit Price)
-7. Rename Amount (INR) header to Net Amount (INR)
-8. Update Download Format CSV template to include all required columns
-9. Update Export CSV to include all fields
-10. Fix Reports summary calculations to use grossAmount for Bills box
-11. Fix Outstanding formula to Gross - (WorkRetention + Payments)
-12. Add print icon button to each view modal
-13. Add printReceipt() function that opens an A5 window with styled receipt and auto-triggers print dialog
+1. Add SFT data model and CRUD functions to `src/backend/main.mo`
+2. Update `src/frontend/src/backend.d.ts` with SFT types and function signatures
+3. Update `src/frontend/src/backend.ts` with SFT wrapper methods
+4. Add `"sft"` to `NavigationContext.tsx` Page type
+5. Create `src/frontend/src/pages/SFTPage.tsx` with full SFT module UI
+6. Add SFT nav item in `MainLayout.tsx` and route render
+
+**Design**: Follow ClearPay design system (Century Gothic, #0078D7, #555555, zebra striping). SFT tab color: #E8F4FD (blue tinted). Print receipt uses blue border (#0078D7).

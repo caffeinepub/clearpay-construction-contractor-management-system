@@ -14,6 +14,7 @@ import {
   FileBarChart,
   FileText,
   FolderKanban,
+  Grid3X3,
   Keyboard,
   LayoutDashboard,
   LogOut,
@@ -37,6 +38,7 @@ import DashboardPage from "../pages/DashboardPage";
 import PaymentsPage from "../pages/PaymentsPage";
 import ProjectsPage from "../pages/ProjectsPage";
 import ReportsPage from "../pages/ReportsPage";
+import SFTPage from "../pages/SFTPage";
 import SeriAIPage from "../pages/SeriAIPage";
 import UsersPage from "../pages/UsersPage";
 import { AppHeader } from "./AppHeader";
@@ -458,6 +460,12 @@ export default function MainLayout() {
       shortcut: "Alt+C",
     },
     {
+      id: "sft" as Page,
+      label: "SFT",
+      icon: Grid3X3,
+      shortcut: "Alt+F",
+    },
+    {
       id: "users" as Page,
       label: "Users",
       icon: UserCog,
@@ -540,6 +548,8 @@ export default function MainLayout() {
         return <PaymentsPage />;
       case "contractors":
         return <ContractorsPage />;
+      case "sft":
+        return <SFTPage />;
       case "users":
         return <UsersPage />;
       case "reports":

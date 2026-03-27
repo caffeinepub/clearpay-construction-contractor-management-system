@@ -22,6 +22,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  Share2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import {
   useGetCallerUserProfile,
   useGetCompletedProjectIds,
 } from "../hooks/useQueries";
+import { shareReceiptAsImage } from "../utils/receiptShare";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ContractorRecord = {
@@ -115,8 +117,9 @@ function printReceipt(
   const win = window.open("", "_blank", "width=600,height=800");
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>
-    @page{size:A5;margin:10mm}
-    body{font-family:'Century Gothic',Arial,sans-serif;margin:0;padding:0;width:148mm;min-height:210mm;background:#fff}
+    @page{size:A4 portrait;margin:20mm 15mm}
+    body{font-family:'Century Gothic',Arial,sans-serif;margin:0;padding:0;width:180mm;min-height:148mm;max-height:148mm;background:#fff;position:relative}
+    body::after{content:"ClearPay";position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Century Gothic',Arial,sans-serif;font-size:72pt;font-weight:700;color:#0078D7;opacity:0.10;pointer-events:none;z-index:9999}
     .header{background:#0078D7;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
     .header h1{margin:0;font-size:18px;font-weight:700}
     .header small{font-size:11px;opacity:.85}
@@ -230,6 +233,28 @@ function PasswordModal({
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
+
+function shareReceipt(
+  type: "contractor" | "bill" | "payment",
+  data: Record<string, string>,
+) {
+  const borderColors = {
+    contractor: "#0078D7",
+    bill: "#FFA500",
+    payment: "#28A745",
+  };
+  const titles = {
+    contractor: "Contractor Receipt",
+    bill: "Bill Receipt",
+    payment: "Payment Receipt",
+  };
+  shareReceiptAsImage({
+    title: titles[type],
+    borderColor: borderColors[type],
+    rows: Object.entries(data).filter(([, v]) => !!v) as [string, string][],
+    filename: `${type}-receipt.png`,
+  });
+}
 export default function ContractorsPage() {
   const { actor } = useActor();
   const { isMasterAdmin } = useMasterAdmin();
@@ -1088,6 +1113,10 @@ export default function ContractorsPage() {
     () => filteredBills.reduce((s, b) => s + b.amount, 0),
     [filteredBills],
   );
+  const totalAreaSft = useMemo(
+    () => filteredBills.reduce((s, b) => s + (b.area || 0), 0),
+    [filteredBills],
+  );
   const totalPaymentsAmt = useMemo(
     () => filteredPayments.reduce((s, p) => s + p.amount, 0),
     [filteredPayments],
@@ -1295,7 +1324,7 @@ export default function ContractorsPage() {
                     style={ribbonBtn("#555")}
                     onClick={() => {
                       const summaryHtml = `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Contractors</div><div class="val">${filteredContractors.length}</div></div></div>`;
-                      const tableHtml = `<table><thead><tr><th>#</th><th>Name</th><th>Trades</th><th>Project</th><th>Date</th><th>Price</th><th>Unit</th><th>Contact</th></tr></thead><tbody>${filteredContractors.map((c, i) => `<tr><td>${i + 1}</td><td>${c.name}</td><td>${c.trades.join(", ")}</td><td>${getProjectName(c.projectId)}</td><td>${c.date}</td><td>${fmtINR(c.contractingPrice)}</td><td>${c.unit}</td><td>${c.contact1}</td></tr>`).join("")}</tbody></table>`;
+                      const tableHtml = `<table><thead><tr><th>#</th><th>Name</th><th>Trades</th><th>Project</th><th>Date</th><th>Price</th><th>Unit</th><th>Contact</th></tr></thead><tbody>${filteredContractors.map((c, i) => `<tr><td>${i + 1}</td><td>${c.name}</td><td>${c.trades.join(", ")}</td><td>${getProjectName(c.projectId)}</td><td>${fmtDate(c.date)}</td><td>${fmtINR(c.contractingPrice)}</td><td>${c.unit}</td><td>${c.contact1}</td></tr>`).join("")}</tbody></table>`;
                       printContent("Contractors List", summaryHtml, tableHtml);
                     }}
                     title="Export PDF"
@@ -1744,7 +1773,7 @@ export default function ContractorsPage() {
                       <td style={tdStyle(i % 2 === 0)}>
                         {getProjectName(c.projectId)}
                       </td>
-                      <td style={tdStyle(i % 2 === 0)}>{c.date}</td>
+                      <td style={tdStyle(i % 2 === 0)}>{fmtDate(c.date)}</td>
                       <td
                         style={{
                           ...tdStyle(i % 2 === 0),
@@ -1826,40 +1855,40 @@ export default function ContractorsPage() {
                 alignItems: "center",
               }}
             >
-              {canManage && (
-                <>
-                  <button
-                    type="button"
-                    style={ribbonBtn()}
-                    onClick={() =>
-                      printContent(
-                        "Contractor Bills",
-                        `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
-                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>Item</th><th>Area</th><th>Unit</th><th>Unit Price</th><th>Gross Amt</th><th>WR%</th><th>WR Amt ₹</th><th>Net Amt</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${b.date}</td><td>${b.item}</td><td>${b.area}</td><td>${b.unit}</td><td>${fmtINR(b.unitPrice)}</td><td style="color:#1565c0">${fmtINR(b.grossAmount ?? b.area * b.unitPrice)}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td></tr>`).join("")}</tbody></table>`,
-                      )
-                    }
-                    title="Print"
-                    data-ocid="contractors.print_button"
-                  >
-                    <Printer size={13} />
-                    Print
-                  </button>
-                  <button
-                    type="button"
-                    style={ribbonBtn("#555")}
-                    onClick={() =>
-                      printContent(
-                        "Contractor Bills – Export PDF",
-                        `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
-                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>Gross Amt</th><th>WR%</th><th>WR Amt ₹</th><th>Net Amt</th><th>Remarks</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${b.date}</td><td style="color:#1565c0">${fmtINR(b.grossAmount ?? b.area * b.unitPrice)}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td><td>${b.remarks}</td></tr>`).join("")}</tbody></table>`,
-                      )
-                    }
-                    title="PDF"
-                    data-ocid="contractors.secondary_button"
-                  >
-                    <FileText size={13} />
-                    PDF
-                  </button>
+              <>
+                <button
+                  type="button"
+                  style={ribbonBtn()}
+                  onClick={() =>
+                    printContent(
+                      "Contractor Bills",
+                      `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
+                      `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>Item</th><th>Area</th><th>Unit</th><th>Unit Price</th><th>Gross Amt</th><th>WR%</th><th>WR Amt ₹</th><th>Net Amt</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${fmtDate(b.date)}</td><td>${b.item}</td><td>${b.area}</td><td>${b.unit}</td><td>${fmtINR(b.unitPrice)}</td><td style="color:#1565c0">${fmtINR(b.grossAmount ?? b.area * b.unitPrice)}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td></tr>`).join("")}</tbody></table>`,
+                    )
+                  }
+                  title="Print"
+                  data-ocid="contractors.print_button"
+                >
+                  <Printer size={13} />
+                  Print
+                </button>
+                <button
+                  type="button"
+                  style={ribbonBtn("#555")}
+                  onClick={() =>
+                    printContent(
+                      "Contractor Bills – Export PDF",
+                      `<div class="summary"><div class="s-card s-blue"><div class="lbl">Total Bills (Gross)</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.grossAmount ?? b.area * b.unitPrice), 0))}</div></div></div><div class="s-card s-purple"><div class="lbl">Total Work Retention</div><div class="val">${fmtINR(filteredBills.reduce((s, b) => s + (b.workRetentionAmount || 0), 0))}</div></div></div>`,
+                      `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Bill No</th><th>Block ID</th><th>Date</th><th>Gross Amt</th><th>WR%</th><th>WR Amt ₹</th><th>Net Amt</th><th>Remarks</th></tr></thead><tbody>${filteredBills.map((b, i) => `<tr><td>${i + 1}</td><td>${getContractorName(b.contractorId)}</td><td>${getProjectName(b.projectId)}</td><td>${b.billNo}</td><td>${b.blockId || ""}</td><td>${fmtDate(b.date)}</td><td style="color:#1565c0">${fmtINR(b.grossAmount ?? b.area * b.unitPrice)}</td><td>${b.workRetention || 0}%</td><td style="color:#9c27b0">${fmtINR(b.workRetentionAmount || 0)}</td><td>${fmtINR(b.amount)}</td><td>${b.remarks}</td></tr>`).join("")}</tbody></table>`,
+                    )
+                  }
+                  title="PDF"
+                  data-ocid="contractors.secondary_button"
+                >
+                  <FileText size={13} />
+                  PDF
+                </button>
+                {canManage && (
                   <button
                     type="button"
                     style={ribbonBtn("#28A745")}
@@ -1870,82 +1899,84 @@ export default function ContractorsPage() {
                     <Upload size={13} />
                     Import CSV
                   </button>
-                  <input
-                    ref={bImportRef}
-                    type="file"
-                    accept=".csv"
-                    style={{ display: "none" }}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      importCSV(f, async (row) => {
-                        try {
-                          await (actor as any).addContractorBill(
-                            row.ContractorId || "",
-                            row.ProjectId || "",
-                            row.BillNo || "",
-                            row.Date || "",
-                            row.Item || "",
-                            Number(row.Area || 0),
-                            row.Unit || "Sft",
-                            Number(row.UnitPrice || 0),
-                            row.Remarks || "",
-                          );
-                        } catch {}
+                )}
+                <input
+                  ref={bImportRef}
+                  type="file"
+                  accept=".csv"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    importCSV(f, async (row) => {
+                      try {
+                        await (actor as any).addContractorBill(
+                          row.ContractorId || "",
+                          row.ProjectId || "",
+                          row.BillNo || "",
+                          row.Date || "",
+                          row.Item || "",
+                          Number(row.Area || 0),
+                          row.Unit || "Sft",
+                          Number(row.UnitPrice || 0),
+                          row.Remarks || "",
+                        );
+                      } catch {}
+                    });
+                    setTimeout(() => {
+                      queryClient.invalidateQueries({
+                        queryKey: ["contractorBillsList"],
                       });
-                      setTimeout(() => {
-                        queryClient.invalidateQueries({
-                          queryKey: ["contractorBillsList"],
-                        });
-                        e.target.value = "";
-                      }, 1500);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    style={ribbonBtn("#FFA500")}
-                    onClick={() =>
-                      exportCSV(
-                        filteredBills.map((b) => ({
-                          Contractor: getContractorName(b.contractorId),
-                          Project: getProjectName(b.projectId),
-                          "Bill No": b.billNo,
-                          "Block ID": b.blockId || "",
-                          Date: fmtDate(b.date),
-                          Item: b.item,
-                          Area: b.area,
-                          Unit: b.unit,
-                          "Unit Price": b.unitPrice,
-                          "Gross Amount": b.grossAmount ?? b.area * b.unitPrice,
-                          "WR %": b.workRetention || 0,
-                          "WR Amount ₹": b.workRetentionAmount || 0,
-                          "Net Amount (INR)": b.amount,
-                          Remarks: b.remarks,
-                        })),
-                        [
-                          "Contractor",
-                          "Project",
-                          "Bill No",
-                          "Block ID",
-                          "Date",
-                          "Item",
-                          "Area",
-                          "Unit",
-                          "Unit Price",
-                          "Gross Amount",
-                          "WR %",
-                          "WR Amount ₹",
-                          "Net Amount (INR)",
-                          "Remarks",
-                        ],
-                        "contractor-bills.csv",
-                      )
-                    }
-                    data-ocid="contractors.secondary_button"
-                  >
-                    <Download size={13} />
-                    Export CSV
-                  </button>
+                      e.target.value = "";
+                    }, 1500);
+                  }}
+                />
+                <button
+                  type="button"
+                  style={ribbonBtn("#FFA500")}
+                  onClick={() =>
+                    exportCSV(
+                      filteredBills.map((b) => ({
+                        Contractor: getContractorName(b.contractorId),
+                        Project: getProjectName(b.projectId),
+                        "Bill No": b.billNo,
+                        "Block ID": b.blockId || "",
+                        Date: fmtDate(b.date),
+                        Item: b.item,
+                        Area: b.area,
+                        Unit: b.unit,
+                        "Unit Price": b.unitPrice,
+                        "Gross Amount": b.grossAmount ?? b.area * b.unitPrice,
+                        "WR %": b.workRetention || 0,
+                        "WR Amount ₹": b.workRetentionAmount || 0,
+                        "Net Amount (INR)": b.amount,
+                        Remarks: b.remarks,
+                      })),
+                      [
+                        "Contractor",
+                        "Project",
+                        "Bill No",
+                        "Block ID",
+                        "Date",
+                        "Item",
+                        "Area",
+                        "Unit",
+                        "Unit Price",
+                        "Gross Amount",
+                        "WR %",
+                        "WR Amount ₹",
+                        "Net Amount (INR)",
+                        "Remarks",
+                      ],
+                      "contractor-bills.csv",
+                    )
+                  }
+                  data-ocid="contractors.secondary_button"
+                >
+                  <Download size={13} />
+                  Export CSV
+                </button>
+                {canManage && (
                   <button
                     type="button"
                     style={ribbonBtn("#555")}
@@ -1974,6 +2005,8 @@ export default function ContractorsPage() {
                     <Download size={13} />
                     Format
                   </button>
+                )}
+                {canManage && (
                   <button
                     type="button"
                     style={ribbonBtn("#0078D7")}
@@ -1983,33 +2016,62 @@ export default function ContractorsPage() {
                     <Plus size={13} />
                     New Bill
                   </button>
-                  {bSelected.length > 0 && (
-                    <button
-                      type="button"
-                      style={ribbonBtn("#FF0000")}
-                      onClick={() => setBPwdAction({ type: "bulk" })}
-                      data-ocid="contractors.delete_button"
-                    >
-                      <Trash2 size={13} />
-                      Bulk Delete ({bSelected.length})
-                    </button>
-                  )}
-                </>
-              )}
+                )}
+                {canManage && bSelected.length > 0 && (
+                  <button
+                    type="button"
+                    style={ribbonBtn("#FF0000")}
+                    onClick={() => setBPwdAction({ type: "bulk" })}
+                    data-ocid="contractors.delete_button"
+                  >
+                    <Trash2 size={13} />
+                    Bulk Delete ({bSelected.length})
+                  </button>
+                )}
+              </>
             </div>
-            <div
-              style={{
-                background: "#FFEBEE",
-                border: "1px solid #D32F2F",
-                borderRadius: "6px",
-                padding: "6px 14px",
-                fontSize: "13px",
-                fontWeight: 700,
-                color: "#D32F2F",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Total Bills: {fmtINR(totalBillsAmt)}
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <div
+                style={{
+                  background: "#E3F2FD",
+                  border: "1px solid #0078D7",
+                  borderRadius: "6px",
+                  padding: "4px 14px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  color: "#0078D7",
+                  whiteSpace: "nowrap",
+                  textAlign: "center",
+                }}
+              >
+                <div>Total SFT</div>
+                <div style={{ fontSize: "15px" }}>
+                  {totalAreaSft.toLocaleString("en-IN", {
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+              </div>
+              <div
+                style={{
+                  background: "#FFEBEE",
+                  border: "1px solid #D32F2F",
+                  borderRadius: "6px",
+                  padding: "4px 14px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  color: "#D32F2F",
+                  whiteSpace: "nowrap",
+                  textAlign: "center",
+                }}
+              >
+                <div>Total Bills: {fmtINR(totalBillsAmt)}</div>
+                <div
+                  style={{ fontSize: "11px", fontWeight: 400, color: "#888" }}
+                >
+                  {filteredBills.length} bill
+                  {filteredBills.length !== 1 ? "s" : ""}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2534,40 +2596,40 @@ export default function ContractorsPage() {
                 alignItems: "center",
               }}
             >
-              {canManage && (
-                <>
-                  <button
-                    type="button"
-                    style={ribbonBtn()}
-                    onClick={() =>
-                      printContent(
-                        "Contractor Payments",
-                        `<div class="summary"><div class="s-card s-green"><div class="lbl">Total Payments</div><div class="val">${fmtINR(totalPaymentsAmt)}</div></div></div>`,
-                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Payment No</th><th>Date</th><th>Amount</th><th>Mode</th><th>Remarks</th></tr></thead><tbody>${filteredPayments.map((p, i) => `<tr><td>${i + 1}</td><td>${getContractorName(p.contractorId)}</td><td>${getProjectName(p.projectId)}</td><td>${p.paymentNo}</td><td>${p.date}</td><td>${fmtINR(p.amount)}</td><td>${p.paymentMode}</td><td>${p.remarks}</td></tr>`).join("")}</tbody></table>`,
-                      )
-                    }
-                    title="Print"
-                    data-ocid="contractors.print_button"
-                  >
-                    <Printer size={13} />
-                    Print
-                  </button>
-                  <button
-                    type="button"
-                    style={ribbonBtn("#555")}
-                    onClick={() =>
-                      printContent(
-                        "Contractor Payments – Export PDF",
-                        `<div class="summary"><div class="s-card s-green"><div class="lbl">Total Payments</div><div class="val">${fmtINR(totalPaymentsAmt)}</div></div></div>`,
-                        `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Payment No</th><th>Date</th><th>Amount</th><th>Mode</th></tr></thead><tbody>${filteredPayments.map((p, i) => `<tr><td>${i + 1}</td><td>${getContractorName(p.contractorId)}</td><td>${getProjectName(p.projectId)}</td><td>${p.paymentNo}</td><td>${p.date}</td><td>${fmtINR(p.amount)}</td><td>${p.paymentMode}</td></tr>`).join("")}</tbody></table>`,
-                      )
-                    }
-                    title="PDF"
-                    data-ocid="contractors.secondary_button"
-                  >
-                    <FileText size={13} />
-                    PDF
-                  </button>
+              <>
+                <button
+                  type="button"
+                  style={ribbonBtn()}
+                  onClick={() =>
+                    printContent(
+                      "Contractor Payments",
+                      `<div class="summary"><div class="s-card s-green"><div class="lbl">Total Payments</div><div class="val">${fmtINR(totalPaymentsAmt)}</div></div></div>`,
+                      `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Payment No</th><th>Date</th><th>Amount</th><th>Mode</th><th>Remarks</th></tr></thead><tbody>${filteredPayments.map((p, i) => `<tr><td>${i + 1}</td><td>${getContractorName(p.contractorId)}</td><td>${getProjectName(p.projectId)}</td><td>${p.paymentNo}</td><td>${fmtDate(p.date)}</td><td>${fmtINR(p.amount)}</td><td>${p.paymentMode}</td><td>${p.remarks}</td></tr>`).join("")}</tbody></table>`,
+                    )
+                  }
+                  title="Print"
+                  data-ocid="contractors.print_button"
+                >
+                  <Printer size={13} />
+                  Print
+                </button>
+                <button
+                  type="button"
+                  style={ribbonBtn("#555")}
+                  onClick={() =>
+                    printContent(
+                      "Contractor Payments – Export PDF",
+                      `<div class="summary"><div class="s-card s-green"><div class="lbl">Total Payments</div><div class="val">${fmtINR(totalPaymentsAmt)}</div></div></div>`,
+                      `<table><thead><tr><th>#</th><th>Contractor</th><th>Project</th><th>Payment No</th><th>Date</th><th>Amount</th><th>Mode</th></tr></thead><tbody>${filteredPayments.map((p, i) => `<tr><td>${i + 1}</td><td>${getContractorName(p.contractorId)}</td><td>${getProjectName(p.projectId)}</td><td>${p.paymentNo}</td><td>${fmtDate(p.date)}</td><td>${fmtINR(p.amount)}</td><td>${p.paymentMode}</td></tr>`).join("")}</tbody></table>`,
+                    )
+                  }
+                  title="PDF"
+                  data-ocid="contractors.secondary_button"
+                >
+                  <FileText size={13} />
+                  PDF
+                </button>
+                {canManage && (
                   <button
                     type="button"
                     style={ribbonBtn("#28A745")}
@@ -2578,59 +2640,61 @@ export default function ContractorsPage() {
                     <Upload size={13} />
                     Import CSV
                   </button>
-                  <input
-                    ref={pImportRef}
-                    type="file"
-                    accept=".csv"
-                    style={{ display: "none" }}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      importCSV(f, async (row) => {
-                        try {
-                          await (actor as any).addContractorPayment(
-                            row.ContractorId || "",
-                            row.ProjectId || "",
-                            row.PaymentNo || "",
-                            row.Date || "",
-                            Number(row.Amount || 0),
-                            row.PaymentMode || "Account",
-                            row.Remarks || "",
-                          );
-                        } catch {}
+                )}
+                <input
+                  ref={pImportRef}
+                  type="file"
+                  accept=".csv"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    importCSV(f, async (row) => {
+                      try {
+                        await (actor as any).addContractorPayment(
+                          row.ContractorId || "",
+                          row.ProjectId || "",
+                          row.PaymentNo || "",
+                          row.Date || "",
+                          Number(row.Amount || 0),
+                          row.PaymentMode || "Account",
+                          row.Remarks || "",
+                        );
+                      } catch {}
+                    });
+                    setTimeout(() => {
+                      queryClient.invalidateQueries({
+                        queryKey: ["contractorPaymentsList"],
                       });
-                      setTimeout(() => {
-                        queryClient.invalidateQueries({
-                          queryKey: ["contractorPaymentsList"],
-                        });
-                        e.target.value = "";
-                      }, 1500);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    style={ribbonBtn("#FFA500")}
-                    onClick={() =>
-                      exportCSV(
-                        filteredPayments,
-                        [
-                          "id",
-                          "contractorId",
-                          "projectId",
-                          "paymentNo",
-                          "date",
-                          "amount",
-                          "paymentMode",
-                          "remarks",
-                        ],
-                        "contractor-payments.csv",
-                      )
-                    }
-                    data-ocid="contractors.secondary_button"
-                  >
-                    <Download size={13} />
-                    Export CSV
-                  </button>
+                      e.target.value = "";
+                    }, 1500);
+                  }}
+                />
+                <button
+                  type="button"
+                  style={ribbonBtn("#FFA500")}
+                  onClick={() =>
+                    exportCSV(
+                      filteredPayments,
+                      [
+                        "id",
+                        "contractorId",
+                        "projectId",
+                        "paymentNo",
+                        "date",
+                        "amount",
+                        "paymentMode",
+                        "remarks",
+                      ],
+                      "contractor-payments.csv",
+                    )
+                  }
+                  data-ocid="contractors.secondary_button"
+                >
+                  <Download size={13} />
+                  Export CSV
+                </button>
+                {canManage && (
                   <button
                     type="button"
                     style={ribbonBtn("#555")}
@@ -2653,6 +2717,8 @@ export default function ContractorsPage() {
                     <Download size={13} />
                     Format
                   </button>
+                )}
+                {canManage && (
                   <button
                     type="button"
                     style={ribbonBtn("#0078D7")}
@@ -2662,19 +2728,19 @@ export default function ContractorsPage() {
                     <Plus size={13} />
                     New Payment
                   </button>
-                  {pSelected.length > 0 && (
-                    <button
-                      type="button"
-                      style={ribbonBtn("#FF0000")}
-                      onClick={() => setPPwdAction({ type: "bulk" })}
-                      data-ocid="contractors.delete_button"
-                    >
-                      <Trash2 size={13} />
-                      Bulk Delete ({pSelected.length})
-                    </button>
-                  )}
-                </>
-              )}
+                )}
+                {canManage && pSelected.length > 0 && (
+                  <button
+                    type="button"
+                    style={ribbonBtn("#FF0000")}
+                    onClick={() => setPPwdAction({ type: "bulk" })}
+                    data-ocid="contractors.delete_button"
+                  >
+                    <Trash2 size={13} />
+                    Bulk Delete ({pSelected.length})
+                  </button>
+                )}
+              </>
             </div>
             <div
               style={{
@@ -2996,7 +3062,7 @@ export default function ContractorsPage() {
                           background: i % 2 === 0 ? ZEBRA_PAYMENT : "#fff",
                         }}
                       >
-                        {p.date}
+                        {fmtDate(p.date)}
                       </td>
                       <td
                         style={{
@@ -3857,37 +3923,60 @@ export default function ContractorsPage() {
             >
               <DialogTitle>Contractor Details</DialogTitle>
               {cViewItem && (
-                <button
-                  type="button"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#0078D7",
-                    padding: "4px",
-                  }}
-                  title="Print Receipt"
-                  onClick={() =>
-                    printReceipt("contractor", {
-                      Name: cViewItem.name,
-                      "Trade(s)": cViewItem.trades.join(", "),
-                      Project: getProjectName(cViewItem.projectId),
-                      Date: fmtDate(cViewItem.date),
-                      "W.O No": cViewItem.woNo || "",
-                      "Contracting Price": fmtINR(cViewItem.contractingPrice),
-                      Unit: cViewItem.unit,
-                      "Contact 1": cViewItem.contact1,
-                      "Contact 2": cViewItem.contact2,
-                      Email: cViewItem.email,
-                      Address: cViewItem.address,
-                      Note: cViewItem.note,
-                      "Link 1 - W.O": cViewItem.link1,
-                      "Link 2": cViewItem.link2,
-                    })
-                  }
-                >
-                  <Printer size={16} />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#0078D7",
+                      padding: "4px",
+                    }}
+                    title="Print Receipt"
+                    onClick={() =>
+                      printReceipt("contractor", {
+                        Name: cViewItem.name,
+                        "Trade(s)": cViewItem.trades.join(", "),
+                        Project: getProjectName(cViewItem.projectId),
+                        Date: fmtDate(cViewItem.date),
+                        "W.O No": cViewItem.woNo || "",
+                        "Contracting Price": fmtINR(cViewItem.contractingPrice),
+                        Unit: cViewItem.unit,
+                        "Contact 1": cViewItem.contact1,
+                        "Contact 2": cViewItem.contact2,
+                        Email: cViewItem.email,
+                        Address: cViewItem.address,
+                        Note: cViewItem.note,
+                        "Link 1 - W.O": cViewItem.link1,
+                        "Link 2": cViewItem.link2,
+                      })
+                    }
+                  >
+                    <Printer size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#555",
+                      padding: "4px",
+                    }}
+                    title="Share"
+                    onClick={() =>
+                      shareReceipt("contractor", {
+                        Name: cViewItem.name,
+                        "Trade(s)": cViewItem.trades.join(", "),
+                        Project: getProjectName(cViewItem.projectId),
+                        Date: fmtDate(cViewItem.date),
+                      })
+                    }
+                  >
+                    <Share2 size={16} />
+                  </button>
+                </>
               )}
             </div>
           </DialogHeader>
@@ -3955,8 +4044,6 @@ export default function ContractorsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Bill Form */}
       <Dialog
         open={bFormOpen}
         onOpenChange={(open) => {
@@ -4211,8 +4298,6 @@ export default function ContractorsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Bill View */}
       <Dialog
         open={bViewOpen}
         onOpenChange={(open) => {
@@ -4230,42 +4315,66 @@ export default function ContractorsPage() {
             >
               <DialogTitle>Bill Details</DialogTitle>
               {bViewItem && (
-                <button
-                  type="button"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#FFA500",
-                    padding: "4px",
-                  }}
-                  title="Print Receipt"
-                  onClick={() =>
-                    printReceipt("bill", {
-                      Contractor: getContractorName(bViewItem.contractorId),
-                      Project: getProjectName(bViewItem.projectId),
-                      "Bill No": bViewItem.billNo,
-                      "Block ID": bViewItem.blockId || "—",
-                      Date: fmtDate(bViewItem.date),
-                      Item: bViewItem.item,
-                      Area: String(bViewItem.area),
-                      Unit: bViewItem.unit,
-                      "Unit Price": fmtINR(bViewItem.unitPrice),
-                      "Gross Amount": fmtINR(
-                        bViewItem.grossAmount ??
-                          bViewItem.area * bViewItem.unitPrice,
-                      ),
-                      "Work Retention %": `${bViewItem.workRetention || 0}%`,
-                      "Work Retention Amount": fmtINR(
-                        bViewItem.workRetentionAmount || 0,
-                      ),
-                      "Net Amount (INR)": fmtINR(bViewItem.amount),
-                      Remarks: bViewItem.remarks,
-                    })
-                  }
-                >
-                  <Printer size={16} />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#FFA500",
+                      padding: "4px",
+                    }}
+                    title="Print Receipt"
+                    onClick={() =>
+                      printReceipt("bill", {
+                        Contractor: getContractorName(bViewItem.contractorId),
+                        Project: getProjectName(bViewItem.projectId),
+                        "Bill No": bViewItem.billNo,
+                        "Block ID": bViewItem.blockId || "—",
+                        Date: fmtDate(bViewItem.date),
+                        Item: bViewItem.item,
+                        Area: String(bViewItem.area),
+                        Unit: bViewItem.unit,
+                        "Unit Price": fmtINR(bViewItem.unitPrice),
+                        "Gross Amount": fmtINR(
+                          bViewItem.grossAmount ??
+                            bViewItem.area * bViewItem.unitPrice,
+                        ),
+                        "Work Retention %": `${bViewItem.workRetention || 0}%`,
+                        "Work Retention Amount": fmtINR(
+                          bViewItem.workRetentionAmount || 0,
+                        ),
+                        "Net Amount (INR)": fmtINR(bViewItem.amount),
+                        Remarks: bViewItem.remarks,
+                      })
+                    }
+                  >
+                    <Printer size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#555",
+                      padding: "4px",
+                    }}
+                    title="Share"
+                    onClick={() =>
+                      shareReceipt("bill", {
+                        Contractor: getContractorName(bViewItem.contractorId),
+                        Project: getProjectName(bViewItem.projectId),
+                        "Bill No": bViewItem.billNo,
+                        Date: fmtDate(bViewItem.date),
+                        "Net Amount": fmtINR(bViewItem.amount),
+                      })
+                    }
+                  >
+                    <Share2 size={16} />
+                  </button>
+                </>
               )}
             </div>
           </DialogHeader>
@@ -4315,8 +4424,6 @@ export default function ContractorsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Payment Form */}
       <Dialog
         open={pFormOpen}
         onOpenChange={(open) => {
@@ -4458,8 +4565,6 @@ export default function ContractorsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Payment View */}
       <Dialog
         open={pViewOpen}
         onOpenChange={(open) => {
@@ -4477,30 +4582,54 @@ export default function ContractorsPage() {
             >
               <DialogTitle>Payment Details</DialogTitle>
               {pViewItem && (
-                <button
-                  type="button"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#28A745",
-                    padding: "4px",
-                  }}
-                  title="Print Receipt"
-                  onClick={() =>
-                    printReceipt("payment", {
-                      Contractor: getContractorName(pViewItem.contractorId),
-                      Project: getProjectName(pViewItem.projectId),
-                      "Payment No": pViewItem.paymentNo,
-                      Date: fmtDate(pViewItem.date),
-                      Amount: fmtINR(pViewItem.amount),
-                      Mode: pViewItem.paymentMode,
-                      Remarks: pViewItem.remarks,
-                    })
-                  }
-                >
-                  <Printer size={16} />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#28A745",
+                      padding: "4px",
+                    }}
+                    title="Print Receipt"
+                    onClick={() =>
+                      printReceipt("payment", {
+                        Contractor: getContractorName(pViewItem.contractorId),
+                        Project: getProjectName(pViewItem.projectId),
+                        "Payment No": pViewItem.paymentNo,
+                        Date: fmtDate(pViewItem.date),
+                        Amount: fmtINR(pViewItem.amount),
+                        Mode: pViewItem.paymentMode,
+                        Remarks: pViewItem.remarks,
+                      })
+                    }
+                  >
+                    <Printer size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#555",
+                      padding: "4px",
+                    }}
+                    title="Share"
+                    onClick={() =>
+                      shareReceipt("payment", {
+                        Contractor: getContractorName(pViewItem.contractorId),
+                        Project: getProjectName(pViewItem.projectId),
+                        "Payment No": pViewItem.paymentNo,
+                        Date: fmtDate(pViewItem.date),
+                        Amount: fmtINR(pViewItem.amount),
+                      })
+                    }
+                  >
+                    <Share2 size={16} />
+                  </button>
+                </>
               )}
             </div>
           </DialogHeader>
@@ -4538,9 +4667,6 @@ export default function ContractorsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ── Password Modals ── */}
-      {/* Contractor pwd */}
       <PasswordModal
         open={!!cPwdAction}
         title={
@@ -4564,8 +4690,6 @@ export default function ContractorsPage() {
           }
         }}
       />
-
-      {/* Bill pwd */}
       <PasswordModal
         open={!!bPwdAction}
         title={
@@ -4608,8 +4732,6 @@ export default function ContractorsPage() {
           }
         }}
       />
-
-      {/* Payment pwd */}
       <PasswordModal
         open={!!pPwdAction}
         title={

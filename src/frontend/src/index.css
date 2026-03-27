@@ -238,6 +238,11 @@
 }
 
 /* Print Styles - Ensure Century Gothic in Exports */
+@page {
+  size: A4 portrait;
+  margin: 20mm 15mm 20mm 15mm;
+}
+
 @media print {
   body * {
     visibility: hidden;
@@ -253,6 +258,25 @@
     left: 0;
     top: 0;
     width: 100%;
+    /* Content occupies ~50% of A4 page height */
+    max-height: 148mm; /* Half of A4 297mm height */
+    page-break-inside: avoid;
+  }
+
+  /* ClearPay watermark at 10% opacity for print */
+  .print-area::after {
+    content: "ClearPay";
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-30deg);
+    font-family: "Century Gothic", Arial, sans-serif;
+    font-size: 72pt;
+    font-weight: 700;
+    color: #0078d7;
+    opacity: 0.1;
+    pointer-events: none;
+    z-index: 9999;
   }
 
   button,
@@ -263,6 +287,8 @@
   /* Force Century Gothic in print/PDF exports */
   * {
     font-family: "Century Gothic", "Gothic A1", Arial, sans-serif !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Headings and Table Headers - Bold (700) */

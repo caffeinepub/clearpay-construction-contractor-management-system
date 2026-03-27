@@ -18,10 +18,11 @@ const SECTIONS: Section[] = [
       { keys: ["Alt", "B"], action: "Bills" },
       { keys: ["Alt", "M"], action: "Payments" },
       { keys: ["Alt", "U"], action: "Users (Admin only)" },
-      { keys: ["Alt", "C"], action: "Clients" },
+      { keys: ["Alt", "C"], action: "Contractors" },
       { keys: ["Alt", "A"], action: "Analytics" },
       { keys: ["Alt", "R"], action: "Reports" },
-      { keys: ["Alt", "S"], action: "Seri AI" },
+      { keys: ["Alt", "I"], action: "Seri AI" },
+      { keys: ["Alt", "S"], action: "SFT Module" },
     ],
   },
   {

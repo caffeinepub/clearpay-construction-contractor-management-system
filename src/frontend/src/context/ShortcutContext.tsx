@@ -126,9 +126,10 @@ export function ShortcutProvider({ children }: { children: React.ReactNode }) {
           m: "payments",
           u: "users",
           c: "contractors",
+          i: "seri-ai",
           a: "analytics",
           r: "reports",
-          s: "seri-ai",
+          s: "sft",
         };
         const target = navMap[e.key.toLowerCase()];
         if (target) {

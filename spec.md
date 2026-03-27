@@ -1,60 +1,34 @@
-# ClearPay – SFT & Contractor Module Fixes + Receipt Enhancements
+# ClearPay – Receipt Sharing, Print Format, Shortcuts & Seri AI Enhancements
 
 ## Current State
-- SFT Module: toolbar shows "SFT Module" text left of Print button; `addSftEntry` fails because SFT functions are missing from `backend.did.js` IDL declarations
-- Projects/Bills/Payments view modals: have Print icon only, no Share icon
-- Contractors Module view receipts: have Print icon only, no Share icon
-- Contractors Module: checkboxes visible to all users (should be hidden for Users)
-- Contractors Module: Print/PDF/Export CSV not explicitly confirmed visible to Users
-- Contractors Bills page: no Total SFT summary box; Total Bills box has no bill count
-- Contractors Payments page: Total Payments box has no payment count
-- Contractors list table: shows `{c.date}` raw (YYYY-MM-DD), not formatted
+ClearPay has receipt view modals across all modules with basic text-based share (navigator.share / clipboard copy). Print uses A5 sizing in popup windows. Keyboard Alt+S maps to Seri AI, Alt+C to Contractors, no Alt+I. Seri AI shows Outstanding and GST Outstanding as separate values.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `addSftEntry`, `updateSftEntry`, `deleteSftEntries`, `listSftEntries` to `backend.did.js` IDL
-- Share icon (Share2 from lucide-react) next to Print icon in top-right of all view receipts:
-  - Projects view modal
-  - Bills view modal
-  - Payments view modal
-  - Contractors: Contractor view, Bill view, Payment view
-  - SFT view receipt
-- Total SFT summary box in Contractors Bills tab (left side of Total Bills box), showing sum of `area` column from filtered bills list
-- Bill count at bottom of Total Bills summary box in Contractors Bills tab
-- Payment count at bottom of Total Payments summary box in Contractors Payments tab
+- `src/frontend/src/utils/receiptShare.ts` — Canvas-based receipt image generator with ClearPay watermark at 10% opacity (diagonal text). Shares as PNG via Web Share API or downloads as fallback.
+- Share icon on Seri AI project summary messages (bottom-right of assistant message bubble) that exports the summary as a watermarked PNG.
+- Alt+I keyboard shortcut → Seri AI module.
+- Alt+S keyboard shortcut → SFT module.
+- Outstanding (Including GST) line in Seri AI project summaries: Outstanding + GST Outstanding.
 
 ### Modify
-- SFT Page toolbar: remove "SFT Module" span/text that appears left of the Print button
-- Contractors list table: change `{c.date}` to `{fmtDate(c.date)}` so date displays as DD-MM-YYYY
-- Role-based visibility in Contractors tab (Contractors/Bills/Payments): checkboxes (row select) hidden for Users; Print, PDF, Export CSV buttons visible to ALL users (not just canManage)
+- `ShortcutContext.tsx` — navMap: Alt+S changed from "seri-ai" to "sft"; Alt+I added for "seri-ai".
+- `KeyboardShortcutsModal.tsx` — Updated cheatsheet entries: Alt+C=Contractors, Alt+I=Seri AI, Alt+S=SFT Module.
+- `ContractorsPage.tsx` — `shareReceipt()` now calls `shareReceiptAsImage()` (canvas+watermark). Print window CSS updated to A4 with max-height 148mm (50% of A4) and ClearPay watermark.
+- `SFTPage.tsx` — Share handler uses `shareReceiptAsImage()`. Print CSS updated to A4 with watermark.
+- `BillViewPage.tsx` — `handleShare()` uses `shareReceiptAsImage()` with bill data.
+- `PaymentViewPage.tsx` — `handleShare()` uses `shareReceiptAsImage()` with payment data.
+- `index.css` — Print CSS: `@page { size: A4 portrait; margin: 20mm 15mm }`, `.print-area::after` watermark at 10% opacity, content max-height 148mm.
+- `SeriAIPage.tsx` — GST included in Outstanding formula; Share2 icon on project summary messages.
 
 ### Remove
-- Nothing
+- Old text-based share fallback (clipboard copy) replaced by image download.
 
 ## Implementation Plan
-
-1. **`backend.did.js`**: Add SFT IDL entries at end of IDL factory (before closing `});`):
-   - `addSftEntry`: takes (Text x11, Float64 x6) -> [Text]
-   - `updateSftEntry`: takes (Text id, ..., Text password) -> []
-   - `deleteSftEntries`: takes ([Text], Text) -> []
-   - `listSftEntries`: returns [Vec(Record({id,contractorId,projectId,billNo,slabNo,footings,rw,columns,beams,slab,oht,totalSft,remarks}))]
-
-2. **`SFTPage.tsx`**: Remove the `<span>SFT Module</span>` element from the toolbar. It appears around line 495.
-
-3. **`ProjectsPage.tsx`**: In the view modal header, add Share2 button next to Printer button. Share uses `navigator.share` (if supported) or copies a summary to clipboard.
-
-4. **`BillsPage.tsx`**: Same — add Share2 button next to Print in the bill view modal.
-
-5. **`PaymentsPage.tsx`**: Same — add Share2 button in payment view modal.
-
-6. **`ContractorsPage.tsx`**:
-   - In Contractor view dialog header: add Share2 next to Printer
-   - In Bill view dialog header: add Share2 next to Printer
-   - In Payment view dialog header: add Share2 next to Printer
-   - Contractors list date: change `{c.date}` to `{fmtDate(c.date)}`
-   - Role-based checkbox: wrap all row-select checkboxes with `{canManage && ...}` in Contractors/Bills/Payments tab tables
-   - Print, PDF, Export CSV buttons: ensure they are NOT wrapped in `{canManage && ...}` — move them outside that gate so Users can also see them
-   - Total SFT box: add before the Total Bills div in the Bills toolbar; value = `filteredBills.reduce((s,b) => s + (b.area || 0), 0)` formatted with 2 decimal places
-   - Bill count: add `<div style={{fontSize:'11px', marginTop:'2px'}}>{filteredBills.length} bills</div>` inside Total Bills div
-   - Payment count: add `<div style={{fontSize:'11px', marginTop:'2px'}}>{filteredPayments.length} payments</div>` inside Total Payments div
+1. Create `receiptShare.ts` utility with canvas drawing, watermark, PNG export.
+2. Update ShortcutContext navMap.
+3. Update KeyboardShortcutsModal cheatsheet.
+4. Update ContractorsPage, SFTPage, BillViewPage, PaymentViewPage share handlers.
+5. Update print CSS in index.css.
+6. Update SeriAI GST formula and add Share icon on summary messages.

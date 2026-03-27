@@ -55,6 +55,12 @@ interface LedgerEntry {
   credit: number;
 }
 
+function fmtDateDMY(d: string): string {
+  if (!d) return "";
+  const p = d.split("-");
+  if (p.length === 3 && p[0].length === 4) return `${p[2]}-${p[1]}-${p[0]}`;
+  return d;
+}
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -340,7 +346,7 @@ export default function ReportsPage() {
               : "#E8F5E9";
         return `<tr style="background:${rowBg}">
             <td style="padding:5px 8px;border:1px solid #ddd;text-align:center">${i + 1}</td>
-            <td style="padding:5px 8px;border:1px solid #ddd">${e.date}</td>
+            <td style="padding:5px 8px;border:1px solid #ddd">${fmtDateDMY(e.date)}</td>
             <td style="padding:5px 8px;border:1px solid #ddd">
               <span style="background:${e.type === "BILL" ? "#FFEBEE" : "#E8F5E9"};color:${e.type === "BILL" ? "#D32F2F" : "#28A745"};padding:2px 6px;border-radius:4px;font-size:10px;font-weight:bold">${e.type}</span>
             </td>
@@ -816,7 +822,7 @@ export default function ReportsPage() {
                               {idx + 1}
                             </TableCell>
                             <TableCell className="text-[#555555] whitespace-nowrap">
-                              {entry.date}
+                              {fmtDateDMY(entry.date)}
                             </TableCell>
                             <TableCell>
                               {entry.type === "BILL" ? (

@@ -3,6 +3,7 @@ import { FileDown, Printer, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { useGetAllBills, useGetAllProjects } from "../hooks/useQueries";
 import { formatINR } from "../utils/money";
+import { shareReceiptAsImage } from "../utils/receiptShare";
 
 export default function BillViewPage() {
   const navigate = useNavigate();
@@ -40,22 +41,27 @@ export default function BillViewPage() {
     }
   };
 
-  const handleShare = async () => {
-    try {
-      if (navigator.share && bill && project) {
-        await navigator.share({
-          title: `Bill ${bill.billNumber} - ${project.name}`,
-          text: `Bill Details\nProject: ${project.name}\nBill No: ${bill.billNumber}\nAmount: ${formatINR(bill.amount)}`,
-        });
-        toast.success("Shared successfully");
-      } else if (bill && project) {
-        const text = `Bill Details\nProject: ${project.name}\nClient: ${project.client}\nBill No: ${bill.billNumber}\nDate: ${bill.date}\nAmount: ${formatINR(bill.amount)}`;
-        await navigator.clipboard.writeText(text);
-        toast.success("Bill details copied to clipboard");
-      }
-    } catch (_error) {
-      toast.error("Failed to share");
-    }
+  const handleShare = () => {
+    if (!bill || !project) return;
+    shareReceiptAsImage({
+      title: "Bill Receipt",
+      borderColor: "#FFA500",
+      rows: [
+        ["Project", project.name],
+        ["Client", project.client],
+        ["Bill No", bill.billNumber],
+        ["Date", bill.date],
+        ["Block ID", bill.blockId || ""],
+        ["Description", bill.description],
+        ["Quantity", String(bill.quantity)],
+        ["Unit", bill.unit],
+        ["Unit Price", formatINR(bill.unitPrice)],
+        ["Total Amount", formatINR(bill.amount)],
+        ["GST", bill.includesGst ? "Included (18%)" : "Not Included"],
+        ["Remarks", bill.remarks || ""],
+      ],
+      filename: `bill-${bill.billNumber}.png`,
+    });
   };
 
   if (billsLoading || projectsLoading) {

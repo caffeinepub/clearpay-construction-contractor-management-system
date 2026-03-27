@@ -28,6 +28,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { canManageData } from "@/lib/authAdmin";
 import { formatINR } from "@/utils/money";
+function fmtDateDMY(d: string): string {
+  if (!d) return "";
+  const p = d.split("-");
+  if (p.length === 3 && p[0].length === 4) return `${p[2]}-${p[1]}-${p[0]}`;
+  return d;
+}
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -41,6 +47,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  Share2,
   Trash2,
   X,
 } from "lucide-react";
@@ -606,7 +613,7 @@ export default function PaymentsPage() {
                 .map(
                   (payment) => `
                 <tr class="${payment.amount < 0 ? "negative" : ""}">
-                  <td>${payment.date}</td>
+                  <td>${fmtDateDMY(payment.date)}</td>
                   <td>${getProjectName(payment.projectId)}</td>
                   <td>${payment.paymentMode === PaymentMode.account ? "Account" : "Cash"}</td>
                   <td class="text-right">${formatINR(payment.amount)}</td>
@@ -731,7 +738,7 @@ export default function PaymentsPage() {
                 .map(
                   (payment) => `
                 <tr class="${payment.amount < 0 ? "negative" : ""}">
-                  <td>${payment.date}</td>
+                  <td>${fmtDateDMY(payment.date)}</td>
                   <td>${getProjectName(payment.projectId)}</td>
                   <td>${payment.paymentMode === PaymentMode.account ? "Account" : "Cash"}</td>
                   <td class="text-right">${formatINR(payment.amount)}</td>
@@ -959,7 +966,6 @@ export default function PaymentsPage() {
         onChange={handleFileChange}
         style={{ display: "none" }}
       />
-
       {/* Top Ribbon Toolbar */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
         <div className="px-6 py-3">
@@ -1033,7 +1039,6 @@ export default function PaymentsPage() {
           </div>
         </div>
       </div>
-
       <div className="p-6 space-y-4">
         {/* Show Filters Toggle */}
         <div className="flex items-center">
@@ -1272,7 +1277,7 @@ export default function PaymentsPage() {
                             </TableCell>
                           )}
                           <TableCell className="font-normal text-[#333333] text-sm">
-                            {payment.date}
+                            {fmtDateDMY(payment.date)}
                           </TableCell>
                           <TableCell
                             className="font-normal text-[#333333] text-sm truncate"
@@ -1346,7 +1351,6 @@ export default function PaymentsPage() {
           </CardContent>
         </Card>
       </div>
-
       {/* View Payment Modal - Styled per image 82 (Pic 3) */}
       <Dialog
         open={!!viewPayment}
@@ -1361,26 +1365,43 @@ export default function PaymentsPage() {
             </DialogTitle>
             <div className="flex items-center gap-2">
               {viewPayment && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    printPaymentReceipt({
-                      Date: viewPayment.date,
-                      Project: getProjectName(viewPayment.projectId),
-                      "Payment Mode":
-                        viewPayment.paymentMode === PaymentMode.account
-                          ? "Account"
-                          : "Cash",
-                      "Total Amount": formatINR(viewPayment.amount),
-                      Reference: viewPayment.reference,
-                      Remarks: viewPayment.remarks || "–",
-                    })
-                  }
-                  className="text-[#28A745] hover:text-[#1e7e34] transition-colors"
-                  title="Print Receipt"
-                >
-                  <Printer className="h-5 w-5" />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      printPaymentReceipt({
+                        Date: viewPayment.date,
+                        Project: getProjectName(viewPayment.projectId),
+                        "Payment Mode":
+                          viewPayment.paymentMode === PaymentMode.account
+                            ? "Account"
+                            : "Cash",
+                        "Total Amount": formatINR(viewPayment.amount),
+                        Reference: viewPayment.reference,
+                        Remarks: viewPayment.remarks || "–",
+                      })
+                    }
+                    className="text-[#28A745] hover:text-[#1e7e34] transition-colors"
+                    title="Print Receipt"
+                  >
+                    <Printer className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = `Payment No: ${viewPayment!.reference || ""}\nProject: ${getProjectName(viewPayment!.projectId)}\nDate: ${fmtDateDMY(viewPayment!.date)}\nAmount: ${formatINR(viewPayment!.amount)}`;
+                      if (navigator.share)
+                        navigator.share({ title: "Payment Receipt", text });
+                      else {
+                        navigator.clipboard.writeText(text);
+                      }
+                    }}
+                    className="text-[#555555] hover:text-[#333333] transition-colors"
+                    title="Share Receipt"
+                  >
+                    <Share2 className="h-5 w-5" />
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1406,7 +1427,7 @@ export default function PaymentsPage() {
                 <div>
                   <span className="font-bold text-[#333333]">Date:</span>
                   <span className="ml-2 font-normal text-[#555555]">
-                    {viewPayment.date}
+                    {fmtDateDMY(viewPayment.date)}
                   </span>
                 </div>
                 <div>
@@ -1455,8 +1476,6 @@ export default function PaymentsPage() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Payment Form Dialog */}
       <Dialog
         open={isFormOpen}
         onOpenChange={(open) => {
@@ -1616,47 +1635,39 @@ export default function PaymentsPage() {
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Edit Password Modal */}
-      {canManage && (
-        <PasswordConfirmModal
-          open={showEditPasswordDialog}
-          onOpenChange={setShowEditPasswordDialog}
-          onConfirm={confirmEdit}
-          title="Confirm Edit"
-          description="Please enter your password to confirm payment update."
-          confirmText="Confirm Update"
-          isPending={updatePayment.isPending}
-        />
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {canManage && (
-        <PasswordConfirmModal
-          open={!!deleteConfirmPayment}
-          onOpenChange={(open) => {
-            if (!open) setDeleteConfirmPayment(null);
-          }}
-          onConfirm={confirmDelete}
-          title="Confirm Delete"
-          description="Are you sure you want to delete this payment? This action cannot be undone."
-          confirmText="Delete Payment"
-          isPending={deletePayment.isPending}
-        />
-      )}
-
-      {/* Bulk Delete Confirmation Modal */}
-      {canManage && (
-        <PasswordConfirmModal
-          open={showBulkDeleteDialog}
-          onOpenChange={setShowBulkDeleteDialog}
-          onConfirm={handleBulkDelete}
-          title="Confirm Bulk Delete"
-          description={`Are you sure you want to delete ${selectedPayments.length} selected payment(s)? This action cannot be undone.`}
-          confirmText="Delete Payments"
-          isPending={bulkDeletePayments.isPending}
-        />
-      )}
+      canManage && (
+      <PasswordConfirmModal
+        open={showEditPasswordDialog}
+        onOpenChange={setShowEditPasswordDialog}
+        onConfirm={confirmEdit}
+        title="Confirm Edit"
+        description="Please enter your password to confirm payment update."
+        confirmText="Confirm Update"
+        isPending={updatePayment.isPending}
+      />
+      )canManage && (
+      <PasswordConfirmModal
+        open={!!deleteConfirmPayment}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirmPayment(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Confirm Delete"
+        description="Are you sure you want to delete this payment? This action cannot be undone."
+        confirmText="Delete Payment"
+        isPending={deletePayment.isPending}
+      />
+      )canManage && (
+      <PasswordConfirmModal
+        open={showBulkDeleteDialog}
+        onOpenChange={setShowBulkDeleteDialog}
+        onConfirm={handleBulkDelete}
+        title="Confirm Bulk Delete"
+        description={`Are you sure you want to delete ${selectedPayments.length} selected payment(s)? This action cannot be undone.`}
+        confirmText="Delete Payments"
+        isPending={bulkDeletePayments.isPending}
+      />
+      )
     </div>
   );
 }

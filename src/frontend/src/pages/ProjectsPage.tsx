@@ -35,6 +35,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+function fmtDateDMY(d: string): string {
+  if (!d) return "";
+  const p = d.split("-");
+  if (p.length === 3 && p[0].length === 4) return `${p[2]}-${p[1]}-${p[0]}`;
+  return d;
+}
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -47,6 +53,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  Share2,
   Trash2,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -878,7 +885,7 @@ export default function ProjectsPage() {
                         {project.name}
                       </TableCell>
                       <TableCell>{project.client}</TableCell>
-                      <TableCell>{project.startDate}</TableCell>
+                      <TableCell>{fmtDateDMY(project.startDate)}</TableCell>
                       <TableCell>{formatCurrency(project.unitPrice)}</TableCell>
                       <TableCell>{project.quantity}</TableCell>
                       <TableCell>
@@ -979,33 +986,50 @@ export default function ProjectsPage() {
               Project Details
             </DialogTitle>
             {viewingProject && (
-              <button
-                type="button"
-                onClick={() =>
-                  printProjectReceipt({
-                    "Project Name": viewingProject.name,
-                    Client: viewingProject.client,
-                    "Start Date": viewingProject.startDate || "—",
-                    Location: viewingProject.location || "—",
-                    Contact: viewingProject.contactNumber,
-                    "Unit Price": formatCurrency(viewingProject.unitPrice),
-                    Quantity: String(viewingProject.quantity),
-                    "Estimated Amount": formatCurrency(
-                      viewingProject.estimatedAmount,
-                    ),
-                    Address: viewingProject.address || "—",
-                    Notes: viewingProject.notes || "—",
-                    "Attachment Link 1":
-                      viewingProject.attachmentLinks[0] || "—",
-                    "Attachment Link 2":
-                      viewingProject.attachmentLinks[1] || "—",
-                  })
-                }
-                className="text-[#0078D7] hover:text-[#005a9e] transition-colors"
-                title="Print Receipt"
-              >
-                <Printer className="h-5 w-5" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    printProjectReceipt({
+                      "Project Name": viewingProject.name,
+                      Client: viewingProject.client,
+                      "Start Date": viewingProject.startDate || "—",
+                      Location: viewingProject.location || "—",
+                      Contact: viewingProject.contactNumber,
+                      "Unit Price": formatCurrency(viewingProject.unitPrice),
+                      Quantity: String(viewingProject.quantity),
+                      "Estimated Amount": formatCurrency(
+                        viewingProject.estimatedAmount,
+                      ),
+                      Address: viewingProject.address || "—",
+                      Notes: viewingProject.notes || "—",
+                      "Attachment Link 1":
+                        viewingProject.attachmentLinks[0] || "—",
+                      "Attachment Link 2":
+                        viewingProject.attachmentLinks[1] || "—",
+                    })
+                  }
+                  className="text-[#0078D7] hover:text-[#005a9e] transition-colors"
+                  title="Print Receipt"
+                >
+                  <Printer className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `Project: ${viewingProject!.name}\nClient: ${viewingProject!.client}\nDate: ${fmtDateDMY(viewingProject!.startDate)}\nContact: ${viewingProject!.contactNumber}`;
+                    if (navigator.share)
+                      navigator.share({ title: "Project Details", text });
+                    else {
+                      navigator.clipboard.writeText(text);
+                    }
+                  }}
+                  className="text-[#555555] hover:text-[#333333] transition-colors"
+                  title="Share Details"
+                >
+                  <Share2 className="h-5 w-5" />
+                </button>
+              </>
             )}
           </DialogHeader>
 
@@ -1042,7 +1066,7 @@ export default function ProjectsPage() {
                     Start Date
                   </p>
                   <p className="text-sm text-[#333333]">
-                    {viewingProject.startDate || "—"}
+                    {fmtDateDMY(viewingProject.startDate) || "—"}
                   </p>
                 </div>
                 <div>
@@ -1192,8 +1216,6 @@ export default function ProjectsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* New Project Form Dialog - Two Column Layout */}
       <Dialog
         open={isFormOpen}
         onOpenChange={(open) => {
@@ -1582,8 +1604,6 @@ export default function ProjectsPage() {
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Edit Password Confirmation Dialog */}
       <Dialog
         open={showEditPasswordDialog}
         onOpenChange={setShowEditPasswordDialog}
@@ -1634,8 +1654,6 @@ export default function ProjectsPage() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent className="bg-white rounded-lg shadow-lg max-w-md">
           <AlertDialogHeader>

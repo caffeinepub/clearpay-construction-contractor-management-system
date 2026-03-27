@@ -28,6 +28,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { canManageData } from "@/lib/authAdmin";
 import { formatINR } from "@/utils/money";
+function fmtDateDMY(d: string): string {
+  if (!d) return "";
+  const p = d.split("-");
+  if (p.length === 3 && p[0].length === 4) return `${p[2]}-${p[1]}-${p[0]}`;
+  return d;
+}
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -41,6 +47,7 @@ import {
   Pencil,
   Plus,
   Printer,
+  Share2,
   Trash2,
   X,
 } from "lucide-react";
@@ -702,7 +709,7 @@ export default function BillsPage() {
                 .map(
                   (bill) => `
                 <tr class="${bill.amount < 0 ? "negative" : ""}">
-                  <td>${bill.date}</td>
+                  <td>${fmtDateDMY(bill.date)}</td>
                   <td>${getProjectName(bill.projectId)}</td>
                   <td>${bill.blockId || "–"}</td>
                   <td>${bill.billNumber}</td>
@@ -835,7 +842,7 @@ export default function BillsPage() {
                 .map(
                   (bill) => `
                 <tr class="${bill.amount < 0 ? "negative" : ""}">
-                  <td>${bill.date}</td>
+                  <td>${fmtDateDMY(bill.date)}</td>
                   <td>${getProjectName(bill.projectId)}</td>
                   <td>${bill.blockId || "–"}</td>
                   <td>${bill.billNumber}</td>
@@ -1120,7 +1127,6 @@ export default function BillsPage() {
         onChange={handleFileChange}
         style={{ display: "none" }}
       />
-
       {/* Top Ribbon Toolbar */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
         <div className="px-6 py-3">
@@ -1194,7 +1200,6 @@ export default function BillsPage() {
           </div>
         </div>
       </div>
-
       <div className="p-6 space-y-4">
         {/* Show Filters Toggle */}
         <div className="flex items-center">
@@ -1472,7 +1477,7 @@ export default function BillsPage() {
                             </TableCell>
                           )}
                           <TableCell className="font-normal text-[#333333] text-sm">
-                            {bill.date}
+                            {fmtDateDMY(bill.date)}
                           </TableCell>
                           <TableCell
                             className="font-normal text-[#333333] text-sm truncate"
@@ -1554,7 +1559,6 @@ export default function BillsPage() {
           </CardContent>
         </Card>
       </div>
-
       {/* View Bill Modal - Styled as image 78 */}
       <Dialog
         open={!!viewBill}
@@ -1569,28 +1573,45 @@ export default function BillsPage() {
             </DialogTitle>
             <div className="flex items-center gap-2">
               {viewBill && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    printBillReceipt({
-                      Date: viewBill.date,
-                      Project: getProjectName(viewBill.projectId),
-                      Client: getClientName(viewBill.projectId),
-                      "Bill No": viewBill.billNumber,
-                      "Block ID": viewBill.blockId || "–",
-                      Description: viewBill.description,
-                      Qty: String(viewBill.quantity),
-                      Unit: viewBill.unit,
-                      "Unit Price": formatINR(viewBill.unitPrice),
-                      "Total Amount": formatINR(viewBill.amount),
-                      Remarks: viewBill.remarks || "–",
-                    })
-                  }
-                  className="text-[#FFA500] hover:text-[#e69500] transition-colors"
-                  title="Print Receipt"
-                >
-                  <Printer className="h-5 w-5" />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      printBillReceipt({
+                        Date: viewBill.date,
+                        Project: getProjectName(viewBill.projectId),
+                        Client: getClientName(viewBill.projectId),
+                        "Bill No": viewBill.billNumber,
+                        "Block ID": viewBill.blockId || "–",
+                        Description: viewBill.description,
+                        Qty: String(viewBill.quantity),
+                        Unit: viewBill.unit,
+                        "Unit Price": formatINR(viewBill.unitPrice),
+                        "Total Amount": formatINR(viewBill.amount),
+                        Remarks: viewBill.remarks || "–",
+                      })
+                    }
+                    className="text-[#FFA500] hover:text-[#e69500] transition-colors"
+                    title="Print Receipt"
+                  >
+                    <Printer className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = `Bill No: ${viewBill!.billNumber}\nProject: ${getProjectName(viewBill!.projectId)}\nDate: ${fmtDateDMY(viewBill!.date)}\nAmount: ${formatINR(viewBill!.amount)}`;
+                      if (navigator.share)
+                        navigator.share({ title: "Bill Receipt", text });
+                      else {
+                        navigator.clipboard.writeText(text);
+                      }
+                    }}
+                    className="text-[#555555] hover:text-[#333333] transition-colors"
+                    title="Share Receipt"
+                  >
+                    <Share2 className="h-5 w-5" />
+                  </button>
+                </>
               )}
               <button
                 type="button"
@@ -1616,7 +1637,7 @@ export default function BillsPage() {
                 <div>
                   <span className="font-bold text-[#333333]">Date:</span>
                   <span className="ml-2 font-normal text-[#555555]">
-                    {viewBill.date}
+                    {fmtDateDMY(viewBill.date)}
                   </span>
                 </div>
                 <div>
@@ -1695,8 +1716,6 @@ export default function BillsPage() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Bill Form Dialog */}
       <Dialog
         open={isFormOpen}
         onOpenChange={(open) => {
@@ -1875,47 +1894,39 @@ export default function BillsPage() {
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* Edit Password Modal */}
-      {canManage && (
-        <PasswordConfirmModal
-          open={showEditPasswordDialog}
-          onOpenChange={setShowEditPasswordDialog}
-          onConfirm={confirmEdit}
-          title="Confirm Edit"
-          description="Please enter your password to confirm bill update."
-          confirmText="Confirm Update"
-          isPending={updateBill.isPending}
-        />
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {canManage && (
-        <PasswordConfirmModal
-          open={!!deleteConfirmBill}
-          onOpenChange={(open) => {
-            if (!open) setDeleteConfirmBill(null);
-          }}
-          onConfirm={confirmDelete}
-          title="Confirm Delete"
-          description="Are you sure you want to delete this bill? This action cannot be undone."
-          confirmText="Delete Bill"
-          isPending={deleteBill.isPending}
-        />
-      )}
-
-      {/* Bulk Delete Confirmation Modal */}
-      {canManage && (
-        <PasswordConfirmModal
-          open={showBulkDeleteDialog}
-          onOpenChange={setShowBulkDeleteDialog}
-          onConfirm={handleBulkDelete}
-          title="Confirm Bulk Delete"
-          description={`Are you sure you want to delete ${selectedBills.length} selected bill(s)? This action cannot be undone.`}
-          confirmText="Delete Bills"
-          isPending={bulkDeleteBills.isPending}
-        />
-      )}
+      canManage && (
+      <PasswordConfirmModal
+        open={showEditPasswordDialog}
+        onOpenChange={setShowEditPasswordDialog}
+        onConfirm={confirmEdit}
+        title="Confirm Edit"
+        description="Please enter your password to confirm bill update."
+        confirmText="Confirm Update"
+        isPending={updateBill.isPending}
+      />
+      )canManage && (
+      <PasswordConfirmModal
+        open={!!deleteConfirmBill}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirmBill(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Confirm Delete"
+        description="Are you sure you want to delete this bill? This action cannot be undone."
+        confirmText="Delete Bill"
+        isPending={deleteBill.isPending}
+      />
+      )canManage && (
+      <PasswordConfirmModal
+        open={showBulkDeleteDialog}
+        onOpenChange={setShowBulkDeleteDialog}
+        onConfirm={handleBulkDelete}
+        title="Confirm Bulk Delete"
+        description={`Are you sure you want to delete ${selectedBills.length} selected bill(s)? This action cannot be undone.`}
+        confirmText="Delete Bills"
+        isPending={bulkDeleteBills.isPending}
+      />
+      )
     </div>
   );
 }

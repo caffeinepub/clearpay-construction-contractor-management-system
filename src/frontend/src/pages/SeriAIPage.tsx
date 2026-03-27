@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Info, Send } from "lucide-react";
+import { Info, Send, Share2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PaymentMode } from "../backend";
@@ -14,6 +14,7 @@ import {
   useGetAllProjects,
   useGetCallerUserProfile,
 } from "../hooks/useQueries";
+import { shareReceiptAsImage } from "../utils/receiptShare";
 
 type Message = {
   id: string;
@@ -150,8 +151,10 @@ export default function SeriAIPage() {
     response += "**Payment Split:**\n";
     response += `   • Account: ${formatCurrency(accountTotal)} (${accountPayments.length} payments)\n`;
     response += `   • Cash: ${formatCurrency(cashTotal)} (${cashPayments.length} payments)\n\n`;
+    const outstandingIncGST = positiveOutstanding + gstOutstanding;
     response += `**Outstanding:** ${formatCurrency(positiveOutstanding)}\n\n`;
-    response += `**GST Outstanding (18%):** ${formatCurrency(gstOutstanding)}\n`;
+    response += `**GST Outstanding (18%):** ${formatCurrency(gstOutstanding)}\n\n`;
+    response += `**Outstanding (Including GST):** ${formatCurrency(outstandingIncGST)}\n`;
 
     return response;
   };
@@ -574,14 +577,60 @@ export default function SeriAIPage() {
                           ))}
                         </div>
                       )}
-                    <div
-                      className={`text-xs mt-2 font-body ${
-                        message.role === "user"
-                          ? "text-blue-100"
-                          : "text-gray-500"
-                      }`}
-                    >
-                      {formatTime(message.timestamp)}
+                    <div className="flex items-center justify-between mt-2 gap-2">
+                      <div
+                        className={`text-xs font-body ${
+                          message.role === "user"
+                            ? "text-blue-100"
+                            : "text-gray-500"
+                        }`}
+                      >
+                        {formatTime(message.timestamp)}
+                      </div>
+                      {message.role === "assistant" &&
+                        message.content.includes("Project Summary:") && (
+                          <button
+                            type="button"
+                            title="Share as image"
+                            onClick={() => {
+                              const lines = message.content
+                                .split("\n")
+                                .filter(Boolean);
+                              const rows: [string, string][] = lines
+                                .filter((l) => l.includes(":"))
+                                .map((l) => {
+                                  const idx = l.indexOf(":");
+                                  const key = l
+                                    .slice(0, idx)
+                                    .replace(/[*📊💳💵📋]/gu, "")
+                                    .trim();
+                                  const val = l.slice(idx + 1).trim();
+                                  return [key, val] as [string, string];
+                                })
+                                .filter(([k]) => k.length > 0 && k.length < 40);
+                              shareReceiptAsImage({
+                                title: "Project Summary",
+                                borderColor: "#0078D7",
+                                rows,
+                                filename: "seri-ai-summary.png",
+                              });
+                            }}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "#0078D7",
+                              padding: "2px 4px",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "3px",
+                              fontSize: "11px",
+                            }}
+                          >
+                            <Share2 size={12} />
+                            Share
+                          </button>
+                        )}
                     </div>
                   </div>
                   {message.role === "user" && userProfile && (

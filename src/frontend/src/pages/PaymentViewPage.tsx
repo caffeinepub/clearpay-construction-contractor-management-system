@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { PaymentMode } from "../backend";
 import { useGetAllPayments, useGetAllProjects } from "../hooks/useQueries";
 import { formatINR } from "../utils/money";
+import { shareReceiptAsImage } from "../utils/receiptShare";
 
 export default function PaymentViewPage() {
   const navigate = useNavigate();
@@ -32,22 +33,25 @@ export default function PaymentViewPage() {
     }
   };
 
-  const handleShare = async () => {
-    try {
-      if (navigator.share && payment && project) {
-        await navigator.share({
-          title: `Payment Receipt - ${project.name}`,
-          text: `Payment Details\nProject: ${project.name}\nAmount: ${formatINR(payment.amount)}\nMode: ${payment.paymentMode === PaymentMode.account ? "Account" : "Cash"}`,
-        });
-        toast.success("Shared successfully");
-      } else if (payment && project) {
-        const text = `Payment Details\nProject: ${project.name}\nClient: ${project.client}\nDate: ${payment.date}\nAmount: ${formatINR(payment.amount)}\nMode: ${payment.paymentMode === PaymentMode.account ? "Account" : "Cash"}\nReference: ${payment.reference}`;
-        await navigator.clipboard.writeText(text);
-        toast.success("Payment details copied to clipboard");
-      }
-    } catch (_error) {
-      toast.error("Failed to share");
-    }
+  const handleShare = () => {
+    if (!payment || !project) return;
+    shareReceiptAsImage({
+      title: "Payment Receipt",
+      borderColor: "#28A745",
+      rows: [
+        ["Project", project.name],
+        ["Client", project.client],
+        ["Date", payment.date],
+        ["Amount", formatINR(payment.amount)],
+        [
+          "Mode",
+          payment.paymentMode === PaymentMode.account ? "Account" : "Cash",
+        ],
+        ["Reference", payment.reference || ""],
+        ["Remarks", payment.remarks || ""],
+      ],
+      filename: `payment-${payment.id}.png`,
+    });
   };
 
   if (paymentsLoading || projectsLoading) {

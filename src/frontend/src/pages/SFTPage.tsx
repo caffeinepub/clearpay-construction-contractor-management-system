@@ -34,6 +34,7 @@ import {
   useGetCallerUserProfile,
   useGetCompletedProjectIds,
 } from "../hooks/useQueries";
+import { shareReceiptAsImage } from "../utils/receiptShare";
 
 type SftRecord = {
   id: string;
@@ -79,8 +80,9 @@ function printReceiptSFT(
   const win = window.open("", "_blank", "width=600,height=800");
   if (!win) return;
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>SFT Receipt</title><style>
-    @page{size:A5;margin:10mm}
-    body{font-family:'Century Gothic',Arial,sans-serif;margin:0;padding:0;background:#fff}
+    @page{size:A4 portrait;margin:20mm 15mm}
+    body{font-family:'Century Gothic',Arial,sans-serif;margin:0;padding:0;background:#fff;max-height:148mm;overflow:hidden;position:relative}
+    body::after{content:"ClearPay";position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Century Gothic',Arial,sans-serif;font-size:72pt;font-weight:700;color:#0078D7;opacity:0.10;pointer-events:none;z-index:9999}
     .header{background:#0078D7;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
     .header h1{margin:0;font-size:17px;font-weight:700}
     .body{border:3px solid #0078D7;margin:10px;padding:12px;border-radius:4px}
@@ -91,6 +93,7 @@ function printReceiptSFT(
     td:first-child{font-weight:600;color:#555;width:45%}
     .footer{text-align:center;font-size:10px;color:#888;padding:8px;border-top:1px solid #eee;margin-top:8px}
     .total{background:#0078D7;color:#fff;font-weight:700}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
     <div class="header"><h1>ClearPay – SFT Receipt</h1><small>SFT Module</small></div>
     <div class="body">
@@ -484,16 +487,6 @@ export default function SFTPage() {
             flexWrap: "wrap",
           }}
         >
-          <span
-            style={{
-              fontWeight: 700,
-              fontSize: 18,
-              color: "#0078D7",
-              marginRight: 8,
-            }}
-          >
-            SFT Module
-          </span>
           <button
             type="button"
             onClick={handlePrint}
@@ -1152,13 +1145,28 @@ export default function SFTPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    const data = `Contractor: ${getContractorName(viewRecord.contractorId)}\nProject: ${getProjectName(viewRecord.projectId)}\nBill No: ${viewRecord.billNo}\nTotal SFT: ${fmt(viewRecord.totalSft)}`;
-                    if (navigator.share)
-                      navigator.share({ title: "SFT Receipt", text: data });
-                    else {
-                      navigator.clipboard.writeText(data);
-                      toast.success("Copied to clipboard");
-                    }
+                    shareReceiptAsImage({
+                      title: "SFT Receipt",
+                      borderColor: "#0078D7",
+                      rows: [
+                        [
+                          "Contractor",
+                          getContractorName(viewRecord.contractorId),
+                        ],
+                        ["Project", getProjectName(viewRecord.projectId)],
+                        ["Bill No", viewRecord.billNo],
+                        ["Slab No", viewRecord.slabNo],
+                        ["Footings", fmt(viewRecord.footings)],
+                        ["R/W", fmt(viewRecord.rw)],
+                        ["Columns", fmt(viewRecord.columns)],
+                        ["Beams", fmt(viewRecord.beams)],
+                        ["Slab", fmt(viewRecord.slab)],
+                        ["OHT", fmt(viewRecord.oht)],
+                        ["Total SFT", fmt(viewRecord.totalSft)],
+                        ["Remarks", viewRecord.remarks],
+                      ],
+                      filename: "sft-receipt.png",
+                    });
                   }}
                   style={{
                     background: "#555",

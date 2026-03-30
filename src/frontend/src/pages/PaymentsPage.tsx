@@ -1399,13 +1399,14 @@ export default function PaymentsPage() {
                           ["Payment No", viewPayment.reference || "–"],
                           ["Project", getProjectName(viewPayment.projectId)],
                           ["Date", fmtDateDMY(viewPayment.date)],
-                          ["Amount (INR)", formatINR(viewPayment.amount)],
+                          ["Amount", formatINR(viewPayment.amount)],
                           [
                             "Payment Mode",
                             viewPayment.paymentMode === "account"
                               ? "Account"
                               : "Cash",
                           ],
+                          ["Reference", viewPayment.reference || "–"],
                           ["Remarks", viewPayment.remarks || "–"],
                         ],
                         filename: `payment-${viewPayment.id || "receipt"}.png`,

@@ -3983,9 +3983,19 @@ export default function ContractorsPage() {
                     onClick={() =>
                       shareReceipt("contractor", {
                         Name: cViewItem.name,
-                        "Trade(s)": cViewItem.trades.join(", "),
+                        Trade: cViewItem.trades.join(", "),
                         Project: getProjectName(cViewItem.projectId),
                         Date: fmtDate(cViewItem.date),
+                        "W.O No": cViewItem.woNo || "–",
+                        "Contracting Price": fmtINR(cViewItem.contractingPrice),
+                        Unit: cViewItem.unit,
+                        "Contact No 1": cViewItem.contact1 || "–",
+                        "Contact No 2": cViewItem.contact2 || "–",
+                        "Email ID": cViewItem.email || "–",
+                        "Link 1 - W.O": cViewItem.link1 || "–",
+                        "Link 2": cViewItem.link2 || "–",
+                        Address: cViewItem.address || "–",
+                        Note: cViewItem.note || "–",
                       })
                     }
                   >
@@ -4382,8 +4392,18 @@ export default function ContractorsPage() {
                         Contractor: getContractorName(bViewItem.contractorId),
                         Project: getProjectName(bViewItem.projectId),
                         "Bill No": bViewItem.billNo,
+                        "Block ID": bViewItem.blockId || "–",
                         Date: fmtDate(bViewItem.date),
-                        "Net Amount": fmtINR(bViewItem.amount),
+                        Item: bViewItem.item || "–",
+                        Area: String(bViewItem.area),
+                        Unit: bViewItem.unit,
+                        "Unit Price": fmtINR(bViewItem.unitPrice),
+                        "Work Retention %": `${bViewItem.workRetention || 0}%`,
+                        "Work Retention Amount": fmtINR(
+                          bViewItem.workRetentionAmount || 0,
+                        ),
+                        "Amount (Net)": fmtINR(bViewItem.amount),
+                        Remarks: bViewItem.remarks || "–",
                       })
                     }
                   >
@@ -4639,6 +4659,11 @@ export default function ContractorsPage() {
                         "Payment No": pViewItem.paymentNo,
                         Date: fmtDate(pViewItem.date),
                         Amount: fmtINR(pViewItem.amount),
+                        "Payment Mode":
+                          pViewItem.paymentMode === "account"
+                            ? "Account"
+                            : "Cash",
+                        Remarks: pViewItem.remarks || "–",
                       })
                     }
                   >

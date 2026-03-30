@@ -1027,18 +1027,28 @@ export default function ProjectsPage() {
                         ["Project Name", viewingProject.name],
                         ["Client", viewingProject.client],
                         ["Start Date", fmtDateDMY(viewingProject.startDate)],
-                        ["Contact", viewingProject.contactNumber || "–"],
-                        ["Address", viewingProject.address || "–"],
                         [
                           "Unit Price",
                           formatCurrency(viewingProject.unitPrice),
                         ],
-                        ["Est. Quantity", String(viewingProject.quantity)],
+                        ["Unit", (viewingProject as any).unit || "–"],
+                        ["Estimated Quantity", String(viewingProject.quantity)],
                         [
-                          "Est. Amount",
+                          "Estimated Amount",
                           formatCurrency(viewingProject.estimatedAmount),
                         ],
-                        ["Notes", viewingProject.notes || "–"],
+                        ["Location", viewingProject.location || "–"],
+                        ["Contact Number", viewingProject.contactNumber || "–"],
+                        ["Address", viewingProject.address || "–"],
+                        [
+                          "Attachment 1",
+                          viewingProject.attachmentLinks?.[0] || "–",
+                        ],
+                        [
+                          "Attachment 2",
+                          viewingProject.attachmentLinks?.[1] || "–",
+                        ],
+                        ["Project Note", viewingProject.notes || "–"],
                       ],
                       filename: `project-${viewingProject.name.replace(/\s+/g, "-")}.png`,
                     });

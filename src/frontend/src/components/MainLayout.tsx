@@ -599,29 +599,32 @@ export default function MainLayout() {
           sidebarOpen ? "w-52" : "w-0"
         } bg-white border-r border-border transition-all duration-300 flex flex-col overflow-hidden`}
       >
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center gap-3 mb-3">
+        <div className="p-4 border-b border-border">
+          <div className="flex items-center gap-2">
             <img
               src="/assets/logo mkt.png"
               alt="ClearPay Logo"
-              className="h-10 w-10"
+              className="h-10 w-10 flex-shrink-0"
             />
-            <div className="text-2xl font-bold">
-              <span className="text-[#0078D7] font-bold">Clear</span>
-              <span className="text-[#555555] font-bold">Pay</span>
+            <div className="flex flex-col min-w-0">
+              <div className="text-xl font-bold leading-tight">
+                <span className="text-[#0078D7] font-bold">Clear</span>
+                <span className="text-[#555555] font-bold">Pay</span>
+              </div>
+              <div
+                style={{
+                  fontWeight: 700,
+                  fontSize: "10px",
+                  color: "#666",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  lineHeight: "1.2",
+                }}
+              >
+                Billing Management System
+              </div>
             </div>
-          </div>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: "9px",
-              color: "#888",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            Billing Management System
           </div>
         </div>
 

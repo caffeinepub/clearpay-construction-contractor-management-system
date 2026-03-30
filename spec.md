@@ -1,29 +1,35 @@
-# ClearPay
+# ClearPay – PayGo Mode (Part 1)
 
 ## Current State
-ContractorsPage has Bills Format download missing Gross Amount column and using old "Amount (INR)" name. Import CSV for Contractors/Bills/Payments silently fails (wrong argument counts, mismatched header names, no feedback). receiptShare.ts has a maxRows cap that truncates data. Sidebar tagline wraps to two lines and copyright wraps.
+The app is ClearPay, a construction billing management system with modules: Dashboard, Analytics, Projects, Bills, Payments, Contractors, SFT, Reports, Seri AI, Users. All inside MainLayout.tsx with a sidebar navigation.
 
 ## Requested Changes (Diff)
 
 ### Add
-- "Gross Amount" column header in Bills Format download (after Unit Price)
-- Toast notifications for import CSV success/errors
-- Dynamic canvas height in receiptShare.ts so all rows render
+- A mode switcher toggle at the top of the sidebar allowing switching between "ClearPay" and "PayGo" modes
+- When PayGo mode is selected, the sidebar branding changes to "PayGo" with its own color/logo treatment
+- PayGo mode has its own separate set of modules: Dashboard, Analytics, Projects, Contractors, Payments, Reports, Users, AI Chatbot
+- PayGo Dashboard page (new): Summary cards (Total Bills, Completed Payments, Pending Payments) with graphs and filters
+- PayGo Projects page (new): Create and manage project details (same fields as ClearPay projects)
+- PayGo Contractors page (new): Manage contractor info (name, trade, project, pricing, contact)
+- PayGo Payments page (new): Track payments against bills (partial and full), with filters
+- PayGo data is fully isolated from ClearPay data – separate state, no shared data
+- PayGo uses a green accent color (#28A745) to visually differentiate from ClearPay's blue (#0078D7)
 
 ### Modify
-- Bills Format: rename "Amount (INR)" → "Net Amount"; add "Gross Amount" after "Unit Price"
-- Bills Import CSV: fix format headers to match import field names (ContractorId, ProjectId, BillNo, BlockId, Date, Item, Area, Unit, UnitPrice, WRPercent, Remarks); pass all 12 args to addContractorBill
-- Contractors Import CSV: add WoNo to format headers and pass as 14th arg to addContractor
-- Payments Import CSV: format already mostly correct, add error toast, ensure paymentNo is handled
-- receiptShare.ts: compute canvas height dynamically from row count (no maxRows truncation)
-- Sidebar "Billing Management System": single bold line, font-size ~9px, nowrap
-- Sidebar "© 2025 ClearPay. Powered by Seri AI.": single line, font-size ~9px, nowrap
-- Sidebar "ClearPay" text: bold, same existing blue/grey colors
+- MainLayout.tsx: Add appMode state ('clearpay' | 'paygo'), mode switcher UI, conditional sidebar nav and page rendering based on mode
+- NavigationContext.tsx: Add PayGo pages to the Page type
 
 ### Remove
-- Fixed maxRows limit in receiptShare.ts
+- Nothing removed from existing ClearPay functionality
 
 ## Implementation Plan
-1. ContractorsPage.tsx: fix Bills format headers (add Gross Amount, rename Amount→Net Amount), fix all three importCSV call sites with correct field names and arg counts, add toast for import success/error
-2. receiptShare.ts: remove maxRows cap, compute canvas H dynamically based on number of rows
-3. MainLayout.tsx: fix sidebar tagline and copyright to single lines with smaller font, ensure ClearPay is bold
+1. Add PayGo page type values to NavigationContext
+2. Create PayGoContext or appMode state in MainLayout
+3. Add mode switcher toggle UI at top of sidebar (tabs or toggle buttons)
+4. Create PayGoDashboardPage.tsx with summary cards and simple bar chart
+5. Create PayGoProjectsPage.tsx with add/edit/delete project table
+6. Create PayGoContractorsPage.tsx with contractor management table
+7. Create PayGoPaymentsPage.tsx with payment tracking table
+8. Modify MainLayout to render PayGo pages when in PayGo mode
+9. PayGo data stored in local state (no backend changes needed for Part 1)

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Page, useNavigation } from "../context/NavigationContext";
+import { PayGoProvider } from "../context/PayGoContext";
 import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useMasterAdmin } from "../hooks/useMasterAdmin";
@@ -35,6 +36,14 @@ import AnalyticsPage from "../pages/AnalyticsPage";
 import BillsPage from "../pages/BillsPage";
 import ContractorsPage from "../pages/ContractorsPage";
 import DashboardPage from "../pages/DashboardPage";
+import PayGoAIPage from "../pages/PayGoAIPage";
+import PayGoAnalyticsPage from "../pages/PayGoAnalyticsPage";
+import PayGoContractorsPage from "../pages/PayGoContractorsPage";
+import PayGoDashboardPage from "../pages/PayGoDashboardPage";
+import PayGoPaymentsPage from "../pages/PayGoPaymentsPage";
+import PayGoProjectsPage from "../pages/PayGoProjectsPage";
+import PayGoReportsPage from "../pages/PayGoReportsPage";
+import PayGoUsersPage from "../pages/PayGoUsersPage";
 import PaymentsPage from "../pages/PaymentsPage";
 import ProjectsPage from "../pages/ProjectsPage";
 import ReportsPage from "../pages/ReportsPage";
@@ -43,6 +52,17 @@ import SeriAIPage from "../pages/SeriAIPage";
 import UsersPage from "../pages/UsersPage";
 import { AppHeader } from "./AppHeader";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
+
+type AppMode = "clearpay" | "paygo";
+type PayGoPage =
+  | "pg-dashboard"
+  | "pg-analytics"
+  | "pg-projects"
+  | "pg-contractors"
+  | "pg-payments"
+  | "pg-reports"
+  | "pg-users"
+  | "pg-ai";
 
 type TickerMessage = { id: string; html: string };
 
@@ -70,11 +90,6 @@ const FONT_SIZES = [
   "48",
 ];
 
-/**
- * Applies an inline CSS property to the currently selected text inside
- * the editor by wrapping it in a <span style="...">.
- * Falls back to execCommand for bold/italic/underline/color.
- */
 function applyStyleToSelection(
   property: "fontFamily" | "fontSize" | "color",
   value: string,
@@ -89,8 +104,6 @@ function applyStyleToSelection(
   else if (property === "color") span.style.color = value;
 
   try {
-    // surroundContents fails if selection crosses element boundaries;
-    // in that case extract + re-insert
     range.surroundContents(span);
   } catch {
     const fragment = range.extractContents();
@@ -98,7 +111,6 @@ function applyStyleToSelection(
     range.insertNode(span);
   }
 
-  // Re-select the wrapped span so further formatting stacks
   const newRange = document.createRange();
   newRange.selectNodeContents(span);
   sel.removeAllRanges();
@@ -171,7 +183,6 @@ function RichToolbar({
         alignItems: "center",
       }}
     >
-      {/* Font Name — applies inline fontFamily via span */}
       <select
         value={fontName}
         onChange={handleFontName}
@@ -190,7 +201,6 @@ function RichToolbar({
         ))}
       </select>
 
-      {/* Font Size — applies inline fontSize via span */}
       <select
         value={fontSize}
         onChange={handleFontSize}
@@ -204,10 +214,8 @@ function RichToolbar({
         ))}
       </select>
 
-      {/* Separator */}
       <span style={{ width: "1px", height: "20px", background: "#ccc" }} />
 
-      {/* Bold */}
       <button
         type="button"
         onMouseDown={(e) => {
@@ -220,7 +228,6 @@ function RichToolbar({
         B
       </button>
 
-      {/* Italic */}
       <button
         type="button"
         onMouseDown={(e) => {
@@ -233,7 +240,6 @@ function RichToolbar({
         I
       </button>
 
-      {/* Underline */}
       <button
         type="button"
         onMouseDown={(e) => {
@@ -246,10 +252,8 @@ function RichToolbar({
         U
       </button>
 
-      {/* Separator */}
       <span style={{ width: "1px", height: "20px", background: "#ccc" }} />
 
-      {/* Text Color — applies inline color via span */}
       <label
         style={{
           display: "flex",
@@ -285,7 +289,6 @@ function RichToolbar({
         />
       </label>
 
-      {/* Background Color — whole message background */}
       <label
         style={{
           display: "flex",
@@ -323,10 +326,8 @@ function RichToolbar({
         />
       </label>
 
-      {/* Separator */}
       <span style={{ width: "1px", height: "20px", background: "#ccc" }} />
 
-      {/* Clear Formatting */}
       <button
         type="button"
         onMouseDown={(e) => {
@@ -342,13 +343,11 @@ function RichToolbar({
   );
 }
 
-// Helper: extract bgColor from stored html wrapper
 function extractBgColor(html: string): string {
   const match = html.match(/data-ticker-bg="([^"]+)"/);
   return match ? match[1] : "#FFF8E1";
 }
 
-// Helper: extract inner html from stored html (strip wrapper if present)
 function extractInnerHtml(html: string): string {
   const match = html.match(/<span[^>]*data-ticker-bg[^>]*>(.*)<\/span>$/s);
   return match ? match[1] : html;
@@ -359,6 +358,11 @@ export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+
+  // Mode switcher
+  const [appMode, setAppMode] = useState<AppMode>("clearpay");
+  const [paygoCurrentPage, setPaygoCurrentPage] =
+    useState<PayGoPage>("pg-dashboard");
 
   // Ticker state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -427,6 +431,7 @@ export default function MainLayout() {
 
   const isAdmin = isMasterAdmin || userProfile?.role === "admin";
 
+  // ClearPay nav items
   const allNavItems = [
     {
       id: "dashboard" as Page,
@@ -459,12 +464,7 @@ export default function MainLayout() {
       icon: Users,
       shortcut: "Alt+C",
     },
-    {
-      id: "sft" as Page,
-      label: "SFT",
-      icon: Grid3X3,
-      shortcut: "Alt+F",
-    },
+    { id: "sft" as Page, label: "SFT", icon: Grid3X3, shortcut: "Alt+F" },
     {
       id: "users" as Page,
       label: "Users",
@@ -486,12 +486,76 @@ export default function MainLayout() {
     return true;
   });
 
+  // PayGo nav items
+  const allPaygoNavItems = [
+    {
+      id: "pg-dashboard" as PayGoPage,
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      shortcut: "Alt+1",
+    },
+    {
+      id: "pg-analytics" as PayGoPage,
+      label: "Analytics",
+      icon: BarChart3,
+      shortcut: "Alt+2",
+    },
+    {
+      id: "pg-projects" as PayGoPage,
+      label: "Projects",
+      icon: FolderKanban,
+      shortcut: "Alt+3",
+    },
+    {
+      id: "pg-contractors" as PayGoPage,
+      label: "Contractors",
+      icon: Users,
+      shortcut: "Alt+4",
+    },
+    {
+      id: "pg-payments" as PayGoPage,
+      label: "Payments",
+      icon: CreditCard,
+      shortcut: "Alt+5",
+    },
+    {
+      id: "pg-reports" as PayGoPage,
+      label: "Reports",
+      icon: FileBarChart,
+      shortcut: "Alt+6",
+    },
+    {
+      id: "pg-users" as PayGoPage,
+      label: "Users",
+      icon: UserCog,
+      adminOnly: true,
+      shortcut: "Alt+7",
+    },
+    {
+      id: "pg-ai" as PayGoPage,
+      label: "AI Assistant",
+      icon: Bot,
+      shortcut: "Alt+8",
+    },
+  ];
+
+  const paygoNavItems = allPaygoNavItems.filter((item) => {
+    if (item.adminOnly) return isAdmin;
+    return true;
+  });
+
   const handlePageChange = (pageId: Page) => {
     if (pageId === "users" && !isAdmin) {
       setCurrentPage("dashboard");
       return;
     }
     setCurrentPage(pageId);
+  };
+
+  const handleModeSwitch = (mode: AppMode) => {
+    setAppMode(mode);
+    if (mode === "clearpay") setCurrentPage("dashboard");
+    else setPaygoCurrentPage("pg-dashboard");
   };
 
   const openAddDialog = (msg?: TickerMessage) => {
@@ -533,7 +597,31 @@ export default function MainLayout() {
 
   const tickerHtml = messages.map((m) => m.html).join("  &nbsp;&nbsp;  ");
 
+  const renderPayGoPage = () => {
+    switch (paygoCurrentPage) {
+      case "pg-dashboard":
+        return <PayGoDashboardPage />;
+      case "pg-analytics":
+        return <PayGoAnalyticsPage />;
+      case "pg-projects":
+        return <PayGoProjectsPage />;
+      case "pg-contractors":
+        return <PayGoContractorsPage />;
+      case "pg-payments":
+        return <PayGoPaymentsPage />;
+      case "pg-reports":
+        return <PayGoReportsPage />;
+      case "pg-users":
+        return <PayGoUsersPage />;
+      case "pg-ai":
+        return <PayGoAIPage />;
+      default:
+        return <PayGoDashboardPage />;
+    }
+  };
+
   const renderPage = () => {
+    if (appMode === "paygo") return renderPayGoPage();
     if (currentPage === "users" && !isAdmin) return <DashboardPage />;
     switch (currentPage) {
       case "dashboard":
@@ -561,8 +649,17 @@ export default function MainLayout() {
     }
   };
 
-  const getPageTitle = () =>
-    navItems.find((item) => item.id === currentPage)?.label || "Dashboard";
+  const getPageTitle = () => {
+    if (appMode === "paygo") {
+      return (
+        paygoNavItems.find((item) => item.id === paygoCurrentPage)?.label ||
+        "Dashboard"
+      );
+    }
+    return (
+      navItems.find((item) => item.id === currentPage)?.label || "Dashboard"
+    );
+  };
 
   const iconBtnStyle: React.CSSProperties = {
     background: "#0078D7",
@@ -579,378 +676,489 @@ export default function MainLayout() {
     lineHeight: 1,
   };
 
+  const PAYGO_GREEN = "#28A745";
+
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <style>{`
-        @keyframes marquee-rtl {
-          from { transform: translateX(100%); }
-          to   { transform: translateX(-100%); }
-        }
-        .ticker-track {
-          display: inline-block;
-          white-space: nowrap;
-          animation: marquee-rtl 40s linear infinite;
-        }
-      `}</style>
+    <PayGoProvider>
+      <div className="flex h-screen bg-background overflow-hidden">
+        <style>{`
+          @keyframes marquee-rtl {
+            from { transform: translateX(100%); }
+            to   { transform: translateX(-100%); }
+          }
+          .ticker-track {
+            display: inline-block;
+            white-space: nowrap;
+            animation: marquee-rtl 40s linear infinite;
+          }
+        `}</style>
 
-      {/* Sidebar */}
-      <aside
-        className={`${
-          sidebarOpen ? "w-52" : "w-0"
-        } bg-white border-r border-border transition-all duration-300 flex flex-col overflow-hidden`}
-      >
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center gap-2">
-            <img
-              src="/assets/logo mkt.png"
-              alt="ClearPay Logo"
-              className="h-10 w-10 flex-shrink-0"
-            />
-            <div className="flex flex-col min-w-0">
-              <div className="text-xl font-bold leading-tight">
-                <span className="text-[#0078D7] font-bold">Clear</span>
-                <span className="text-[#555555] font-bold">Pay</span>
-              </div>
-              <div
-                style={{
-                  fontWeight: 700,
-                  fontSize: "10px",
-                  color: "#666",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  lineHeight: "1.2",
-                }}
-              >
-                Billing Management System
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <nav className="flex-1 overflow-y-auto py-4">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPage === item.id;
-            return (
+        {/* Sidebar */}
+        <aside
+          className={`${
+            sidebarOpen ? "w-52" : "w-0"
+          } bg-white border-r border-border transition-all duration-300 flex flex-col overflow-hidden`}
+        >
+          {/* Mode Switcher */}
+          <div className="px-3 pt-3 pb-2">
+            <div
+              className="flex rounded-lg overflow-hidden border"
+              style={{
+                borderColor: appMode === "paygo" ? PAYGO_GREEN : "#0078D7",
+              }}
+            >
               <button
                 type="button"
-                key={item.id}
-                onClick={() => handlePageChange(item.id)}
-                className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors font-medium ${
-                  isActive
-                    ? "bg-[#0078D7] text-white"
-                    : "text-[#555555] hover:bg-gray-100"
-                }`}
+                onClick={() => handleModeSwitch("clearpay")}
+                data-ocid="nav.clearpay_toggle"
+                style={{
+                  flex: 1,
+                  padding: "5px 0",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: "none",
+                  background: appMode === "clearpay" ? "#0078D7" : "#f5f5f5",
+                  color: appMode === "clearpay" ? "#fff" : "#888",
+                  transition: "all 0.2s",
+                  fontFamily: "Century Gothic, sans-serif",
+                  letterSpacing: "0.03em",
+                }}
               >
-                <Icon className="h-5 w-5" />
-                <span className="flex-1">{item.label}</span>
+                ClearPay
               </button>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-border">
-          <div
-            style={{
-              fontSize: "9px",
-              color: "#555555",
-              marginBottom: "8px",
-              textAlign: "center",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            © 2025 <strong>ClearPay</strong>. Powered by Seri AI.
-          </div>
-          <Button
-            onClick={handleLogout}
-            variant="outline"
-            className="w-full font-normal"
-            size="sm"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
-          </Button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-border px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              data-ocid="nav.toggle"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <h1 className="text-2xl font-bold text-[#333333]">
-              {getPageTitle()}
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowShortcuts(true)}
-              title="Keyboard Shortcuts (?)"
-              data-ocid="shortcuts.open_modal_button"
-              style={{
-                background: "transparent",
-                border: "1px solid #ddd",
-                borderRadius: "6px",
-                padding: "4px 8px",
-                cursor: "pointer",
-                color: "#555555",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                fontSize: "12px",
-                fontFamily: "'Century Gothic', Arial, sans-serif",
-              }}
-            >
-              <Keyboard size={15} />
-              <span style={{ fontWeight: 600 }}>?</span>
-            </button>
-            <AppHeader />
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-auto bg-gray-50">{renderPage()}</main>
-
-        {/* Footer */}
-        <footer className="bg-white border-t border-border px-4 py-2 flex items-center gap-3 text-sm text-[#555555] font-normal overflow-hidden">
-          <div className="flex items-center gap-2 flex-1 overflow-hidden">
-            {/* + and pencil: ONLY master admin */}
-            {isMasterAdmin && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => openAddDialog()}
-                  title="Add scrolling message"
-                  data-ocid="ticker.open_modal_button"
-                  style={iconBtnStyle}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManageDialogOpen(true)}
-                  title="Manage scrolling messages"
-                  data-ocid="ticker.manage_button"
-                  style={{ ...iconBtnStyle, background: "#555555" }}
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
-              </>
-            )}
-            {/* Scrolling ticker — visible to ALL users */}
-            <div
-              className="overflow-hidden flex-1"
-              style={{
-                position: "relative",
-                background: "#f9f9f9",
-                borderRadius: "4px",
-                padding: "2px 8px",
-                border: "1px solid #e0e0e0",
-                minHeight: "24px",
-              }}
-            >
-              {tickerHtml && (
-                <span
-                  className="ticker-track"
-                  style={{ fontSize: "0.8rem" }}
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: rich text ticker content from admin only
-                  dangerouslySetInnerHTML={{ __html: tickerHtml }}
-                />
-              )}
+              <button
+                type="button"
+                onClick={() => handleModeSwitch("paygo")}
+                data-ocid="nav.paygo_toggle"
+                style={{
+                  flex: 1,
+                  padding: "5px 0",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  border: "none",
+                  background: appMode === "paygo" ? PAYGO_GREEN : "#f5f5f5",
+                  color: appMode === "paygo" ? "#fff" : "#888",
+                  transition: "all 0.2s",
+                  fontFamily: "Century Gothic, sans-serif",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                PayGo
+              </button>
             </div>
           </div>
 
-          <span
-            className="flex-shrink-0 text-right"
-            style={{ fontFamily: "'Consolas', monospace", fontSize: "0.8rem" }}
-          >
-            {currentDateTime.toLocaleDateString("en-GB")}{" "}
-            {currentDateTime.toLocaleTimeString("en-GB")}
-          </span>
-        </footer>
-      </div>
-
-      {/* Add / Edit Dialog */}
-      <Dialog
-        open={addDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setAddDialogOpen(false);
-            setEditingMessage(null);
-            setMsgBgColor("#FFF8E1");
-            if (editorRef.current) editorRef.current.innerHTML = "";
-          }
-        }}
-      >
-        <DialogContent className="max-w-lg" data-ocid="ticker.dialog">
-          <DialogHeader>
-            <DialogTitle>
-              {editingMessage
-                ? "Edit Scrolling Message"
-                : "Add Scrolling Message"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="py-2">
-            <RichToolbar
-              editorRef={editorRef}
-              bgColor={msgBgColor}
-              onBgColorChange={setMsgBgColor}
-            />
-            <div
-              ref={editorRef}
-              contentEditable
-              suppressContentEditableWarning
-              data-ocid="ticker.editor"
-              style={{
-                minHeight: "80px",
-                border: "1px solid #ccc",
-                borderTop: "none",
-                borderRadius: "0 0 4px 4px",
-                padding: "8px 10px",
-                outline: "none",
-                fontSize: "14px",
-                lineHeight: "1.5",
-                fontFamily: "Century Gothic, sans-serif",
-                color: "#333",
-                backgroundColor: msgBgColor,
-              }}
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Select text first, then apply font / size / color from the toolbar
-              above.
-            </p>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAddDialogOpen(false);
-                setEditingMessage(null);
-                setMsgBgColor("#FFF8E1");
-                if (editorRef.current) editorRef.current.innerHTML = "";
-              }}
-              data-ocid="ticker.cancel_button"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveMessage}
-              style={{ background: "#0078D7", color: "#fff" }}
-              data-ocid="ticker.save_button"
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Manage Messages Dialog */}
-      <Dialog open={manageDialogOpen} onOpenChange={setManageDialogOpen}>
-        <DialogContent className="max-w-lg" data-ocid="ticker.manage_dialog">
-          <DialogHeader>
-            <DialogTitle>Manage Scrolling Messages</DialogTitle>
-          </DialogHeader>
-
-          <div className="py-2 space-y-2 max-h-72 overflow-y-auto">
-            {messages.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">
-                No messages saved yet.
-              </p>
-            ) : (
-              messages.map((msg, idx) => {
-                const div = document.createElement("div");
-                div.innerHTML = extractInnerHtml(msg.html);
-                const preview =
-                  (div.textContent || "").slice(0, 60) +
-                  ((div.textContent || "").length > 60 ? "…" : "");
-                const bg = extractBgColor(msg.html);
-                return (
-                  <div
-                    key={msg.id}
-                    className="flex items-center justify-between gap-2 p-2 border border-gray-200 rounded"
-                    style={{ backgroundColor: bg }}
-                  >
-                    <span
-                      className="flex-1 text-sm text-[#333] truncate"
-                      title={div.textContent || ""}
-                    >
-                      {preview}
-                    </span>
-                    <div className="flex gap-1 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setManageDialogOpen(false);
-                          openAddDialog(msg);
-                        }}
-                        title="Edit"
-                        data-ocid={`ticker.edit_button.${idx + 1}`}
-                        style={{
-                          background: "#0078D7",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: "3px",
-                          padding: "3px 8px",
-                          cursor: "pointer",
-                          fontSize: "12px",
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteMessage(msg.id)}
-                        title="Delete"
-                        data-ocid={`ticker.delete_button.${idx + 1}`}
-                        style={{
-                          background: "#D32F2F",
-                          color: "#fff",
-                          border: "none",
-                          borderRadius: "3px",
-                          padding: "3px 8px",
-                          cursor: "pointer",
-                          fontSize: "12px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "3px",
-                        }}
-                      >
-                        <Trash2 style={{ width: "11px", height: "11px" }} />
-                      </button>
+          {/* Branding */}
+          <div className="px-4 pb-3 border-b border-border">
+            <div className="flex items-center gap-2">
+              <img
+                src="/assets/logo mkt.png"
+                alt="Logo"
+                className="h-10 w-10 flex-shrink-0"
+              />
+              <div className="flex flex-col min-w-0">
+                {appMode === "clearpay" ? (
+                  <>
+                    <div className="text-xl font-bold leading-tight">
+                      <span className="text-[#0078D7] font-bold">Clear</span>
+                      <span className="text-[#555555] font-bold">Pay</span>
                     </div>
-                  </div>
-                );
-              })
-            )}
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: "10px",
+                        color: "#666",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        lineHeight: "1.2",
+                      }}
+                    >
+                      Billing Management System
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xl font-bold leading-tight">
+                      <span style={{ color: "#555555" }}>Pay</span>
+                      <span style={{ color: PAYGO_GREEN }}>Go</span>
+                    </div>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: "10px",
+                        color: "#666",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        lineHeight: "1.2",
+                      }}
+                    >
+                      Construction Billing Platform
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setManageDialogOpen(false)}
-              data-ocid="ticker.cancel_button"
+          {/* Navigation */}
+          <nav className="flex-1 overflow-y-auto py-4">
+            {appMode === "clearpay"
+              ? navItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = currentPage === item.id;
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() => handlePageChange(item.id)}
+                      className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-colors font-medium ${
+                        isActive
+                          ? "bg-[#0078D7] text-white"
+                          : "text-[#555555] hover:bg-gray-100"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                      <span className="flex-1">{item.label}</span>
+                    </button>
+                  );
+                })
+              : paygoNavItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = paygoCurrentPage === item.id;
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() => setPaygoCurrentPage(item.id)}
+                      className="w-full flex items-center gap-3 px-6 py-3 text-left transition-colors font-medium"
+                      style={{
+                        background: isActive ? PAYGO_GREEN : "transparent",
+                        color: isActive ? "#fff" : "#555555",
+                      }}
+                    >
+                      <Icon className="h-5 w-5" />
+                      <span className="flex-1">{item.label}</span>
+                    </button>
+                  );
+                })}
+          </nav>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-border">
+            <div
+              style={{
+                fontSize: "9px",
+                color: "#555555",
+                marginBottom: "8px",
+                textAlign: "center",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
             >
-              Close
+              © 2025{" "}
+              <strong>{appMode === "paygo" ? "PayGo" : "ClearPay"}</strong>.
+              Powered by Seri AI.
+            </div>
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              className="w-full font-normal"
+              size="sm"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <KeyboardShortcutsModal
-        open={showShortcuts}
-        onClose={() => setShowShortcuts(false)}
-      />
-    </div>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <header className="bg-white border-b border-border px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                data-ocid="nav.toggle"
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+              <h1
+                className="text-2xl font-bold"
+                style={{ color: appMode === "paygo" ? PAYGO_GREEN : "#333333" }}
+              >
+                {getPageTitle()}
+              </h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowShortcuts(true)}
+                title="Keyboard Shortcuts (?)"
+                data-ocid="shortcuts.open_modal_button"
+                style={{
+                  background: "transparent",
+                  border: "1px solid #ddd",
+                  borderRadius: "6px",
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                  color: "#555555",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontSize: "12px",
+                  fontFamily: "'Century Gothic', Arial, sans-serif",
+                }}
+              >
+                <Keyboard size={15} />
+                <span style={{ fontWeight: 600 }}>?</span>
+              </button>
+              <AppHeader />
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-auto bg-gray-50">
+            {renderPage()}
+          </main>
+
+          {/* Footer */}
+          <footer className="bg-white border-t border-border px-4 py-2 flex items-center gap-3 text-sm text-[#555555] font-normal overflow-hidden">
+            <div className="flex items-center gap-2 flex-1 overflow-hidden">
+              {isMasterAdmin && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => openAddDialog()}
+                    title="Add scrolling message"
+                    data-ocid="ticker.open_modal_button"
+                    style={iconBtnStyle}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManageDialogOpen(true)}
+                    title="Manage scrolling messages"
+                    data-ocid="ticker.manage_button"
+                    style={{ ...iconBtnStyle, background: "#555555" }}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </>
+              )}
+              <div
+                className="overflow-hidden flex-1"
+                style={{
+                  position: "relative",
+                  background: "#f9f9f9",
+                  borderRadius: "4px",
+                  padding: "2px 8px",
+                  border: "1px solid #e0e0e0",
+                  minHeight: "24px",
+                }}
+              >
+                {tickerHtml && (
+                  <span
+                    className="ticker-track"
+                    style={{ fontSize: "0.8rem" }}
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: rich text ticker content from admin only
+                    dangerouslySetInnerHTML={{ __html: tickerHtml }}
+                  />
+                )}
+              </div>
+            </div>
+
+            <span
+              className="flex-shrink-0 text-right"
+              style={{
+                fontFamily: "'Consolas', monospace",
+                fontSize: "0.8rem",
+              }}
+            >
+              {currentDateTime.toLocaleDateString("en-GB")}{" "}
+              {currentDateTime.toLocaleTimeString("en-GB")}
+            </span>
+          </footer>
+        </div>
+
+        {/* Add / Edit Dialog */}
+        <Dialog
+          open={addDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setAddDialogOpen(false);
+              setEditingMessage(null);
+              setMsgBgColor("#FFF8E1");
+              if (editorRef.current) editorRef.current.innerHTML = "";
+            }
+          }}
+        >
+          <DialogContent className="max-w-lg" data-ocid="ticker.dialog">
+            <DialogHeader>
+              <DialogTitle>
+                {editingMessage
+                  ? "Edit Scrolling Message"
+                  : "Add Scrolling Message"}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="py-2">
+              <RichToolbar
+                editorRef={editorRef}
+                bgColor={msgBgColor}
+                onBgColorChange={setMsgBgColor}
+              />
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                data-ocid="ticker.editor"
+                style={{
+                  minHeight: "80px",
+                  border: "1px solid #ccc",
+                  borderTop: "none",
+                  borderRadius: "0 0 4px 4px",
+                  padding: "8px 10px",
+                  outline: "none",
+                  fontSize: "14px",
+                  lineHeight: "1.5",
+                  fontFamily: "Century Gothic, sans-serif",
+                  color: "#333",
+                  backgroundColor: msgBgColor,
+                }}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Select text first, then apply font / size / color from the
+                toolbar above.
+              </p>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAddDialogOpen(false);
+                  setEditingMessage(null);
+                  setMsgBgColor("#FFF8E1");
+                  if (editorRef.current) editorRef.current.innerHTML = "";
+                }}
+                data-ocid="ticker.cancel_button"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveMessage}
+                style={{ background: "#0078D7", color: "#fff" }}
+                data-ocid="ticker.save_button"
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Manage Messages Dialog */}
+        <Dialog open={manageDialogOpen} onOpenChange={setManageDialogOpen}>
+          <DialogContent className="max-w-lg" data-ocid="ticker.manage_dialog">
+            <DialogHeader>
+              <DialogTitle>Manage Scrolling Messages</DialogTitle>
+            </DialogHeader>
+
+            <div className="py-2 space-y-2 max-h-72 overflow-y-auto">
+              {messages.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">
+                  No messages saved yet.
+                </p>
+              ) : (
+                messages.map((msg, idx) => {
+                  const div = document.createElement("div");
+                  div.innerHTML = extractInnerHtml(msg.html);
+                  const preview =
+                    (div.textContent || "").slice(0, 60) +
+                    ((div.textContent || "").length > 60 ? "\u2026" : "");
+                  const bg = extractBgColor(msg.html);
+                  return (
+                    <div
+                      key={msg.id}
+                      className="flex items-center justify-between gap-2 p-2 border border-gray-200 rounded"
+                      style={{ backgroundColor: bg }}
+                    >
+                      <span
+                        className="flex-1 text-sm text-[#333] truncate"
+                        title={div.textContent || ""}
+                      >
+                        {preview}
+                      </span>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManageDialogOpen(false);
+                            openAddDialog(msg);
+                          }}
+                          title="Edit"
+                          data-ocid={`ticker.edit_button.${idx + 1}`}
+                          style={{
+                            background: "#0078D7",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "3px",
+                            padding: "3px 8px",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          title="Delete"
+                          data-ocid={`ticker.delete_button.${idx + 1}`}
+                          style={{
+                            background: "#D32F2F",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "3px",
+                            padding: "3px 8px",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "3px",
+                          }}
+                        >
+                          <Trash2 style={{ width: "11px", height: "11px" }} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setManageDialogOpen(false)}
+                data-ocid="ticker.cancel_button"
+              >
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <KeyboardShortcutsModal
+          open={showShortcuts}
+          onClose={() => setShowShortcuts(false)}
+        />
+      </div>
+    </PayGoProvider>
   );
 }

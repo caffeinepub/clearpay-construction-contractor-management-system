@@ -1,11 +1,7 @@
 /**
  * receiptShare.ts
- * Generates a receipt as a PNG/JPEG image with a ClearPay watermark at 10% opacity,
- * then triggers download or Web Share API.
- *
- * Usage:
- *   shareReceiptAsImage({ title, borderColor, rows, type })
- *   rows: Array of [label, value] pairs
+ * Generates a receipt as a PNG image with the ClearPay logo watermark at 10% opacity.
+ * Canvas size: 2480 × 1754 px (A4 landscape @ 300 DPI)
  */
 
 export interface ReceiptShareOptions {
@@ -29,13 +25,16 @@ export async function shareReceiptAsImage(
     filename = "receipt.png",
   } = options;
 
-  // ── Canvas dimensions (A5 proportions at 96dpi) ──────────────────────────
-  const W = 560;
-  const ROW_H = 32;
-  const HEADER_H = 70;
-  const FOOTER_H = 36;
-  const PADDING = 20;
-  const H = HEADER_H + PADDING + rows.length * ROW_H + PADDING + FOOTER_H;
+  // A4 landscape @ 300 DPI
+  const W = 2480;
+  const HEADER_H = 220;
+  const ROW_H = 80;
+  const PADDING = 60;
+  const minH = 1754;
+  const H = Math.max(
+    minH,
+    HEADER_H + 14 + PADDING + rows.length * ROW_H + PADDING + 8 + 100,
+  );
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -43,87 +42,92 @@ export async function shareReceiptAsImage(
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  // Background
+  // White background
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, W, H);
 
-  // ── Watermark (drawn first so content goes on top) ────────────────────────
-  ctx.save();
-  ctx.globalAlpha = 0.1; // 10% opacity
-  ctx.font = "bold 64px Arial, sans-serif";
-  ctx.fillStyle = "#0078D7";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.translate(W / 2, H / 2);
-  ctx.rotate(-Math.PI / 6); // -30 degrees
-  ctx.fillText("ClearPay", 0, 0);
-  ctx.restore();
+  // ── Logo Watermark (drawn first, behind everything) ───────────────────────
+  await new Promise<void>((resolve) => {
+    const logoImg = new Image();
+    logoImg.onload = () => {
+      ctx.save();
+      ctx.globalAlpha = 0.1;
+      const logoSize = 600;
+      ctx.drawImage(
+        logoImg,
+        (W - logoSize) / 2,
+        (H - logoSize) / 2,
+        logoSize,
+        logoSize,
+      );
+      ctx.restore();
+      resolve();
+    };
+    logoImg.onerror = () => resolve(); // skip if logo not found
+    logoImg.src = "/assets/logo mkt.png";
+  });
 
   // ── Header ────────────────────────────────────────────────────────────────
   ctx.fillStyle = headerBg;
   ctx.fillRect(0, 0, W, HEADER_H);
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 22px 'Century Gothic', Arial, sans-serif";
+  ctx.font = "bold 80px 'Century Gothic', Arial, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText("ClearPay", 20, HEADER_H / 2 - 8);
+  ctx.fillText("ClearPay", 80, HEADER_H / 2 - 25);
 
-  ctx.font = "13px 'Century Gothic', Arial, sans-serif";
+  ctx.font = "46px 'Century Gothic', Arial, sans-serif";
   ctx.globalAlpha = 0.85;
-  ctx.fillText(subtitle, 20, HEADER_H / 2 + 14);
+  ctx.fillText(subtitle, 80, HEADER_H / 2 + 45);
   ctx.globalAlpha = 1.0;
 
-  // Receipt type label (right side)
   ctx.textAlign = "right";
-  ctx.font = "bold 13px 'Century Gothic', Arial, sans-serif";
+  ctx.font = "bold 52px 'Century Gothic', Arial, sans-serif";
   ctx.fillStyle = "#ffffff";
   ctx.globalAlpha = 0.9;
-  ctx.fillText(title, W - 20, HEADER_H / 2);
+  ctx.fillText(title, W - 80, HEADER_H / 2);
   ctx.globalAlpha = 1.0;
 
-  // ── Border accent line ────────────────────────────────────────────────────
+  // ── Border accent below header ────────────────────────────────────────────
   ctx.fillStyle = borderColor;
-  ctx.fillRect(0, HEADER_H, W, 4);
+  ctx.fillRect(0, HEADER_H, W, 14);
 
   // ── Rows ──────────────────────────────────────────────────────────────────
-  const rowsY = HEADER_H + 4 + PADDING;
-  ctx.font = "13px 'Century Gothic', Arial, sans-serif";
+  const rowsY = HEADER_H + 14 + PADDING;
 
   rows.forEach(([label, value], i) => {
     const y = rowsY + i * ROW_H;
-    // Alternating row background
     if (i % 2 === 0) {
       ctx.fillStyle = "#f5f5f5";
       ctx.fillRect(0, y, W, ROW_H);
     }
-    // Label
     ctx.fillStyle = "#555555";
-    ctx.font = "bold 12px 'Century Gothic', Arial, sans-serif";
+    ctx.font = "bold 36px 'Century Gothic', Arial, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, 20, y + ROW_H / 2);
-    // Value
+    ctx.fillText(label, 80, y + ROW_H / 2);
+
     ctx.fillStyle = "#333333";
-    ctx.font = "12px 'Century Gothic', Arial, sans-serif";
+    ctx.font = "36px 'Century Gothic', Arial, sans-serif";
     ctx.textAlign = "right";
-    ctx.fillText(value || "–", W - 20, y + ROW_H / 2);
+    ctx.fillText(value || "\u2013", W - 80, y + ROW_H / 2);
   });
 
   // ── Bottom border accent ──────────────────────────────────────────────────
   const footerY = rowsY + rows.length * ROW_H + PADDING;
   ctx.fillStyle = borderColor;
-  ctx.fillRect(0, footerY, W, 2);
+  ctx.fillRect(0, footerY, W, 8);
 
   // ── Footer ────────────────────────────────────────────────────────────────
   ctx.fillStyle = "#888888";
-  ctx.font = "11px 'Century Gothic', Arial, sans-serif";
+  ctx.font = "34px 'Century Gothic', Arial, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(
-    "© 2025 ClearPay. Powered by Seri AI.",
+    "\u00A9 2025 ClearPay. Powered by Seri AI.",
     W / 2,
-    footerY + FOOTER_H / 2,
+    Math.min(footerY + 60, H - 40),
   );
 
   // ── Export ────────────────────────────────────────────────────────────────
@@ -142,7 +146,6 @@ export async function shareReceiptAsImage(
         // fall through to download
       }
     }
-    // Fallback: download
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

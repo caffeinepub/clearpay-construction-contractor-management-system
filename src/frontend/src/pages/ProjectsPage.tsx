@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { shareReceiptAsImage } from "../utils/receiptShare";
 function fmtDateDMY(d: string): string {
   if (!d) return "";
   const p = d.split("-");
@@ -1017,12 +1018,30 @@ export default function ProjectsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    const text = `Project: ${viewingProject!.name}\nClient: ${viewingProject!.client}\nDate: ${fmtDateDMY(viewingProject!.startDate)}\nContact: ${viewingProject!.contactNumber}`;
-                    if (navigator.share)
-                      navigator.share({ title: "Project Details", text });
-                    else {
-                      navigator.clipboard.writeText(text);
-                    }
+                    if (!viewingProject) return;
+                    shareReceiptAsImage({
+                      title: "Project Details",
+                      borderColor: "#0078D7",
+                      headerBg: "#0078D7",
+                      rows: [
+                        ["Project Name", viewingProject.name],
+                        ["Client", viewingProject.client],
+                        ["Start Date", fmtDateDMY(viewingProject.startDate)],
+                        ["Contact", viewingProject.contactNumber || "–"],
+                        ["Address", viewingProject.address || "–"],
+                        [
+                          "Unit Price",
+                          formatCurrency(viewingProject.unitPrice),
+                        ],
+                        ["Est. Quantity", String(viewingProject.quantity)],
+                        [
+                          "Est. Amount",
+                          formatCurrency(viewingProject.estimatedAmount),
+                        ],
+                        ["Notes", viewingProject.notes || "–"],
+                      ],
+                      filename: `project-${viewingProject.name.replace(/\s+/g, "-")}.png`,
+                    });
                   }}
                   className="text-[#555555] hover:text-[#333333] transition-colors"
                   title="Share Details"

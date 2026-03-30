@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { canManageData } from "@/lib/authAdmin";
 import { formatINR } from "@/utils/money";
+import { shareReceiptAsImage } from "../utils/receiptShare";
 function fmtDateDMY(d: string): string {
   if (!d) return "";
   const p = d.split("-");
@@ -1389,12 +1390,26 @@ export default function PaymentsPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      const text = `Payment No: ${viewPayment!.reference || ""}\nProject: ${getProjectName(viewPayment!.projectId)}\nDate: ${fmtDateDMY(viewPayment!.date)}\nAmount: ${formatINR(viewPayment!.amount)}`;
-                      if (navigator.share)
-                        navigator.share({ title: "Payment Receipt", text });
-                      else {
-                        navigator.clipboard.writeText(text);
-                      }
+                      if (!viewPayment) return;
+                      shareReceiptAsImage({
+                        title: "Payment Receipt",
+                        borderColor: "#28A745",
+                        headerBg: "#28A745",
+                        rows: [
+                          ["Payment No", viewPayment.reference || "–"],
+                          ["Project", getProjectName(viewPayment.projectId)],
+                          ["Date", fmtDateDMY(viewPayment.date)],
+                          ["Amount (INR)", formatINR(viewPayment.amount)],
+                          [
+                            "Payment Mode",
+                            viewPayment.paymentMode === "account"
+                              ? "Account"
+                              : "Cash",
+                          ],
+                          ["Remarks", viewPayment.remarks || "–"],
+                        ],
+                        filename: `payment-${viewPayment.id || "receipt"}.png`,
+                      });
                     }}
                     className="text-[#555555] hover:text-[#333333] transition-colors"
                     title="Share Receipt"

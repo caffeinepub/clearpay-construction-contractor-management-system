@@ -596,7 +596,7 @@ export default function MainLayout() {
       {/* Sidebar */}
       <aside
         className={`${
-          sidebarOpen ? "w-64" : "w-0"
+          sidebarOpen ? "w-52" : "w-0"
         } bg-white border-r border-border transition-all duration-300 flex flex-col overflow-hidden`}
       >
         <div className="p-6 border-b border-border">
@@ -611,7 +611,16 @@ export default function MainLayout() {
               <span className="text-[#555555] font-bold">Pay</span>
             </div>
           </div>
-          <div className="text-sm text-gray-500" style={{ fontWeight: 400 }}>
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: "9px",
+              color: "#888",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
             Billing Management System
           </div>
         </div>
@@ -639,8 +648,18 @@ export default function MainLayout() {
         </nav>
 
         <div className="p-4 border-t border-border">
-          <div className="text-xs text-[#555555] mb-2 text-center">
-            © 2025 ClearPay. Powered by Seri AI.
+          <div
+            style={{
+              fontSize: "9px",
+              color: "#555555",
+              marginBottom: "8px",
+              textAlign: "center",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            © 2025 <strong>ClearPay</strong>. Powered by Seri AI.
           </div>
           <Button
             onClick={handleLogout}

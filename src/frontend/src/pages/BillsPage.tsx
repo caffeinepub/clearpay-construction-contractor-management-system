@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { canManageData } from "@/lib/authAdmin";
 import { formatINR } from "@/utils/money";
+import { shareReceiptAsImage } from "../utils/receiptShare";
 function fmtDateDMY(d: string): string {
   if (!d) return "";
   const p = d.split("-");
@@ -1599,12 +1600,22 @@ export default function BillsPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      const text = `Bill No: ${viewBill!.billNumber}\nProject: ${getProjectName(viewBill!.projectId)}\nDate: ${fmtDateDMY(viewBill!.date)}\nAmount: ${formatINR(viewBill!.amount)}`;
-                      if (navigator.share)
-                        navigator.share({ title: "Bill Receipt", text });
-                      else {
-                        navigator.clipboard.writeText(text);
-                      }
+                      if (!viewBill) return;
+                      shareReceiptAsImage({
+                        title: "Bill Receipt",
+                        borderColor: "#FFA500",
+                        headerBg: "#FFA500",
+                        rows: [
+                          ["Bill No", viewBill.billNumber],
+                          ["Project", getProjectName(viewBill.projectId)],
+                          ["Block ID", viewBill.blockId || "–"],
+                          ["Date", fmtDateDMY(viewBill.date)],
+                          ["Description", viewBill.description || "–"],
+                          ["Amount (INR)", formatINR(viewBill.amount)],
+                          ["Remarks", viewBill.remarks || "–"],
+                        ],
+                        filename: `bill-${viewBill.billNumber}.png`,
+                      });
                     }}
                     className="text-[#555555] hover:text-[#333333] transition-colors"
                     title="Share Receipt"

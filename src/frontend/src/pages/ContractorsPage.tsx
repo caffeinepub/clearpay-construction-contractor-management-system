@@ -1367,13 +1367,17 @@ export default function ContractorsPage() {
                             row.Link1 || "",
                             row.Link2 || "",
                             row.Note || "",
+                            row.WoNo || "",
                           );
-                        } catch {}
+                        } catch (err) {
+                          toast.error(`Import error: ${err}`);
+                        }
                       });
                       setTimeout(() => {
                         queryClient.invalidateQueries({
                           queryKey: ["contractorsList"],
                         });
+                        toast.success("Contractors imported successfully");
                         e.target.value = "";
                       }, 1500);
                     }}
@@ -1428,6 +1432,7 @@ export default function ContractorsPage() {
                           "Link1",
                           "Link2",
                           "Note",
+                          "WoNo",
                         ],
                         "contractors-format.csv",
                       )
@@ -1920,13 +1925,19 @@ export default function ContractorsPage() {
                           row.Unit || "Sft",
                           Number(row.UnitPrice || 0),
                           row.Remarks || "",
+                          row.BlockId || "",
+                          Number(row.WRPercent || 0),
+                          Number(row.WRAmount || 0),
                         );
-                      } catch {}
+                      } catch (err) {
+                        toast.error(`Import error: ${err}`);
+                      }
                     });
                     setTimeout(() => {
                       queryClient.invalidateQueries({
                         queryKey: ["contractorBillsList"],
                       });
+                      toast.success("Bills imported successfully");
                       e.target.value = "";
                     }, 1500);
                   }}
@@ -1983,18 +1994,19 @@ export default function ContractorsPage() {
                     onClick={() =>
                       downloadFormat(
                         [
-                          "Contractor",
-                          "Project",
-                          "Bill No",
-                          "Block ID",
+                          "ContractorId",
+                          "ProjectId",
+                          "BillNo",
+                          "BlockId",
                           "Date",
                           "Item",
                           "Area",
                           "Unit",
-                          "Unit Price",
-                          "WR %",
-                          "WR Amount ₹",
-                          "Amount (INR)",
+                          "UnitPrice",
+                          "GrossAmount",
+                          "WRPercent",
+                          "WRAmount",
+                          "NetAmount",
                           "Remarks",
                         ],
                         "contractor-bills-format.csv",
@@ -2660,12 +2672,15 @@ export default function ContractorsPage() {
                           row.PaymentMode || "Account",
                           row.Remarks || "",
                         );
-                      } catch {}
+                      } catch (err) {
+                        toast.error(`Import error: ${err}`);
+                      }
                     });
                     setTimeout(() => {
                       queryClient.invalidateQueries({
                         queryKey: ["contractorPaymentsList"],
                       });
+                      toast.success("Payments imported successfully");
                       e.target.value = "";
                     }, 1500);
                   }}

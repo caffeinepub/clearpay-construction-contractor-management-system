@@ -37,6 +37,31 @@ export default function SeriAIPage() {
   const { data: clients = [] } = useGetAllClients();
   const { data: userProfile } = useGetCallerUserProfile();
 
+  const [contractors, setContractors] = useState<any[]>([]);
+  const [contractorBills, setContractorBills] = useState<any[]>([]);
+  const [contractorPayments, setContractorPayments] = useState<any[]>([]);
+  const [sftEntries, setSftEntries] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!actor) return;
+    (actor as any)
+      .listContractors()
+      .then(setContractors)
+      .catch(() => {});
+    (actor as any)
+      .listContractorBills()
+      .then(setContractorBills)
+      .catch(() => {});
+    (actor as any)
+      .listContractorPayments()
+      .then(setContractorPayments)
+      .catch(() => {});
+    (actor as any)
+      .listSftEntries()
+      .then(setSftEntries)
+      .catch(() => {});
+  }, [actor]);
+
   // Initialize chat with backend greeting
   useEffect(() => {
     const initializeChat = async () => {
@@ -91,6 +116,10 @@ export default function SeriAIPage() {
       "payments",
       "outstanding",
       "with gst outstanding",
+      "contractor",
+      "contractors",
+      "sft",
+      "slab",
     ];
 
     // Check for trigger keywords
@@ -394,6 +423,97 @@ export default function SeriAIPage() {
       };
     }
 
+    // Contractors query
+    if (
+      lowerQuery.includes("contractor") ||
+      lowerQuery.includes("contractors")
+    ) {
+      // Check if a specific contractor is named
+      const matchedContractor = contractors.find((c: any) =>
+        lowerQuery.includes((c.name || "").toLowerCase()),
+      );
+      if (matchedContractor) {
+        const cBills = contractorBills.filter(
+          (b: any) =>
+            b.contractorId === matchedContractor.id ||
+            b.contractorName === matchedContractor.name,
+        );
+        const cPayments = contractorPayments.filter(
+          (p: any) =>
+            p.contractorId === matchedContractor.id ||
+            p.contractorName === matchedContractor.name,
+        );
+        const totalGross = cBills.reduce(
+          (s: number, b: any) => s + (b.grossAmount || b.amount || 0),
+          0,
+        );
+        const totalPaid = cPayments.reduce(
+          (s: number, p: any) => s + (p.amount || 0),
+          0,
+        );
+        const outstanding = totalGross - totalPaid;
+        let r = `🏗️ **Contractor: ${matchedContractor.name}**\n\n`;
+        r += `**Trade:** ${matchedContractor.trade || "–"}\n`;
+        r += `**Project:** ${matchedContractor.project || "–"}\n\n`;
+        r += `**Total Bills:** ${cBills.length} bills – ${formatCurrency(totalGross)}\n`;
+        r += `**Total Payments:** ${cPayments.length} payments – ${formatCurrency(totalPaid)}\n`;
+        r += `**Outstanding:** ${formatCurrency(outstanding)}\n`;
+        return { content: r };
+      }
+      // All contractors summary
+      const activeContractors = contractors.filter((c: any) => !c.completed);
+      const totalGrossAll = contractorBills.reduce(
+        (s: number, b: any) => s + (b.grossAmount || b.amount || 0),
+        0,
+      );
+      const totalPaidAll = contractorPayments.reduce(
+        (s: number, p: any) => s + (p.amount || 0),
+        0,
+      );
+      let r = "🏗️ **Contractors Summary**\n\n";
+      r += `**Total Contractors:** ${contractors.length} (${activeContractors.length} active)\n`;
+      r += `**Total Contract Bills:** ${contractorBills.length} – ${formatCurrency(totalGrossAll)}\n`;
+      r += `**Total Payments:** ${contractorPayments.length} – ${formatCurrency(totalPaidAll)}\n`;
+      r += `**Outstanding:** ${formatCurrency(totalGrossAll - totalPaidAll)}\n\n`;
+      if (activeContractors.length > 0) {
+        r += "**Active Contractors:**\n";
+        for (let i = 0; i < Math.min(activeContractors.length, 10); i++) {
+          const c = activeContractors[i] as any;
+          r += `${i + 1}. ${c.name} – ${c.trade || "–"}\n`;
+        }
+      }
+      return { content: r };
+    }
+
+    // SFT query
+    if (lowerQuery.includes("sft") || lowerQuery.includes("slab")) {
+      const totalSFT = sftEntries.reduce(
+        (s: number, e: any) => s + (e.totalSft || 0),
+        0,
+      );
+      // Per-project breakdown
+      const projectMap: Record<string, number> = {};
+      for (const sftEntry of sftEntries) {
+        const pName =
+          (sftEntry as any).project ||
+          (sftEntry as any).projectName ||
+          "Unknown";
+        projectMap[pName] =
+          (projectMap[pName] || 0) + ((sftEntry as any).totalSft || 0);
+      }
+      let r = "📐 **SFT (Slab Form Tracker) Summary**\n\n";
+      r += `**Total Entries:** ${sftEntries.length}\n`;
+      r += `**Total SFT:** ${totalSFT.toFixed(2)} sft\n\n`;
+      const projectEntries = Object.entries(projectMap);
+      if (projectEntries.length > 0) {
+        r += "**Project-wise Breakdown:**\n";
+        for (const [pName, sft] of projectEntries) {
+          r += `• ${pName}: ${sft.toFixed(2)} sft\n`;
+        }
+      }
+      return { content: r };
+    }
+
     // Default ClearPay response
     return {
       content:
@@ -403,12 +523,16 @@ export default function SeriAIPage() {
         "💳 **Payments** - Payment summaries, payment modes\n" +
         "📊 **Outstanding** - Outstanding amounts by project\n" +
         "📋 **GST** - GST calculations (18%) on outstanding amounts\n" +
-        "👥 **Clients** - Client information\n\n" +
+        "👥 **Clients** - Client information\n" +
+        "🏗️ **Contractors** - Contractor bills, payments, outstanding\n" +
+        "📐 **SFT** - Slab Form Tracker entries and totals\n\n" +
         "💡 Try asking:\n" +
         '• "Projects"\n' +
         '• "Outstanding"\n' +
+        '• "Contractors"\n' +
+        '• "SFT"\n' +
         '• "[Project Name] – bills"\n' +
-        '• "[Project Name] – client"',
+        '• "[Contractor Name]"',
     };
   };
 

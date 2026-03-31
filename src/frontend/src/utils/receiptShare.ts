@@ -64,7 +64,7 @@ export async function shareReceiptAsImage(
       resolve();
     };
     logoImg.onerror = () => resolve(); // skip if logo not found
-    logoImg.src = "/assets/logo mkt.png";
+    logoImg.src = "/assets/bms_logo-019d4322-c766-7414-bc34-e217a90db159.png";
   });
 
   // ── Header ────────────────────────────────────────────────────────────────

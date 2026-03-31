@@ -544,6 +544,108 @@ export default function ContractorsPage() {
     [cPayments, rFilter, completedContractorIds, completedProjectIdSet],
   );
 
+  // ── Dynamic filter options (data-driven) ──
+  // Contractors tab: projects that have at least one contractor linked
+  const cProjectOptions = useMemo(() => {
+    const filtered = cFilter.name
+      ? contractors.filter((c) =>
+          c.name.toLowerCase().includes(cFilter.name.toLowerCase()),
+        )
+      : contractors;
+    const ids = [...new Set(filtered.map((c) => c.projectId))].filter(Boolean);
+    return projects.filter((p) => ids.includes(p.id));
+  }, [contractors, projects, cFilter.name]);
+
+  // Bills tab: contractor options from bills data
+  const bContractorOptions = useMemo(() => {
+    const ids = [
+      ...new Set(
+        cBills
+          .filter((b) => !completedContractorIds.has(b.contractorId))
+          .map((b) => b.contractorId),
+      ),
+    ].filter(Boolean);
+    return contractors.filter((c) => ids.includes(c.id));
+  }, [cBills, contractors, completedContractorIds]);
+
+  // Bills tab: project options scoped to selected contractor
+  const bProjectOptions = useMemo(() => {
+    const relevantBills = bFilter.contractorId
+      ? cBills.filter((b) => b.contractorId === bFilter.contractorId)
+      : cBills;
+    const ids = [
+      ...new Set(
+        relevantBills
+          .filter((b) => !completedProjectIdSet.has(b.projectId))
+          .map((b) => b.projectId),
+      ),
+    ].filter(Boolean);
+    return projects.filter((p) => ids.includes(p.id));
+  }, [cBills, projects, bFilter.contractorId, completedProjectIdSet]);
+
+  // Payments tab: contractor options from payments data
+  const pContractorOptions = useMemo(() => {
+    const ids = [
+      ...new Set(
+        cPayments
+          .filter((p) => !completedContractorIds.has(p.contractorId))
+          .map((p) => p.contractorId),
+      ),
+    ].filter(Boolean);
+    return contractors.filter((c) => ids.includes(c.id));
+  }, [cPayments, contractors, completedContractorIds]);
+
+  // Payments tab: project options scoped to selected contractor
+  const pProjectOptions = useMemo(() => {
+    const relevantPayments = pFilter.contractorId
+      ? cPayments.filter((p) => p.contractorId === pFilter.contractorId)
+      : cPayments;
+    const ids = [
+      ...new Set(
+        relevantPayments
+          .filter((p) => !completedProjectIdSet.has(p.projectId))
+          .map((p) => p.projectId),
+      ),
+    ].filter(Boolean);
+    return projects.filter((p) => ids.includes(p.id));
+  }, [cPayments, projects, pFilter.contractorId, completedProjectIdSet]);
+
+  // Reports tab: contractor options from combined bills+payments data
+  const rContractorOptions = useMemo(() => {
+    const billIds = cBills
+      .filter((b) => !completedContractorIds.has(b.contractorId))
+      .map((b) => b.contractorId);
+    const payIds = cPayments
+      .filter((p) => !completedContractorIds.has(p.contractorId))
+      .map((p) => p.contractorId);
+    const ids = [...new Set([...billIds, ...payIds])].filter(Boolean);
+    return contractors.filter((c) => ids.includes(c.id));
+  }, [cBills, cPayments, contractors, completedContractorIds]);
+
+  // Reports tab: project options scoped to selected contractor
+  const rProjectOptions = useMemo(() => {
+    const filteredBills = rFilter.contractorId
+      ? cBills.filter((b) => b.contractorId === rFilter.contractorId)
+      : cBills;
+    const filteredPayments = rFilter.contractorId
+      ? cPayments.filter((p) => p.contractorId === rFilter.contractorId)
+      : cPayments;
+    const billProjIds = filteredBills
+      .filter((b) => !completedProjectIdSet.has(b.projectId))
+      .map((b) => b.projectId);
+    const payProjIds = filteredPayments
+      .filter((p) => !completedProjectIdSet.has(p.projectId))
+      .map((p) => p.projectId);
+    const ids = [...new Set([...billProjIds, ...payProjIds])].filter(Boolean);
+    return projects.filter((p) => ids.includes(p.id));
+  }, [
+    cBills,
+    cPayments,
+    projects,
+    rFilter.contractorId,
+    completedProjectIdSet,
+  ]);
+
   // ── Helpers ──
   const getContractorName = (id: string) =>
     contractors.find((c) => c.id === id)?.name || id;
@@ -1514,7 +1616,7 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Projects</option>
-              {projects.map((p) => (
+              {cProjectOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
@@ -2108,13 +2210,11 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Contractors</option>
-              {contractors
-                .filter((c) => !completedContractorIds.has(c.id))
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              {bContractorOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
             <select
               style={filterStyle}
@@ -2125,13 +2225,11 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Projects</option>
-              {projects
-                .filter((p) => !completedProjectIdSet.has(p.id))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+              {bProjectOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
             <input
               type="date"
@@ -2794,13 +2892,11 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Contractors</option>
-              {contractors
-                .filter((c) => !completedContractorIds.has(c.id))
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              {pContractorOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
             <select
               style={filterStyle}
@@ -2811,13 +2907,11 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Projects</option>
-              {projects
-                .filter((p) => !completedProjectIdSet.has(p.id))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+              {pProjectOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
             <select
               style={filterStyle}
@@ -3345,13 +3439,11 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Contractors</option>
-              {contractors
-                .filter((c) => !completedContractorIds.has(c.id))
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+              {rContractorOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </select>
             <select
               style={filterStyle}
@@ -3362,13 +3454,11 @@ export default function ContractorsPage() {
               data-ocid="contractors.select"
             >
               <option value="">All Projects</option>
-              {projects
-                .filter((p) => !completedProjectIdSet.has(p.id))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+              {rProjectOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
             <input
               type="date"

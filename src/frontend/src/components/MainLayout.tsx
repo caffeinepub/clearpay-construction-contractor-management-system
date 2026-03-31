@@ -754,7 +754,7 @@ export default function MainLayout() {
           <div className="px-4 pb-3 border-b border-border">
             <div className="flex items-center gap-2">
               <img
-                src="/assets/logo mkt.png"
+                src="/assets/bms_logo-019d4322-c766-7414-bc34-e217a90db159.png"
                 alt="Logo"
                 className="h-10 w-10 flex-shrink-0"
               />

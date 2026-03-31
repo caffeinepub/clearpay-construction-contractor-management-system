@@ -76,7 +76,7 @@ export default function AccountLinkPage({
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
             <img
-              src="/assets/logo mkt.png"
+              src="/assets/bms_logo-019d4322-c766-7414-bc34-e217a90db159.png"
               alt="ClearPay Logo"
               className="h-20 w-20"
             />

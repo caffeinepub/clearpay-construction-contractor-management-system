@@ -237,6 +237,165 @@
   }
 }
 
+/* ===== NEON GLOW THEME ===== */
+[data-theme="neon"] {
+  --neon-blue: #00d4ff;
+  --neon-purple: #b829ff;
+  --neon-magenta: #ff2d78;
+  --neon-green: #00ff88;
+  --neon-bg: #05050f;
+  --neon-surface: #0d0d1a;
+  --neon-surface2: #12122a;
+  --neon-border: #1a1a3a;
+  --neon-text: #e0e8ff;
+  --neon-text-muted: #8899bb;
+}
+
+[data-theme="neon"] body,
+[data-theme="neon"] .bg-white,
+[data-theme="neon"] .bg-background {
+  background-color: #05050f !important;
+  color: #e0e8ff !important;
+}
+
+[data-theme="neon"] .bg-gray-50,
+[data-theme="neon"] .bg-gray-100,
+[data-theme="neon"] .bg-muted {
+  background-color: #0d0d1a !important;
+}
+
+[data-theme="neon"] .bg-gray-200 {
+  background-color: #12122a !important;
+}
+
+[data-theme="neon"] aside,
+[data-theme="neon"] [class*="sidebar"],
+[data-theme="neon"] nav {
+  background: linear-gradient(180deg, #05050f 0%, #0a0a1f 100%) !important;
+  border-color: #1a1a3a !important;
+}
+
+[data-theme="neon"] header {
+  background: rgba(5, 5, 15, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  border-color: #1a1a3a !important;
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.08) !important;
+}
+
+[data-theme="neon"] .border,
+[data-theme="neon"] [class*="card"],
+[data-theme="neon"] [class*="Card"] {
+  background: rgba(13, 13, 26, 0.8) !important;
+  backdrop-filter: blur(8px) !important;
+  border-color: #1a1a3a !important;
+}
+
+[data-theme="neon"] table,
+[data-theme="neon"] thead,
+[data-theme="neon"] tbody {
+  background: transparent !important;
+}
+
+[data-theme="neon"] th {
+  background: rgba(0, 212, 255, 0.07) !important;
+  color: #00d4ff !important;
+  border-color: #1a1a3a !important;
+}
+
+[data-theme="neon"] td {
+  border-color: #1a1a3a !important;
+  color: #e0e8ff !important;
+}
+
+[data-theme="neon"] tr:hover td {
+  background: rgba(184, 41, 255, 0.06) !important;
+}
+
+[data-theme="neon"] button[class*="bg-[#0078D7]"],
+[data-theme="neon"] .bg-\[\#0078D7\] {
+  background: linear-gradient(135deg, #00d4ff, #b829ff) !important;
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.4) !important;
+  border: none !important;
+  color: #fff !important;
+}
+
+[data-theme="neon"] button:hover {
+  filter: brightness(1.2) !important;
+}
+
+[data-theme="neon"] .text-gray-600,
+[data-theme="neon"] .text-gray-700,
+[data-theme="neon"] .text-gray-800,
+[data-theme="neon"] .text-gray-900 {
+  color: #e0e8ff !important;
+}
+
+[data-theme="neon"] .text-gray-400,
+[data-theme="neon"] .text-gray-500 {
+  color: #8899bb !important;
+}
+
+[data-theme="neon"] input,
+[data-theme="neon"] select,
+[data-theme="neon"] textarea {
+  background: rgba(13, 13, 26, 0.9) !important;
+  border-color: #1a1a3a !important;
+  color: #e0e8ff !important;
+}
+
+[data-theme="neon"] input:focus,
+[data-theme="neon"] select:focus,
+[data-theme="neon"] textarea:focus {
+  border-color: #00d4ff !important;
+  box-shadow: 0 0 8px rgba(0, 212, 255, 0.3) !important;
+  outline: none !important;
+}
+
+[data-theme="neon"] [role="dialog"],
+[data-theme="neon"] [class*="DialogContent"],
+[data-theme="neon"] [class*="SheetContent"] {
+  background: rgba(10, 10, 28, 0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(0, 212, 255, 0.2) !important;
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.1), 0 0 60px rgba(184, 41, 255, 0.08) !important;
+}
+
+[data-theme="neon"] [data-state="active"],
+[data-theme="neon"] [aria-current="page"] {
+  background: rgba(0, 212, 255, 0.1) !important;
+  color: #00d4ff !important;
+  border-left: 3px solid #00d4ff !important;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.6) !important;
+}
+
+[data-theme="neon"] .border-border,
+[data-theme="neon"] .border-gray-200 {
+  border-color: #1a1a3a !important;
+}
+
+[data-theme="neon"] ::-webkit-scrollbar-track {
+  background: #05050f !important;
+}
+[data-theme="neon"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.2) !important;
+}
+[data-theme="neon"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 212, 255, 0.4) !important;
+}
+
+[data-theme="neon"] .rounded-lg,
+[data-theme="neon"] .rounded-xl {
+  box-shadow: inset 0 0 20px rgba(0, 212, 255, 0.03) !important;
+}
+
+[data-theme="neon"] footer,
+[data-theme="neon"] [class*="footer"] {
+  background: #05050f !important;
+  border-color: #1a1a3a !important;
+  color: #8899bb !important;
+}
+/* ===== END NEON GLOW THEME ===== */
+
 /* Print Styles - Ensure Century Gothic in Exports */
 @page {
   size: A4 portrait;

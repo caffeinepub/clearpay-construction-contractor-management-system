@@ -2205,7 +2205,11 @@ export default function ContractorsPage() {
               style={filterStyle}
               value={bFilter.contractorId}
               onChange={(e) =>
-                setBFilter((f) => ({ ...f, contractorId: e.target.value }))
+                setBFilter((f) => ({
+                  ...f,
+                  contractorId: e.target.value,
+                  projectId: "",
+                }))
               }
               data-ocid="contractors.select"
             >
@@ -2887,7 +2891,11 @@ export default function ContractorsPage() {
               style={filterStyle}
               value={pFilter.contractorId}
               onChange={(e) =>
-                setPFilter((f) => ({ ...f, contractorId: e.target.value }))
+                setPFilter((f) => ({
+                  ...f,
+                  contractorId: e.target.value,
+                  projectId: "",
+                }))
               }
               data-ocid="contractors.select"
             >
@@ -3434,7 +3442,11 @@ export default function ContractorsPage() {
               style={filterStyle}
               value={rFilter.contractorId}
               onChange={(e) =>
-                setRFilter((f) => ({ ...f, contractorId: e.target.value }))
+                setRFilter((f) => ({
+                  ...f,
+                  contractorId: e.target.value,
+                  projectId: "",
+                }))
               }
               data-ocid="contractors.select"
             >

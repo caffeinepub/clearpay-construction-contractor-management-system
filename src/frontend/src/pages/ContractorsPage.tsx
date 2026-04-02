@@ -481,11 +481,17 @@ export default function ContractorsPage() {
   const filteredBills = useMemo(
     () =>
       cBills.filter((b) => {
-        if (completedContractorIds.has(b.contractorId)) return false;
-        if (completedProjectIdSet.has(b.projectId)) return false;
-        if (bFilter.contractorId && b.contractorId !== bFilter.contractorId)
+        if (completedContractorIds.has(b.contractorId?.trim())) return false;
+        if (completedProjectIdSet.has(b.projectId?.trim())) return false;
+        if (
+          bFilter.contractorId &&
+          b.contractorId?.trim() !== bFilter.contractorId.trim()
+        )
           return false;
-        if (bFilter.projectId && b.projectId !== bFilter.projectId)
+        if (
+          bFilter.projectId &&
+          b.projectId?.trim() !== bFilter.projectId.trim()
+        )
           return false;
         if (bFilter.dateFrom && b.date < bFilter.dateFrom) return false;
         if (bFilter.dateTo && b.date > bFilter.dateTo) return false;
@@ -497,11 +503,17 @@ export default function ContractorsPage() {
   const filteredPayments = useMemo(
     () =>
       cPayments.filter((p) => {
-        if (completedContractorIds.has(p.contractorId)) return false;
-        if (completedProjectIdSet.has(p.projectId)) return false;
-        if (pFilter.contractorId && p.contractorId !== pFilter.contractorId)
+        if (completedContractorIds.has(p.contractorId?.trim())) return false;
+        if (completedProjectIdSet.has(p.projectId?.trim())) return false;
+        if (
+          pFilter.contractorId &&
+          p.contractorId?.trim() !== pFilter.contractorId.trim()
+        )
           return false;
-        if (pFilter.projectId && p.projectId !== pFilter.projectId)
+        if (
+          pFilter.projectId &&
+          p.projectId?.trim() !== pFilter.projectId.trim()
+        )
           return false;
         if (pFilter.paymentMode && p.paymentMode !== pFilter.paymentMode)
           return false;
@@ -515,11 +527,17 @@ export default function ContractorsPage() {
   const rFilteredBills = useMemo(
     () =>
       cBills.filter((b) => {
-        if (completedContractorIds.has(b.contractorId)) return false;
-        if (completedProjectIdSet.has(b.projectId)) return false;
-        if (rFilter.contractorId && b.contractorId !== rFilter.contractorId)
+        if (completedContractorIds.has(b.contractorId?.trim())) return false;
+        if (completedProjectIdSet.has(b.projectId?.trim())) return false;
+        if (
+          rFilter.contractorId &&
+          b.contractorId?.trim() !== rFilter.contractorId.trim()
+        )
           return false;
-        if (rFilter.projectId && b.projectId !== rFilter.projectId)
+        if (
+          rFilter.projectId &&
+          b.projectId?.trim() !== rFilter.projectId.trim()
+        )
           return false;
         if (rFilter.dateFrom && b.date < rFilter.dateFrom) return false;
         if (rFilter.dateTo && b.date > rFilter.dateTo) return false;
@@ -531,11 +549,17 @@ export default function ContractorsPage() {
   const rFilteredPayments = useMemo(
     () =>
       cPayments.filter((p) => {
-        if (completedContractorIds.has(p.contractorId)) return false;
-        if (completedProjectIdSet.has(p.projectId)) return false;
-        if (rFilter.contractorId && p.contractorId !== rFilter.contractorId)
+        if (completedContractorIds.has(p.contractorId?.trim())) return false;
+        if (completedProjectIdSet.has(p.projectId?.trim())) return false;
+        if (
+          rFilter.contractorId &&
+          p.contractorId?.trim() !== rFilter.contractorId.trim()
+        )
           return false;
-        if (rFilter.projectId && p.projectId !== rFilter.projectId)
+        if (
+          rFilter.projectId &&
+          p.projectId?.trim() !== rFilter.projectId.trim()
+        )
           return false;
         if (rFilter.dateFrom && p.date < rFilter.dateFrom) return false;
         if (rFilter.dateTo && p.date > rFilter.dateTo) return false;
@@ -561,26 +585,28 @@ export default function ContractorsPage() {
     const ids = [
       ...new Set(
         cBills
-          .filter((b) => !completedContractorIds.has(b.contractorId))
-          .map((b) => b.contractorId),
+          .filter((b) => !completedContractorIds.has(b.contractorId?.trim()))
+          .map((b) => b.contractorId?.trim()),
       ),
     ].filter(Boolean);
-    return contractors.filter((c) => ids.includes(c.id));
+    return contractors.filter((c) => ids.includes(c.id?.trim()));
   }, [cBills, contractors, completedContractorIds]);
 
   // Bills tab: project options scoped to selected contractor
   const bProjectOptions = useMemo(() => {
     const relevantBills = bFilter.contractorId
-      ? cBills.filter((b) => b.contractorId === bFilter.contractorId)
+      ? cBills.filter(
+          (b) => b.contractorId?.trim() === bFilter.contractorId.trim(),
+        )
       : cBills;
     const ids = [
       ...new Set(
         relevantBills
-          .filter((b) => !completedProjectIdSet.has(b.projectId))
-          .map((b) => b.projectId),
+          .filter((b) => !completedProjectIdSet.has(b.projectId?.trim()))
+          .map((b) => b.projectId?.trim()),
       ),
     ].filter(Boolean);
-    return projects.filter((p) => ids.includes(p.id));
+    return projects.filter((p) => ids.includes(p.id?.trim()));
   }, [cBills, projects, bFilter.contractorId, completedProjectIdSet]);
 
   // Payments tab: contractor options from payments data
@@ -588,56 +614,62 @@ export default function ContractorsPage() {
     const ids = [
       ...new Set(
         cPayments
-          .filter((p) => !completedContractorIds.has(p.contractorId))
-          .map((p) => p.contractorId),
+          .filter((p) => !completedContractorIds.has(p.contractorId?.trim()))
+          .map((p) => p.contractorId?.trim()),
       ),
     ].filter(Boolean);
-    return contractors.filter((c) => ids.includes(c.id));
+    return contractors.filter((c) => ids.includes(c.id?.trim()));
   }, [cPayments, contractors, completedContractorIds]);
 
   // Payments tab: project options scoped to selected contractor
   const pProjectOptions = useMemo(() => {
     const relevantPayments = pFilter.contractorId
-      ? cPayments.filter((p) => p.contractorId === pFilter.contractorId)
+      ? cPayments.filter(
+          (p) => p.contractorId?.trim() === pFilter.contractorId.trim(),
+        )
       : cPayments;
     const ids = [
       ...new Set(
         relevantPayments
-          .filter((p) => !completedProjectIdSet.has(p.projectId))
-          .map((p) => p.projectId),
+          .filter((p) => !completedProjectIdSet.has(p.projectId?.trim()))
+          .map((p) => p.projectId?.trim()),
       ),
     ].filter(Boolean);
-    return projects.filter((p) => ids.includes(p.id));
+    return projects.filter((p) => ids.includes(p.id?.trim()));
   }, [cPayments, projects, pFilter.contractorId, completedProjectIdSet]);
 
   // Reports tab: contractor options from combined bills+payments data
   const rContractorOptions = useMemo(() => {
     const billIds = cBills
-      .filter((b) => !completedContractorIds.has(b.contractorId))
-      .map((b) => b.contractorId);
+      .filter((b) => !completedContractorIds.has(b.contractorId?.trim()))
+      .map((b) => b.contractorId?.trim());
     const payIds = cPayments
-      .filter((p) => !completedContractorIds.has(p.contractorId))
-      .map((p) => p.contractorId);
+      .filter((p) => !completedContractorIds.has(p.contractorId?.trim()))
+      .map((p) => p.contractorId?.trim());
     const ids = [...new Set([...billIds, ...payIds])].filter(Boolean);
-    return contractors.filter((c) => ids.includes(c.id));
+    return contractors.filter((c) => ids.includes(c.id?.trim()));
   }, [cBills, cPayments, contractors, completedContractorIds]);
 
   // Reports tab: project options scoped to selected contractor
   const rProjectOptions = useMemo(() => {
     const filteredBills = rFilter.contractorId
-      ? cBills.filter((b) => b.contractorId === rFilter.contractorId)
+      ? cBills.filter(
+          (b) => b.contractorId?.trim() === rFilter.contractorId.trim(),
+        )
       : cBills;
     const filteredPayments = rFilter.contractorId
-      ? cPayments.filter((p) => p.contractorId === rFilter.contractorId)
+      ? cPayments.filter(
+          (p) => p.contractorId?.trim() === rFilter.contractorId.trim(),
+        )
       : cPayments;
     const billProjIds = filteredBills
-      .filter((b) => !completedProjectIdSet.has(b.projectId))
-      .map((b) => b.projectId);
+      .filter((b) => !completedProjectIdSet.has(b.projectId?.trim()))
+      .map((b) => b.projectId?.trim());
     const payProjIds = filteredPayments
-      .filter((p) => !completedProjectIdSet.has(p.projectId))
-      .map((p) => p.projectId);
+      .filter((p) => !completedProjectIdSet.has(p.projectId?.trim()))
+      .map((p) => p.projectId?.trim());
     const ids = [...new Set([...billProjIds, ...payProjIds])].filter(Boolean);
-    return projects.filter((p) => ids.includes(p.id));
+    return projects.filter((p) => ids.includes(p.id?.trim()));
   }, [
     cBills,
     cPayments,

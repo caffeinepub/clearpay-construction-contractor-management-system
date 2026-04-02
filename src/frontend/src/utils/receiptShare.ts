@@ -51,7 +51,7 @@ export async function shareReceiptAsImage(
     const logoImg = new Image();
     logoImg.onload = () => {
       ctx.save();
-      ctx.globalAlpha = 0.1;
+      ctx.globalAlpha = 0.2;
       const logoSize = 600;
       ctx.drawImage(
         logoImg,

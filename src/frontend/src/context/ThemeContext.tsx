@@ -12,15 +12,17 @@ export type AppTheme = "light" | "neon";
 interface ThemeContextValue {
   theme: AppTheme;
   toggleTheme: () => void;
+  setTheme: (theme: AppTheme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "light",
   toggleTheme: () => {},
+  setTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<AppTheme>(() => {
+  const [theme, setThemeState] = useState<AppTheme>(() => {
     try {
       const stored = localStorage.getItem("bms-theme");
       return stored === "neon" ? "neon" : "light";
@@ -44,11 +46,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "light" ? "neon" : "light"));
+    setThemeState((prev) => (prev === "light" ? "neon" : "light"));
+  }, []);
+
+  const setTheme = useCallback((t: AppTheme) => {
+    setThemeState(t);
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );

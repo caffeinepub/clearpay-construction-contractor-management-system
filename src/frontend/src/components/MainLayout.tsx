@@ -357,7 +357,7 @@ function extractInnerHtml(html: string): string {
 }
 
 export default function MainLayout() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const { currentPage, setCurrentPage } = useNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -376,6 +376,20 @@ export default function MainLayout() {
   );
   const [msgBgColor, setMsgBgColor] = useState("#FFF8E1");
   const editorRef = useRef<HTMLDivElement>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleThemeClick = () => {
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      setTheme("neon");
+    } else {
+      clickTimerRef.current = setTimeout(() => {
+        clickTimerRef.current = null;
+        setTheme("light");
+      }, 250);
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentDateTime(new Date()), 1000);
@@ -865,12 +879,8 @@ export default function MainLayout() {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={toggleTheme}
-                  title={
-                    theme === "neon"
-                      ? "Switch to Light Theme"
-                      : "Switch to Neon Glow Theme"
-                  }
+                  onClick={handleThemeClick}
+                  title="Single click = Light | Double click = Neon"
                   data-ocid="header.toggle"
                   style={{
                     padding: "6px 10px",

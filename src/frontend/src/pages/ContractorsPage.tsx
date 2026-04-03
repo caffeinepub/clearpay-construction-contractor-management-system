@@ -119,7 +119,7 @@ function printReceipt(
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title><style>
     @page{size:A4 portrait;margin:20mm 15mm}
     body{font-family:'Century Gothic',Arial,sans-serif;margin:0;padding:0;width:180mm;min-height:148mm;max-height:148mm;background:#fff;position:relative}
-    body::after{content:"ClearPay";position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Century Gothic',Arial,sans-serif;font-size:72pt;font-weight:700;color:#0078D7;opacity:0.10;pointer-events:none;z-index:9999}
+    body::after{content:"";position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:300px;height:300px;background-image:url('/assets/bms_logo-019d48b5-0b82-7546-891d-f56bd7c931f7.png');background-size:contain;background-repeat:no-repeat;background-position:center;opacity:0.20;pointer-events:none;z-index:9999}
     .header{background:#0078D7;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
     .header h1{margin:0;font-size:18px;font-weight:700}
     .header small{font-size:11px;opacity:.85}
@@ -129,12 +129,12 @@ function printReceipt(
     .footer{text-align:center;font-size:10px;color:#888;padding:10px;margin-top:10px;border-top:1px solid #eee}
     @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
-    <div class="header"><h1>ClearPay</h1><small>MKT Constructions</small></div>
+    <div class="header"><h1>BMS</h1><small>MKT Constructions</small></div>
     <div class="body">
       <h2>${title}</h2>
       <table>${rows}</table>
     </div>
-    <div class="footer">© 2025 ClearPay. Powered by Seri AI.</div>
+    <div class="footer">© 2025 BMS. Powered by Seri AI.</div>
   </body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 300);
@@ -684,6 +684,28 @@ export default function ContractorsPage() {
   const getProjectName = (id: string) =>
     projects.find((p) => p.id === id)?.name || id;
 
+  // Resolve contractor name → ID for CSV import
+  const resolveContractorId = (val: string): string => {
+    if (!val) return "";
+    const byId = contractors.find((c) => c.id?.trim() === val.trim());
+    if (byId) return byId.id;
+    const byName = contractors.find(
+      (c) => c.name?.toLowerCase().trim() === val.toLowerCase().trim(),
+    );
+    return byName ? byName.id : val;
+  };
+
+  // Resolve project name → ID for CSV import
+  const resolveProjectId = (val: string): string => {
+    if (!val) return "";
+    const byId = projects.find((p) => p.id?.trim() === val.trim());
+    if (byId) return byId.id;
+    const byName = projects.find(
+      (p) => p.name?.toLowerCase().trim() === val.toLowerCase().trim(),
+    );
+    return byName ? byName.id : val;
+  };
+
   // ── Sort helpers ──
   const mkHandleSort =
     (
@@ -1161,12 +1183,12 @@ export default function ContractorsPage() {
     </style></head>
     <body>
       <div class="header">
-        <div><h1>ClearPay</h1><div class="sub">${title}</div></div>
+        <div><h1>BMS</h1><div class="sub">${title}</div></div>
         <div class="right"><div class="dt">${dateStr} ${timeStr}</div></div>
       </div>
       ${summaryHtml}
       ${tableHtml}
-      <div class="footer">© ${new Date().getFullYear()} ClearPay. Powered by Seri AI.</div>
+      <div class="footer">© ${new Date().getFullYear()} BMS. Powered by Seri AI.</div>
     </body></html>`);
     w.document.close();
     w.focus();
@@ -2050,18 +2072,25 @@ export default function ContractorsPage() {
                     importCSV(f, async (row) => {
                       try {
                         await (actor as any).addContractorBill(
-                          row.ContractorId || "",
-                          row.ProjectId || "",
-                          row.BillNo || "",
+                          resolveContractorId(
+                            row.Contractor || row.ContractorId || "",
+                          ),
+                          resolveProjectId(row.Project || row.ProjectId || ""),
+                          row["Bill No"] || row.BillNo || "",
                           row.Date || "",
                           row.Item || "",
                           Number(row.Area || 0),
                           row.Unit || "Sft",
-                          Number(row.UnitPrice || 0),
+                          Number(row["Unit Price"] || row.UnitPrice || 0),
                           row.Remarks || "",
-                          row.BlockId || "",
-                          Number(row.WRPercent || 0),
-                          Number(row.WRAmount || 0),
+                          row["Block ID"] || row.BlockId || "",
+                          Number(row["WR %"] || row.WRPercent || 0),
+                          Number(
+                            row["WR Amount ₹"] ||
+                              row["WR Amount"] ||
+                              row.WRAmount ||
+                              0,
+                          ),
                         );
                       } catch (err) {
                         toast.error(`Import error: ${err}`);
@@ -2128,19 +2157,19 @@ export default function ContractorsPage() {
                     onClick={() =>
                       downloadFormat(
                         [
-                          "ContractorId",
-                          "ProjectId",
-                          "BillNo",
-                          "BlockId",
+                          "Contractor",
+                          "Project",
+                          "Bill No",
+                          "Block ID",
                           "Date",
                           "Item",
                           "Area",
                           "Unit",
-                          "UnitPrice",
-                          "GrossAmount",
-                          "WRPercent",
-                          "WRAmount",
-                          "NetAmount",
+                          "Unit Price",
+                          "Gross Amount",
+                          "WR %",
+                          "WR Amount ₹",
+                          "Net Amount (INR)",
                           "Remarks",
                         ],
                         "contractor-bills-format.csv",
@@ -2798,8 +2827,10 @@ export default function ContractorsPage() {
                     importCSV(f, async (row) => {
                       try {
                         await (actor as any).addContractorPayment(
-                          row.ContractorId || "",
-                          row.ProjectId || "",
+                          resolveContractorId(
+                            row.Contractor || row.ContractorId || "",
+                          ),
+                          resolveProjectId(row.Project || row.ProjectId || ""),
                           row.PaymentNo || "",
                           row.Date || "",
                           Number(row.Amount || 0),
@@ -2850,8 +2881,8 @@ export default function ContractorsPage() {
                     onClick={() =>
                       downloadFormat(
                         [
-                          "ContractorId",
-                          "ProjectId",
+                          "Contractor",
+                          "Project",
                           "PaymentNo",
                           "Date",
                           "Amount",
@@ -4140,56 +4171,84 @@ export default function ContractorsPage() {
             </div>
           </DialogHeader>
           {cViewItem && (
-            <div className="space-y-2 text-sm py-2">
-              {[
-                { k: "Name", v: cViewItem.name },
-                { k: "Trade(s)", v: cViewItem.trades.join(", ") },
-                { k: "Project", v: getProjectName(cViewItem.projectId) },
-                { k: "Date", v: cViewItem.date },
-                {
-                  k: "Contracting Price",
-                  v: fmtINR(cViewItem.contractingPrice),
-                },
-                { k: "Unit", v: cViewItem.unit },
-                { k: "Contact 1", v: cViewItem.contact1 },
-                { k: "Contact 2", v: cViewItem.contact2 },
-                { k: "Email", v: cViewItem.email },
-                { k: "Address", v: cViewItem.address },
-                { k: "Note", v: cViewItem.note },
-              ].map(({ k, v }) =>
-                v ? (
-                  <div key={k} className="flex gap-2">
-                    <span className="font-bold w-36 flex-shrink-0">{k}:</span>
-                    <span>{v}</span>
+            <div style={{ position: "relative" }}>
+              {/* Watermark overlay */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: "220px",
+                  height: "220px",
+                  backgroundImage:
+                    "url('/assets/bms_logo-019d48b5-0b82-7546-891d-f56bd7c931f7.png')",
+                  backgroundSize: "contain",
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "center",
+                  opacity: 0.2,
+                  pointerEvents: "none",
+                  zIndex: 1,
+                }}
+              />
+              <div
+                className="space-y-2 text-sm py-2"
+                style={{ position: "relative", zIndex: 2 }}
+              >
+                {[
+                  { k: "Name", v: cViewItem.name },
+                  { k: "Trade(s)", v: cViewItem.trades.join(", ") },
+                  { k: "Project", v: getProjectName(cViewItem.projectId) },
+                  { k: "Date", v: cViewItem.date },
+                  {
+                    k: "Contracting Price",
+                    v: fmtINR(cViewItem.contractingPrice),
+                  },
+                  { k: "Unit", v: cViewItem.unit },
+                  { k: "Contact 1", v: cViewItem.contact1 },
+                  { k: "Contact 2", v: cViewItem.contact2 },
+                  { k: "Email", v: cViewItem.email },
+                  { k: "Address", v: cViewItem.address },
+                  { k: "Note", v: cViewItem.note },
+                ].map(({ k, v }) =>
+                  v ? (
+                    <div key={k} className="flex gap-2">
+                      <span className="font-bold w-36 flex-shrink-0">{k}:</span>
+                      <span>{v}</span>
+                    </div>
+                  ) : null,
+                )}
+                {cViewItem.link1 && (
+                  <div className="flex gap-2">
+                    <span className="font-bold w-36 flex-shrink-0">
+                      Link 1:
+                    </span>
+                    <a
+                      href={cViewItem.link1}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#0078D7" }}
+                    >
+                      {cViewItem.link1}
+                    </a>
                   </div>
-                ) : null,
-              )}
-              {cViewItem.link1 && (
-                <div className="flex gap-2">
-                  <span className="font-bold w-36 flex-shrink-0">Link 1:</span>
-                  <a
-                    href={cViewItem.link1}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "#0078D7" }}
-                  >
-                    {cViewItem.link1}
-                  </a>
-                </div>
-              )}
-              {cViewItem.link2 && (
-                <div className="flex gap-2">
-                  <span className="font-bold w-36 flex-shrink-0">Link 2:</span>
-                  <a
-                    href={cViewItem.link2}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: "#0078D7" }}
-                  >
-                    {cViewItem.link2}
-                  </a>
-                </div>
-              )}
+                )}
+                {cViewItem.link2 && (
+                  <div className="flex gap-2">
+                    <span className="font-bold w-36 flex-shrink-0">
+                      Link 2:
+                    </span>
+                    <a
+                      href={cViewItem.link2}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#0078D7" }}
+                    >
+                      {cViewItem.link2}
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -4548,38 +4607,62 @@ export default function ContractorsPage() {
             </div>
           </DialogHeader>
           {bViewItem && (
-            <div className="space-y-2 text-sm py-2">
-              {[
-                {
-                  k: "Contractor",
-                  v: getContractorName(bViewItem.contractorId),
-                },
-                { k: "Project", v: getProjectName(bViewItem.projectId) },
-                { k: "Bill No", v: bViewItem.billNo },
-                { k: "Block ID", v: bViewItem.blockId || "—" },
-                { k: "Date", v: bViewItem.date },
-                { k: "Item", v: bViewItem.item },
-                { k: "Area", v: String(bViewItem.area) },
-                { k: "Unit", v: bViewItem.unit },
-                { k: "Unit Price", v: fmtINR(bViewItem.unitPrice) },
-                {
-                  k: "Work Retention %",
-                  v: `${bViewItem.workRetention || 0}%`,
-                },
-                {
-                  k: "Work Retention Amount",
-                  v: fmtINR(bViewItem.workRetentionAmount || 0),
-                },
-                { k: "Amount (Net)", v: fmtINR(bViewItem.amount) },
-                { k: "Remarks", v: bViewItem.remarks },
-              ].map(({ k, v }) =>
-                v ? (
-                  <div key={k} className="flex gap-2">
-                    <span className="font-bold w-28 flex-shrink-0">{k}:</span>
-                    <span>{v}</span>
-                  </div>
-                ) : null,
-              )}
+            <div style={{ position: "relative" }}>
+              {/* Watermark overlay */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: "220px",
+                  height: "220px",
+                  backgroundImage:
+                    "url('/assets/bms_logo-019d48b5-0b82-7546-891d-f56bd7c931f7.png')",
+                  backgroundSize: "contain",
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "center",
+                  opacity: 0.2,
+                  pointerEvents: "none",
+                  zIndex: 1,
+                }}
+              />
+              <div
+                className="space-y-2 text-sm py-2"
+                style={{ position: "relative", zIndex: 2 }}
+              >
+                {[
+                  {
+                    k: "Contractor",
+                    v: getContractorName(bViewItem.contractorId),
+                  },
+                  { k: "Project", v: getProjectName(bViewItem.projectId) },
+                  { k: "Bill No", v: bViewItem.billNo },
+                  { k: "Block ID", v: bViewItem.blockId || "—" },
+                  { k: "Date", v: bViewItem.date },
+                  { k: "Item", v: bViewItem.item },
+                  { k: "Area", v: String(bViewItem.area) },
+                  { k: "Unit", v: bViewItem.unit },
+                  { k: "Unit Price", v: fmtINR(bViewItem.unitPrice) },
+                  {
+                    k: "Work Retention %",
+                    v: `${bViewItem.workRetention || 0}%`,
+                  },
+                  {
+                    k: "Work Retention Amount",
+                    v: fmtINR(bViewItem.workRetentionAmount || 0),
+                  },
+                  { k: "Amount (Net)", v: fmtINR(bViewItem.amount) },
+                  { k: "Remarks", v: bViewItem.remarks },
+                ].map(({ k, v }) =>
+                  v ? (
+                    <div key={k} className="flex gap-2">
+                      <span className="font-bold w-28 flex-shrink-0">{k}:</span>
+                      <span>{v}</span>
+                    </div>
+                  ) : null,
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -4808,26 +4891,50 @@ export default function ContractorsPage() {
             </div>
           </DialogHeader>
           {pViewItem && (
-            <div className="space-y-2 text-sm py-2">
-              {[
-                {
-                  k: "Contractor",
-                  v: getContractorName(pViewItem.contractorId),
-                },
-                { k: "Project", v: getProjectName(pViewItem.projectId) },
-                { k: "Payment No", v: pViewItem.paymentNo },
-                { k: "Date", v: pViewItem.date },
-                { k: "Amount", v: fmtINR(pViewItem.amount) },
-                { k: "Mode", v: pViewItem.paymentMode },
-                { k: "Remarks", v: pViewItem.remarks },
-              ].map(({ k, v }) =>
-                v ? (
-                  <div key={k} className="flex gap-2">
-                    <span className="font-bold w-28 flex-shrink-0">{k}:</span>
-                    <span>{v}</span>
-                  </div>
-                ) : null,
-              )}
+            <div style={{ position: "relative" }}>
+              {/* Watermark overlay */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: "220px",
+                  height: "220px",
+                  backgroundImage:
+                    "url('/assets/bms_logo-019d48b5-0b82-7546-891d-f56bd7c931f7.png')",
+                  backgroundSize: "contain",
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "center",
+                  opacity: 0.2,
+                  pointerEvents: "none",
+                  zIndex: 1,
+                }}
+              />
+              <div
+                className="space-y-2 text-sm py-2"
+                style={{ position: "relative", zIndex: 2 }}
+              >
+                {[
+                  {
+                    k: "Contractor",
+                    v: getContractorName(pViewItem.contractorId),
+                  },
+                  { k: "Project", v: getProjectName(pViewItem.projectId) },
+                  { k: "Payment No", v: pViewItem.paymentNo },
+                  { k: "Date", v: pViewItem.date },
+                  { k: "Amount", v: fmtINR(pViewItem.amount) },
+                  { k: "Mode", v: pViewItem.paymentMode },
+                  { k: "Remarks", v: pViewItem.remarks },
+                ].map(({ k, v }) =>
+                  v ? (
+                    <div key={k} className="flex gap-2">
+                      <span className="font-bold w-28 flex-shrink-0">{k}:</span>
+                      <span>{v}</span>
+                    </div>
+                  ) : null,
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>

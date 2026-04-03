@@ -64,7 +64,7 @@ export async function shareReceiptAsImage(
       resolve();
     };
     logoImg.onerror = () => resolve(); // skip if logo not found
-    logoImg.src = "/assets/bms_logo-019d4322-c766-7414-bc34-e217a90db159.png";
+    logoImg.src = "/assets/bms_logo-019d48b5-0b82-7546-891d-f56bd7c931f7.png";
   });
 
   // ── Header ────────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export async function shareReceiptAsImage(
   ctx.font = "bold 80px 'Century Gothic', Arial, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText("ClearPay", 80, HEADER_H / 2 - 25);
+  ctx.fillText("BMS", 80, HEADER_H / 2 - 25);
 
   ctx.font = "46px 'Century Gothic', Arial, sans-serif";
   ctx.globalAlpha = 0.85;
@@ -125,7 +125,7 @@ export async function shareReceiptAsImage(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(
-    "\u00A9 2025 ClearPay. Powered by Seri AI.",
+    "\u00A9 2025 BMS. Powered by Seri AI.",
     W / 2,
     Math.min(footerY + 60, H - 40),
   );

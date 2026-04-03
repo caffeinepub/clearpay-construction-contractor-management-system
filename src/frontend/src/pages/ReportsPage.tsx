@@ -314,7 +314,7 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ClearPay_Ledger_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `BMS_Ledger_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -374,7 +374,7 @@ export default function ReportsPage() {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>ClearPay — Ledger Report</title>
+  <title>BMS — Ledger Report</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Century Gothic', Arial, sans-serif; font-size: 11px; color: #333; padding: 20px; }
@@ -401,7 +401,7 @@ export default function ReportsPage() {
 </head>
 <body>
   <div class="header-bar">
-    <h1>ClearPay — Ledger Report</h1>
+    <h1>BMS — Ledger Report</h1>
     <p class="meta">Generated: ${new Date().toLocaleString("en-IN")} &nbsp;|&nbsp; ${filterInfo}</p>
   </div>
 

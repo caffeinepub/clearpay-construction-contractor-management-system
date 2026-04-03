@@ -376,19 +376,8 @@ export default function MainLayout() {
   );
   const [msgBgColor, setMsgBgColor] = useState("#FFF8E1");
   const editorRef = useRef<HTMLDivElement>(null);
-  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const handleThemeClick = () => {
-    if (clickTimerRef.current) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      setTheme("neon");
-    } else {
-      clickTimerRef.current = setTimeout(() => {
-        clickTimerRef.current = null;
-        setTheme("light");
-      }, 250);
-    }
+    setTheme(theme === "neon" ? "light" : "neon");
   };
 
   useEffect(() => {
@@ -880,7 +869,7 @@ export default function MainLayout() {
                 <button
                   type="button"
                   onClick={handleThemeClick}
-                  title="Single click = Light | Double click = Neon"
+                  title="Click to toggle theme (Light / Neon)"
                   data-ocid="header.toggle"
                   style={{
                     padding: "6px 10px",

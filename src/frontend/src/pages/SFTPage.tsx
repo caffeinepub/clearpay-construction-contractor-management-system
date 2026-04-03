@@ -82,7 +82,7 @@ function printReceiptSFT(
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>SFT Receipt</title><style>
     @page{size:A4 portrait;margin:20mm 15mm}
     body{font-family:'Century Gothic',Arial,sans-serif;margin:0;padding:0;background:#fff;max-height:148mm;overflow:hidden;position:relative}
-    body::after{content:"ClearPay";position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-family:'Century Gothic',Arial,sans-serif;font-size:72pt;font-weight:700;color:#0078D7;opacity:0.10;pointer-events:none;z-index:9999}
+    body::after{content:"";position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:300px;height:300px;background-image:url('/assets/bms_logo-019d48b5-0b82-7546-891d-f56bd7c931f7.png');background-size:contain;background-repeat:no-repeat;background-position:center;opacity:0.20;pointer-events:none;z-index:9999}
     .header{background:#0078D7;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
     .header h1{margin:0;font-size:17px;font-weight:700}
     .body{border:3px solid #0078D7;margin:10px;padding:12px;border-radius:4px}
@@ -95,7 +95,7 @@ function printReceiptSFT(
     .total{background:#0078D7;color:#fff;font-weight:700}
     @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
-    <div class="header"><h1>ClearPay – SFT Receipt</h1><small>SFT Module</small></div>
+    <div class="header"><h1>BMS – SFT Receipt</h1><small>SFT Module</small></div>
     <div class="body">
       <h2>SFT Details</h2>
       <table>
@@ -113,7 +113,7 @@ function printReceiptSFT(
         ${record.remarks ? `<tr><td>Remarks</td><td>${record.remarks}</td></tr>` : ""}
       </table>
     </div>
-    <div class="footer">© 2025 ClearPay. Powered by Seri AI.</div>
+    <div class="footer">© 2025 BMS. Powered by Seri AI.</div>
   </body></html>`);
   win.document.close();
   win.focus();
@@ -431,13 +431,13 @@ export default function SFTPage() {
       td{border-bottom:1px solid #e0e0e0}
       .footer{text-align:center;font-size:10px;color:#888;margin-top:12px}
     </style></head><body>
-      <h2 style="color:#0078D7">ClearPay – SFT Report</h2>
+      <h2 style="color:#0078D7">BMS – SFT Report</h2>
       <p style="font-size:12px;color:#555">Total SFT: <strong>${fmt(totalSftSum)}</strong></p>
       <table><thead><tr>
         <th>Contractor</th><th>Bill No</th><th>Slab No</th><th>Project</th>
         <th>Footings</th><th>R/W</th><th>Columns</th><th>Beams</th><th>Slab</th><th>OHT</th><th>Total SFT</th>
       </tr></thead><tbody>${rows}</tbody></table>
-      <div class="footer">© 2025 ClearPay. Powered by Seri AI.</div>
+      <div class="footer">© 2025 BMS. Powered by Seri AI.</div>
     </body></html>`);
     win.document.close();
     win.focus();

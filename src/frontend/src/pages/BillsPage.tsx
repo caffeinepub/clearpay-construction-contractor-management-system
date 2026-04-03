@@ -113,11 +113,12 @@ function printBillReceipt(data: Record<string, string>) {
     .body h2{margin:0 0 10px;color:#FFA500;font-size:14px;font-weight:700;text-transform:uppercase}
     table{width:100%;border-collapse:collapse;font-size:12px}
     .footer{text-align:center;font-size:10px;color:#888;padding:10px;margin-top:10px;border-top:1px solid #eee}
+    body::after{content:"";position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:300px;height:300px;background-image:url('/assets/bms_logo-019d48b5-0b82-7546-891d-f56bd7c931f7.png');background-size:contain;background-repeat:no-repeat;background-position:center;opacity:0.20;pointer-events:none;z-index:9999}
     @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
-    <div class="header"><h1>ClearPay</h1><small>MKT Constructions</small></div>
+    <div class="header"><h1>BMS</h1><small>MKT Constructions</small></div>
     <div class="body"><h2>Bill Receipt</h2><table>${rows}</table></div>
-    <div class="footer">© 2025 ClearPay. Powered by Seri AI.</div>
+    <div class="footer">© 2025 BMS. Powered by Seri AI.</div>
   </body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 300);

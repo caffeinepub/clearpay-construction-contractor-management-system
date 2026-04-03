@@ -394,6 +394,59 @@
   border-color: #1a1a3a !important;
   color: #8899bb !important;
 }
+
+/* Neon theme - aggressive overrides for inline-styled components */
+html[data-theme="neon"] {
+  background-color: #05050f;
+  color: #e0e8ff;
+}
+
+html[data-theme="neon"] body {
+  background-color: #05050f !important;
+  color: #e0e8ff !important;
+}
+
+/* Override main content area */
+html[data-theme="neon"] main,
+html[data-theme="neon"] [role="main"],
+html[data-theme="neon"] .main-content {
+  background-color: #05050f !important;
+  color: #e0e8ff !important;
+}
+
+/* Override inline-styled white background containers */
+html[data-theme="neon"] div[style*="background: #fff"],
+html[data-theme="neon"] div[style*="background: white"],
+html[data-theme="neon"] div[style*="background-color: #fff"],
+html[data-theme="neon"] div[style*="background-color: white"],
+html[data-theme="neon"] div[style*="background:#fff"] {
+  background-color: #0d0d1a !important;
+  color: #e0e8ff !important;
+}
+
+/* Override table rows - keep transparent to show neon colors */
+html[data-theme="neon"] td {
+  background-color: transparent !important;
+  color: #e0e8ff !important;
+}
+
+/* Override inline dark text colors */
+html[data-theme="neon"] span[style*="color: #333"],
+html[data-theme="neon"] span[style*="color:#333"],
+html[data-theme="neon"] div[style*="color: #333"],
+html[data-theme="neon"] div[style*="color:#333"],
+html[data-theme="neon"] span[style*="color: #555"],
+html[data-theme="neon"] span[style*="color:#555"],
+html[data-theme="neon"] div[style*="color: #555"],
+html[data-theme="neon"] div[style*="color:#555"] {
+  color: #e0e8ff !important;
+}
+
+/* Override page wrapper backgrounds with inline styles */
+html[data-theme="neon"] div[style*="minHeight"],
+html[data-theme="neon"] div[style*="min-height"] {
+  background-color: #05050f !important;
+}
 /* ===== END NEON GLOW THEME ===== */
 
 /* Print Styles - Ensure Century Gothic in Exports */

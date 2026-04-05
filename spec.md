@@ -1,71 +1,74 @@
-# BMS – Neon Glow Theme Full Coverage
+# BMS – PayGo New Bill Form with Workflow & Payments Flow
 
 ## Current State
-The app has a working ThemeContext (`/context/ThemeContext.tsx`) that sets `data-theme="neon"` on `document.documentElement` and persists to localStorage. The header toggle button calls `toggleTheme()` with a single click.
 
-A Neon CSS block already exists in `index.css` (lines ~241–450), covering:
-- body, bg-white, bg-gray-*, sidebar, header, table, inputs, dialogs, footer
-- Aggressive `html[data-theme="neon"]` overrides for `div[style*="background: #fff"]`, `div[style*="color: #333"]`, `div[style*="minHeight"]`
+The PayGo (MPH) Bills page (`PayGoBillsPage.tsx`) has a basic New Bill form with fields: Project, Contractor, Trade, Block ID, Date, Amount, Year, Financial Year, Status, Remarks. The `PayGoBill` type in `PayGoContext.tsx` only stores: id, billNo, project, contractor, trade, blockId, date, amount, status (Pending/Approved/Paid/Rejected), remarks, year, financialYear.
+
+There is no:
+- Auto-generated bill number based on project prefix
+- Dynamic contractor-to-trade linkage
+- Unit Price auto-populate from contractor rates
+- Auto-calculated Gross Amount, Retention Amount, Net Amount
+- Conditional Debit logic with reason validation
+- Multi-step approval workflow (PM → QC → Billing Engineer)
+- Payment flow showing approved bills with Pending/Partially Paid/Completed status
+
+The PayGoContractor type stores: id, name, trade (single string), project, contractingPrice, unit, contact, email, address, notes, status.
+
+The PayGoPayment type stores: id, paymentNo, project, date, amount, paymentMode, reference, remarks, status.
 
 ## Requested Changes (Diff)
 
 ### Add
-- More comprehensive neon CSS overrides targeting inline `style` attributes that are NOT currently covered:
-  - `div[style*="background: #f5f5f5"]`, `div[style*="background: #f0f0f0"]`, `div[style*="background: #fafafa"]`
-  - `div[style*="background: #E3F2FD"]`, `div[style*="background: #FFEBEE"]`, `div[style*="background: #E8F5E9"]` (table zebra rows)
-  - `div[style*="background: #FFF8E1"]`, `div[style*="background: #FFF9C4"]` (ticker/highlight)
-  - `span[style*="color: #0078D7"]`, `div[style*="color: #0078D7"]` → neon blue
-  - `span[style*="color: #28A745"]`, `div[style*="color: #28A745"]` → neon green
-  - `span[style*="color: #D32F2F"]`, `div[style*="color: #D32F2F"]` → neon magenta
-  - `button[style*="background"]` catch-all for primary/action buttons
-  - `[style*="border: 1px solid #"]` → neon border
-  - `[style*="boxShadow"]` → neon glow shadow replacement
-  - Modal overlay (`[style*="position: fixed"][style*="inset"]`, `.modal-overlay`, `[class*="overlay"]`) → dark semi-transparent
-  - Receipt view containers (all view modal backgrounds)
-  - Sticky header and toolbar areas
-  - Summary/stat cards (inline-styled)
-  - Select/option dropdowns
-  - Badge and tag elements
-  - Neon scrolling ticker area
-  - PayGo page components
-  - SFT page components
-  - Analytics/Charts backgrounds
-
-- CSS variables update in `[data-theme="neon"]` block to set CSS variable overrides that components like shadcn rely on (background, foreground, card, border, input etc.) using `color: oklch(...)` to match neon palette
-
-- Glow animation keyframe for neon pulsing effect on active nav items and primary buttons:
-```css
-@keyframes neonPulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(0,212,255,0.4); }
-  50% { box-shadow: 0 0 20px rgba(0,212,255,0.8), 0 0 40px rgba(184,41,255,0.3); }
-}
-```
-
-- Gradient text effect for page headings in neon mode
-- Glassmorphism effect for sticky headers and toolbars
-- Holographic shimmer on sidebar active item
+- **New fields to `PayGoBill` type:** description, unit, unitPrice, qty, nos, grossAmount, debitAmount, reasonForDebit, workRetention (%), retentionAmount, netAmount, attachment1, attachment2, engineerName, workflowStatus, workflowHistory (array of step objects), paidAmount, remainingAmount
+- **Bill Number auto-generation:** Based on first 2 letters of project name in uppercase + 3-digit sequence (e.g., Parkville → PA001). Must check existing bills for the same project and assign next number.
+- **Dynamic Contractor → Trade linkage:** After selecting Contractor, Trade dropdown filters to show only trades mapped to that contractor (from PayGoContractor records for the selected project)
+- **Unit Price auto-populate:** Pulls from `contractingPrice` of the matched contractor record for that project+trade combo
+- **Real-time calculations:**
+  - Gross Amount = Unit Price × Qty × No's
+  - Debit Amount only applies if Reason for Debit is non-empty
+  - Retention Amount = (Gross Amount − Debit Amount) / 100 × Work Retention %
+  - Net Amount = Gross Amount − Debit Amount + Retention Amount
+- **Approval Workflow:**
+  - After save: bill status = "Pending PM Review"
+  - PM actions: Add Debit (with reason), Approve (moves to QC), Reject (remarks mandatory)
+  - QC actions: Add Debit (with reason), Approve (moves to Billing Engineer), Reject
+  - Billing Engineer: Approve → bill becomes "Billing Approved" and appears in Payments
+- **workflowStatus values:** "Pending PM Review", "PM Approved", "QC Approved", "Billing Approved", "Rejected"
+- **Payments integration:** Bills with workflowStatus = "Billing Approved" automatically appear in PayGoPaymentsPage as payment entries with status = "Pending"
+- **Pay button in Payments:** Opens a Pay dialog. Full payment → status = "Completed". Partial → status = "Partially Paid", track remaining balance.
+- **Role simulation:** Since we don't have a real role system in PayGo, simulate with a role selector in the header area of PayGo OR use a simple role context. The Bills list shows different action buttons based on current role (Admin/Site Engineer → create; PM/QC/Billing Engineer → approve/reject buttons in view).
+- **Engineer Name auto-fill:** Use logged-in user's name or a stored PayGo user role name
 
 ### Modify
-- Expand existing neon CSS overrides to also cover `tr[style*="background"]` for zebra rows → make transparent with neon tint
-- Fix: `html[data-theme="neon"] div[style*="background"]` should be a broader selector to catch all bg colors
-- The header toggle button: already works, no changes to JS needed
-- Ensure all pages (ContractorsPage, ProjectsPage, BillsPage, PaymentsPage, ReportsPage, AnalyticsPage, SFTPage, SeriAIPage, DashboardPage, all PayGo pages, UsersPage) are covered by CSS-only neon overrides – no TSX changes needed if CSS is comprehensive enough
+- `PayGoBill` type: extend with all new fields above
+- `PayGoContext`: update addBill logic for project-prefix bill numbering; add updateBillWorkflow action; extend payments to support partial pay with paidAmount/remainingAmount tracking
+- `PayGoBillsPage.tsx`: completely replace the New Bill form dialog with the comprehensive form (all new fields, real-time calculations, dynamic dropdowns). Add workflow action buttons (Approve/Reject/Add Debit) in the View dialog based on current workflow step. Bills list shows workflow status column.
+- `PayGoPaymentsPage.tsx`: Show bills with workflowStatus = "Billing Approved" in the payments list. Add a "Pay" button that opens a Pay dialog. Track paidAmount, remainingAmount, update status to Partially Paid or Completed.
 
 ### Remove
-- Nothing removed
+- The simple "Amount" field from the bill form (replaced by Gross Amount, Debit Amount, Net Amount calculations)
+- Manual Status selector in New Bill form (status is driven by workflow now)
 
 ## Implementation Plan
-1. Expand `index.css` neon theme block with comprehensive selectors covering:
-   - All inline background color variants used in the app
-   - All inline text color variants
-   - Table zebra stripe rows (`tr` with inline bg)
-   - Sticky header/toolbar glassmorphism
-   - Modal overlays and dialog backgrounds
-   - Summary card and stat box backgrounds
-   - Button inline styles (primary, delete, action)
-   - Select/option dropdown backgrounds
-   - Neon pulse animation for active/primary elements
-   - Gradient text for headings
-   - Border and box-shadow overrides for inline styles
-2. Add CSS variable overrides inside `[data-theme="neon"]` for shadcn components to pick up
-3. Validate build passes (lint + typecheck + build)
+
+1. **Update `PayGoContext.tsx`:**
+   - Extend `PayGoBill` type with all new fields
+   - Update `addBill` to auto-generate project-prefix bill numbers
+   - Add `updateBillWorkflow(id, step, action, remarks, debitAmount?, reasonForDebit?)` action
+   - Extend `PayGoPayment` type with `billId`, `paidAmount`, `remainingAmount`
+   - Add `payBill(billId, payAmount)` action that creates/updates the payment record
+
+2. **Update `PayGoBillsPage.tsx`:**
+   - Replace the small 2-col form with a full-width comprehensive form dialog
+   - Form fields: Project (dropdown → triggers bill no generation), Bill No (read-only auto), Date, Contractor (dropdown → filters trade), Trade (filtered dropdown), Block ID, Description of Work, Unit, Unit Price (auto from contractor rate, editable), Qty, No's, Gross Amount (read-only calc), Debit Amount, Reason for Debit (textarea), Work Retention %, Retention Amount (read-only calc), Net Amount (read-only calc), Remarks, Attachment 1 (URL input), Attachment 2 (URL input), Engineer Name (auto-filled)
+   - Bills list table: add columns for Gross Amount, Net Amount, Workflow Status
+   - View dialog: show full bill details + workflow history + action buttons based on workflowStatus (Approve, Reject, Add Debit)
+   - Role simulation: show a small "Current Role" selector at the top of the page (Admin, Site Engineer, PM, QC, Billing Engineer)
+
+3. **Update `PayGoPaymentsPage.tsx`:**
+   - Query bills with workflowStatus = "Billing Approved" and add them to the payments list automatically
+   - Show status as Pending/Partially Paid/Completed
+   - Add "Pay" button that opens a Pay dialog with amount input
+   - Track paidAmount and remainingAmount
+   - Update bill status to Completed or Partially Paid based on payment

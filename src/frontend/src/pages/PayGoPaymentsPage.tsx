@@ -16,11 +16,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Download, Edit2, Printer, Trash2 } from "lucide-react";
-import { Plus } from "lucide-react";
-import { useState } from "react";
+import {
+  CreditCard,
+  Download,
+  Edit2,
+  Plus,
+  Printer,
+  Trash2,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { type PayGoPayment, usePayGo } from "../context/PayGoContext";
+import {
+  type PayGoBill,
+  type PayGoPayment,
+  usePayGo,
+} from "../context/PayGoContext";
 import { formatINR } from "../utils/money";
 
 const GREEN = "#28A745";
@@ -40,7 +50,447 @@ const emptyForm = (): FormData => ({
 
 type FilterState = { project: string; mode: string; status: string };
 
-export default function PayGoPaymentsPage() {
+const PAYMENT_STATUS_COLORS: Record<
+  PayGoBill["paymentStatus"],
+  { bg: string; color: string }
+> = {
+  Unpaid: { bg: "#FFF3CD", color: "#856404" },
+  "Partially Paid": { bg: "#CCE5FF", color: "#004085" },
+  Completed: { bg: "#D4EDDA", color: "#155724" },
+};
+
+function fmtDate(d: string): string {
+  if (!d) return "";
+  const parts = d.split("-");
+  if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  return d;
+}
+
+// ─── Pay Bill Dialog ─────────────────────────────────────────────────────
+type PayBillDialogProps = {
+  bill: PayGoBill;
+  onClose: () => void;
+  onPay: (billId: string, amount: number) => void;
+};
+
+function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
+  const [payAmt, setPayAmt] = useState<number>(bill.remainingAmount || 0);
+
+  const handlePay = () => {
+    if (payAmt <= 0) {
+      toast.error("Payment amount must be greater than 0.");
+      return;
+    }
+    if (payAmt > (bill.remainingAmount || 0)) {
+      toast.error(
+        `Payment cannot exceed remaining amount: ${formatINR(bill.remainingAmount || 0)}`,
+      );
+      return;
+    }
+    onPay(bill.id, payAmt);
+    toast.success(
+      payAmt >= (bill.remainingAmount || 0)
+        ? "Full payment processed. Bill marked as Completed."
+        : `Partial payment of ${formatINR(payAmt)} recorded.`,
+    );
+    onClose();
+  };
+
+  const willBePartial = payAmt < (bill.remainingAmount || 0) && payAmt > 0;
+  const willBeComplete = payAmt >= (bill.remainingAmount || 0) && payAmt > 0;
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent className="max-w-md" data-ocid="paygo.payments.dialog">
+        <DialogHeader>
+          <DialogTitle style={{ color: GREEN }}>
+            Process Payment — {bill.billNo}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2">
+          {/* Bill summary */}
+          <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Bill No:</span>
+              <span className="font-semibold font-mono">{bill.billNo}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Project:</span>
+              <span className="font-medium">{bill.project}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Contractor:</span>
+              <span className="font-medium">{bill.contractor}</span>
+            </div>
+            <div className="flex justify-between border-t pt-1.5 mt-1.5">
+              <span className="text-gray-500">Net Amount:</span>
+              <span className="font-bold" style={{ color: GREEN }}>
+                {formatINR(bill.netAmount || bill.amount)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Already Paid:</span>
+              <span className="font-medium text-gray-700">
+                {formatINR(bill.paidAmount || 0)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500 font-semibold">Remaining:</span>
+              <span className="font-bold text-red-600">
+                {formatINR(bill.remainingAmount || 0)}
+              </span>
+            </div>
+          </div>
+
+          {/* Pay amount input */}
+          <div>
+            <Label className="text-xs font-semibold">
+              Pay Amount (₹)
+              <span className="text-gray-400 font-normal ml-1">
+                (max: {formatINR(bill.remainingAmount || 0)})
+              </span>
+            </Label>
+            <Input
+              type="number"
+              value={payAmt || ""}
+              onChange={(e) => setPayAmt(Number(e.target.value))}
+              max={bill.remainingAmount || 0}
+              min={0}
+              placeholder="Enter payment amount"
+              className="mt-1"
+              data-ocid="paygo.payments.input"
+            />
+          </div>
+
+          {/* Quick fill buttons */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPayAmt(bill.remainingAmount || 0)}
+              className="text-xs px-3 py-1 rounded-md border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
+            >
+              Full Payment
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setPayAmt(Math.floor((bill.remainingAmount || 0) / 2))
+              }
+              className="text-xs px-3 py-1 rounded-md border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors"
+            >
+              50% Partial
+            </button>
+          </div>
+
+          {/* Outcome preview */}
+          {payAmt > 0 && (
+            <div
+              className="rounded-lg px-3 py-2 text-xs font-semibold"
+              style={{
+                background: willBeComplete
+                  ? "#D4EDDA"
+                  : willBePartial
+                    ? "#CCE5FF"
+                    : "#f9f9f9",
+                color: willBeComplete
+                  ? "#155724"
+                  : willBePartial
+                    ? "#004085"
+                    : "#666",
+              }}
+            >
+              {willBeComplete
+                ? "✅ Will mark bill as COMPLETED"
+                : willBePartial
+                  ? `🟡 Partially Paid — Remaining: ${formatINR((bill.remainingAmount || 0) - payAmt)}`
+                  : ""}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            data-ocid="paygo.payments.cancel_button"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handlePay}
+            style={{ background: GREEN, color: "#fff" }}
+            data-ocid="paygo.payments.submit_button"
+          >
+            <CreditCard size={14} className="mr-1" />
+            Pay {formatINR(payAmt)}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Bills Payment Tab ───────────────────────────────────────────────────────
+function BillsPaymentTab() {
+  const { bills, payBill } = usePayGo();
+  const [payingBill, setPayingBill] = useState<PayGoBill | null>(null);
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | PayGoBill["paymentStatus"]
+  >("all");
+  const [filterProject, setFilterProject] = useState("");
+
+  const approvedBills = useMemo(
+    () => bills.filter((b) => b.workflowStatus === "Billing Approved"),
+    [bills],
+  );
+
+  const projectNames = useMemo(
+    () => [...new Set(approvedBills.map((b) => b.project))],
+    [approvedBills],
+  );
+
+  const filtered = useMemo(
+    () =>
+      approvedBills.filter((b) => {
+        const mStatus =
+          filterStatus === "all" ||
+          (b.paymentStatus || "Unpaid") === filterStatus;
+        const mProject = !filterProject || b.project === filterProject;
+        return mStatus && mProject;
+      }),
+    [approvedBills, filterStatus, filterProject],
+  );
+
+  const totalNet = filtered.reduce(
+    (s, b) => s + (b.netAmount || b.amount || 0),
+    0,
+  );
+  const totalPaid = filtered.reduce((s, b) => s + (b.paidAmount || 0), 0);
+  const totalRemaining = filtered.reduce(
+    (s, b) => s + (b.remainingAmount || 0),
+    0,
+  );
+
+  return (
+    <div className="flex flex-col gap-0">
+      {/* Summary cards */}
+      <div className="px-4 py-3 flex gap-3 flex-wrap">
+        <div
+          className="rounded-xl px-4 py-3 text-white font-bold shadow-md flex flex-col"
+          style={{ background: "linear-gradient(135deg, #1976D2, #0D47A1)" }}
+        >
+          <span className="text-xs font-normal opacity-90">
+            Total Net Bills
+          </span>
+          <span className="text-lg">{formatINR(totalNet)}</span>
+          <span className="text-xs opacity-75">
+            {filtered.length} bills approved
+          </span>
+        </div>
+        <div
+          className="rounded-xl px-4 py-3 text-white font-bold shadow-md flex flex-col"
+          style={{ background: "linear-gradient(135deg, #43A047, #1B5E20)" }}
+        >
+          <span className="text-xs font-normal opacity-90">Total Paid</span>
+          <span className="text-lg">{formatINR(totalPaid)}</span>
+        </div>
+        <div
+          className="rounded-xl px-4 py-3 text-white font-bold shadow-md flex flex-col"
+          style={{ background: "linear-gradient(135deg, #E53935, #B71C1C)" }}
+        >
+          <span className="text-xs font-normal opacity-90">
+            Total Remaining
+          </span>
+          <span className="text-lg">{formatINR(totalRemaining)}</span>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="px-4 pb-3">
+        <div
+          className="rounded-xl shadow-sm border flex flex-wrap gap-3 px-4 py-3"
+          style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-600">
+              Project:
+            </span>
+            <select
+              value={filterProject}
+              onChange={(e) => setFilterProject(e.target.value)}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white focus:outline-none"
+            >
+              <option value="">All Projects</option>
+              {projectNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-600">
+              Payment Status:
+            </span>
+            <select
+              value={filterStatus}
+              onChange={(e) =>
+                setFilterStatus(e.target.value as typeof filterStatus)
+              }
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white focus:outline-none"
+            >
+              <option value="all">All</option>
+              <option value="Unpaid">Unpaid</option>
+              <option value="Partially Paid">Partially Paid</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+          {(filterProject || filterStatus !== "all") && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterProject("");
+                setFilterStatus("all");
+              }}
+              className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bills Payment Table */}
+      <div className="px-4 pb-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: "#1976D2" }}>
+                  {[
+                    "#",
+                    "Bill No",
+                    "Project",
+                    "Contractor",
+                    "Net Amount",
+                    "Paid",
+                    "Remaining",
+                    "Payment Status",
+                    "Actions",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      className="px-4 py-12 text-center"
+                      data-ocid="paygo.payments.empty_state"
+                    >
+                      <div className="flex flex-col items-center gap-2 text-gray-400">
+                        <CreditCard size={32} className="opacity-40" />
+                        <span className="text-sm">
+                          {approvedBills.length === 0
+                            ? "No bills have been approved by Billing Engineer yet."
+                            : "No bills match the current filters."}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((b, i) => (
+                    <tr
+                      key={b.id}
+                      style={{ background: i % 2 === 0 ? "#E3F2FD" : "#fff" }}
+                      data-ocid={`paygo.payments.item.${i + 1}`}
+                    >
+                      <td className="px-3 py-2.5 text-gray-500">{i + 1}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs font-semibold text-gray-700">
+                        {b.billNo}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-700 max-w-[100px] truncate">
+                        {b.project}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-700">
+                        {b.contractor}
+                      </td>
+                      <td
+                        className="px-3 py-2.5 font-semibold whitespace-nowrap"
+                        style={{ color: GREEN }}
+                      >
+                        {formatINR(b.netAmount || b.amount)}
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap">
+                        {formatINR(b.paidAmount || 0)}
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-red-600 whitespace-nowrap">
+                        {formatINR(b.remainingAmount || 0)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
+                          style={
+                            PAYMENT_STATUS_COLORS[b.paymentStatus || "Unpaid"]
+                          }
+                        >
+                          {b.paymentStatus || "Unpaid"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {(b.paymentStatus || "Unpaid") !== "Completed" && (
+                          <button
+                            type="button"
+                            onClick={() => setPayingBill(b)}
+                            className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md text-white shadow-sm hover:opacity-90 transition-opacity"
+                            style={{ background: GREEN }}
+                            data-ocid={"paygo.payments.primary_button"}
+                          >
+                            <CreditCard size={12} /> Pay
+                          </button>
+                        )}
+                        {(b.paymentStatus || "Unpaid") === "Completed" && (
+                          <span className="text-xs text-green-600 font-semibold">
+                            ✔ Paid
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Pay Dialog */}
+      {payingBill && (
+        <PayBillDialog
+          bill={payingBill}
+          onClose={() => setPayingBill(null)}
+          onPay={payBill}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Payments Tab (existing) ──────────────────────────────────────────────────
+function PaymentsTab() {
   const { projects, payments, addPayment, updatePayment, deletePayment } =
     usePayGo();
   const [formOpen, setFormOpen] = useState(false);
@@ -109,7 +559,7 @@ export default function PayGoPaymentsPage() {
   };
 
   const exportCSV = () => {
-    const headers = [
+    const h = [
       "Payment No",
       "Project",
       "Date",
@@ -129,265 +579,270 @@ export default function PayGoPaymentsPage() {
       p.status,
       p.remarks,
     ]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+    const csv = [h, ...rows].map((r) => r.join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "paygo-payments.csv";
+    a.download = "mph-payments.csv";
     a.click();
+    toast.success("CSV exported.");
   };
 
-  const handlePrint = () => {
-    const win = window.open("", "_blank");
-    if (!win) return;
-    const html = `<html><head><title>PayGo Payments</title><style>body{font-family:Century Gothic,sans-serif;font-size:12px;margin:20px;}table{width:100%;border-collapse:collapse;}th{background:#28A745;color:#fff;padding:6px 8px;text-align:left;}td{padding:5px 8px;border-bottom:1px solid #ddd;}.total{font-weight:bold;text-align:right;padding:8px;}</style></head><body><h2 style="color:#28A745">PayGo – Payments Report</h2><p>Total: ${formatINR(totalAmount)}</p><table><thead><tr>${["Payment No", "Project", "Date", "Amount", "Mode", "Status"].map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${filtered.map((p) => `<tr><td>${p.paymentNo}</td><td>${p.project}</td><td>${p.date.split("-").reverse().join("-")}</td><td>${formatINR(p.amount)}</td><td>${p.paymentMode}</td><td>${p.status}</td></tr>`).join("")}</tbody></table></body></html>`;
-    win.document.write(html);
-    win.document.close();
-    win.print();
-  };
-
-  const fmtDate = (d: string) => (d ? d.split("-").reverse().join("-") : "");
+  const projectNames = useMemo(
+    () => [...new Set(projects.map((p) => p.name))],
+    [projects],
+  );
 
   return (
-    <div className="p-6">
-      {/* Toolbar + Summary */}
-      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+    <div className="flex flex-col gap-0">
+      {/* Toolbar */}
+      <div className="bg-white border-b shadow-sm px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors"
+          >
+            <Printer size={14} /> Print
+          </button>
+          <button
+            type="button"
+            onClick={exportCSV}
+            className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors"
+          >
+            <Download size={14} /> Export CSV
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
             onClick={openAdd}
-            size="sm"
-            style={{ background: GREEN, color: "#fff" }}
+            className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-sm font-semibold shadow-md hover:opacity-90"
+            style={{ background: GREEN }}
             data-ocid="paygo.payments.primary_button"
           >
-            <Plus className="h-4 w-4 mr-1" /> New Payment
-          </Button>
-          <Button
-            onClick={exportCSV}
-            size="sm"
-            variant="outline"
-            data-ocid="paygo.payments.secondary_button"
+            <Plus size={16} /> New Payment
+          </button>
+          <div
+            className="rounded-xl px-4 py-2 text-white text-sm font-bold shadow-md flex flex-col items-end"
+            style={{ background: "linear-gradient(135deg, #43A047, #1B5E20)" }}
           >
-            <Download className="h-4 w-4 mr-1" /> Export CSV
-          </Button>
-          <Button onClick={handlePrint} size="sm" variant="outline">
-            <Printer className="h-4 w-4 mr-1" /> Print
-          </Button>
-        </div>
-        <div className="bg-green-50 border-2 border-green-300 rounded-lg px-5 py-3 text-right">
-          <div className="text-xs text-green-700 font-semibold uppercase">
-            Total Payments
+            <span className="text-xs font-normal opacity-90">
+              Total Payments
+            </span>
+            <span className="text-base font-bold">
+              {formatINR(totalAmount)}
+            </span>
+            <span className="text-xs opacity-80">
+              {filtered.length} entries
+            </span>
           </div>
-          <div className="text-xl font-bold" style={{ color: GREEN }}>
-            {formatINR(totalAmount)}
-          </div>
-          <div className="text-xs text-gray-500">{filtered.length} records</div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap bg-gray-50 p-3 rounded-lg border border-gray-200">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-600">Project:</span>
-          <Select
-            value={filters.project || "all"}
-            onValueChange={(v) =>
-              setFilters((f) => ({ ...f, project: v === "all" ? "" : v }))
-            }
-          >
-            <SelectTrigger className="h-8 text-xs w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              {projects.map((p) => (
-                <SelectItem key={p.id} value={p.name}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-600">Mode:</span>
-          <Select
-            value={filters.mode || "all"}
-            onValueChange={(v) =>
-              setFilters((f) => ({ ...f, mode: v === "all" ? "" : v }))
-            }
-          >
-            <SelectTrigger className="h-8 text-xs w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="Account">Account</SelectItem>
-              <SelectItem value="Cash">Cash</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-gray-600">Status:</span>
-          <Select
-            value={filters.status || "all"}
-            onValueChange={(v) =>
-              setFilters((f) => ({ ...f, status: v === "all" ? "" : v }))
-            }
-          >
-            <SelectTrigger className="h-8 text-xs w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="Pending">Pending</SelectItem>
-              <SelectItem value="Completed">Completed</SelectItem>
-              <SelectItem value="Partial">Partial</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-xs"
-          onClick={() => setFilters({ project: "", mode: "", status: "" })}
-          data-ocid="paygo.payments.secondary_button"
+      <div className="px-4 pt-3 pb-1">
+        <div
+          className="rounded-xl shadow-sm border flex flex-wrap gap-4 px-4 py-3"
+          style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
         >
-          Clear
-        </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-600">
+              Project:
+            </span>
+            <select
+              value={filters.project}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, project: e.target.value }))
+              }
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
+            >
+              <option value="">All</option>
+              {projectNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-600">Mode:</span>
+            <select
+              value={filters.mode}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, mode: e.target.value }))
+              }
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
+            >
+              <option value="">All</option>
+              <option value="Account">Account</option>
+              <option value="Cash">Cash</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-600">Status:</span>
+            <select
+              value={filters.status}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, status: e.target.value }))
+              }
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
+            >
+              <option value="">All</option>
+              <option value="Pending">Pending</option>
+              <option value="Completed">Completed</option>
+              <option value="Partial">Partial</option>
+            </select>
+          </div>
+          {(filters.project || filters.mode || filters.status) && (
+            <button
+              type="button"
+              onClick={() => setFilters({ project: "", mode: "", status: "" })}
+              className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr style={{ background: GREEN }}>
-              {[
-                "#",
-                "Payment No",
-                "Project",
-                "Date",
-                "Amount",
-                "Mode",
-                "Reference",
-                "Status",
-                "Actions",
-              ].map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={9}
-                  className="px-4 py-8 text-center text-gray-400"
-                  data-ocid="paygo.payments.empty_state"
-                >
-                  No payments found.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((p, i) => (
-                <tr
-                  key={p.id}
-                  style={{ background: i % 2 === 0 ? "#f0fff4" : "#fff" }}
-                  data-ocid={`paygo.payments.item.${i + 1}`}
-                >
-                  <td className="px-4 py-2 text-gray-500">{i + 1}</td>
-                  <td
-                    className="px-4 py-2 font-medium"
-                    style={{ color: GREEN }}
-                  >
-                    {p.paymentNo}
-                  </td>
-                  <td className="px-4 py-2 text-gray-700">{p.project}</td>
-                  <td className="px-4 py-2 text-gray-600">{fmtDate(p.date)}</td>
-                  <td className="px-4 py-2 font-semibold">
-                    {formatINR(p.amount)}
-                  </td>
-                  <td className="px-4 py-2 text-gray-600">{p.paymentMode}</td>
-                  <td className="px-4 py-2 text-gray-500 text-xs">
-                    {p.reference}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span
-                      className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                      style={{
-                        background:
-                          p.status === "Completed"
-                            ? "#d4edda"
-                            : p.status === "Pending"
-                              ? "#fff3cd"
-                              : "#cce5ff",
-                        color:
-                          p.status === "Completed"
-                            ? "#155724"
-                            : p.status === "Pending"
-                              ? "#856404"
-                              : "#004085",
-                      }}
+      <div className="px-4 py-3">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ background: GREEN }}>
+                  {[
+                    "#",
+                    "Payment No",
+                    "Project",
+                    "Date",
+                    "Amount (₹)",
+                    "Mode",
+                    "Reference",
+                    "Status",
+                    "Remarks",
+                    "Actions",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap"
                     >
-                      {p.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(p)}
-                        title="Edit"
-                        data-ocid={`paygo.payments.edit_button.${i + 1}`}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDeleteId(p.id);
-                          setPw("");
-                        }}
-                        title="Delete"
-                        data-ocid={`paygo.payments.delete_button.${i + 1}`}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={10}
+                      className="px-4 py-10 text-center text-gray-400 text-sm"
+                      data-ocid="paygo.payments.empty_state"
+                    >
+                      No payments found.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((p, i) => (
+                    <tr
+                      key={p.id}
+                      style={{ background: i % 2 === 0 ? "#E8F5E9" : "#fff" }}
+                      data-ocid={`paygo.payments.item.${i + 1}`}
+                    >
+                      <td className="px-3 py-2.5 text-gray-500">{i + 1}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs font-semibold text-gray-700">
+                        {p.paymentNo}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-700">{p.project}</td>
+                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
+                        {fmtDate(p.date)}
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap">
+                        {formatINR(p.amount)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.paymentMode === "Account" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}
+                        >
+                          {p.paymentMode}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">
+                        {p.reference || "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.status === "Completed" ? "bg-green-100 text-green-700" : p.status === "Partial" ? "bg-blue-100 text-blue-700" : "bg-yellow-100 text-yellow-700"}`}
+                        >
+                          {p.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">
+                        {p.remarks || "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(p)}
+                            title="Edit"
+                            className="text-gray-500 hover:text-gray-700"
+                            data-ocid={`paygo.payments.edit_button.${i + 1}`}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteId(p.id);
+                              setPw("");
+                            }}
+                            title="Delete"
+                            className="text-red-500 hover:text-red-700"
+                            data-ocid={`paygo.payments.delete_button.${i + 1}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      {/* Add / Edit */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg" data-ocid="paygo.payments.modal">
+      {/* Form Dialog */}
+      <Dialog
+        open={formOpen}
+        onOpenChange={(o) => {
+          if (!o) setFormOpen(false);
+        }}
+      >
+        <DialogContent data-ocid="paygo.payments.dialog">
           <DialogHeader>
             <DialogTitle style={{ color: GREEN }}>
               {editItem ? "Edit Payment" : "New Payment"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
+          <div className="grid grid-cols-2 gap-4 py-2">
             <div className="col-span-2">
-              <Label className="text-xs font-semibold">Project *</Label>
+              <Label className="text-xs font-semibold">Project</Label>
               <Select
                 value={form.project}
                 onValueChange={(v) => setForm((f) => ({ ...f, project: v }))}
               >
-                <SelectTrigger data-ocid="paygo.payments.select">
-                  <SelectValue placeholder="Select project" />
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Project" />
                 </SelectTrigger>
                 <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.name}>
-                      {p.name}
+                  {projectNames.map((n) => (
+                    <SelectItem key={n} value={n}>
+                      {n}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -401,11 +856,10 @@ export default function PayGoPaymentsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, date: e.target.value }))
                 }
-                data-ocid="paygo.payments.input"
               />
             </div>
             <div>
-              <Label className="text-xs font-semibold">Amount (₹) *</Label>
+              <Label className="text-xs font-semibold">Amount (₹)</Label>
               <Input
                 type="number"
                 value={form.amount || ""}
@@ -422,7 +876,7 @@ export default function PayGoPaymentsPage() {
                 onValueChange={(v) =>
                   setForm((f) => ({
                     ...f,
-                    paymentMode: v as PayGoPayment["paymentMode"],
+                    paymentMode: v as "Account" | "Cash",
                   }))
                 }
               >
@@ -434,6 +888,16 @@ export default function PayGoPaymentsPage() {
                   <SelectItem value="Cash">Cash</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Reference</Label>
+              <Input
+                value={form.reference}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, reference: e.target.value }))
+                }
+                placeholder="NEFT/ref..."
+              />
             </div>
             <div>
               <Label className="text-xs font-semibold">Status</Label>
@@ -457,16 +921,6 @@ export default function PayGoPaymentsPage() {
               </Select>
             </div>
             <div className="col-span-2">
-              <Label className="text-xs font-semibold">Reference</Label>
-              <Input
-                value={form.reference}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, reference: e.target.value }))
-                }
-                placeholder="NEFT / Cheque No"
-              />
-            </div>
-            <div className="col-span-2">
               <Label className="text-xs font-semibold">Remarks</Label>
               <Textarea
                 value={form.remarks}
@@ -474,7 +928,6 @@ export default function PayGoPaymentsPage() {
                   setForm((f) => ({ ...f, remarks: e.target.value }))
                 }
                 rows={2}
-                data-ocid="paygo.payments.textarea"
               />
             </div>
           </div>
@@ -535,6 +988,64 @@ export default function PayGoPaymentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── Main Export ────────────────────────────────────────────────────────────
+type ActivePayTab = "bills" | "payments";
+
+export default function PayGoPaymentsPage() {
+  const [activeTab, setActiveTab] = useState<ActivePayTab>("bills");
+  const { bills } = usePayGo();
+
+  const pendingBillsCount = useMemo(
+    () =>
+      bills.filter(
+        (b) =>
+          b.workflowStatus === "Billing Approved" &&
+          (b.paymentStatus || "Unpaid") !== "Completed",
+      ).length,
+    [bills],
+  );
+
+  return (
+    <div className="flex flex-col min-h-full">
+      {/* Tab switcher */}
+      <div className="bg-white border-b px-4 flex gap-0 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setActiveTab("bills")}
+          className="px-5 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2"
+          style={{
+            borderColor: activeTab === "bills" ? "#1976D2" : "transparent",
+            color: activeTab === "bills" ? "#1976D2" : "#6B7280",
+          }}
+          data-ocid="paygo.payments.bills.tab"
+        >
+          <CreditCard size={14} />
+          Bill Payments
+          {pendingBillsCount > 0 && (
+            <span className="bg-orange-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+              {pendingBillsCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("payments")}
+          className="px-5 py-3 text-sm font-semibold border-b-2 transition-colors"
+          style={{
+            borderColor: activeTab === "payments" ? GREEN : "transparent",
+            color: activeTab === "payments" ? GREEN : "#6B7280",
+          }}
+          data-ocid="paygo.payments.general.tab"
+        >
+          General Payments
+        </button>
+      </div>
+
+      {activeTab === "bills" ? <BillsPaymentTab /> : <PaymentsTab />}
     </div>
   );
 }

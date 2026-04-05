@@ -41,6 +41,7 @@ import ContractorsPage from "../pages/ContractorsPage";
 import DashboardPage from "../pages/DashboardPage";
 import PayGoAIPage from "../pages/PayGoAIPage";
 import PayGoAnalyticsPage from "../pages/PayGoAnalyticsPage";
+import PayGoBillsPage from "../pages/PayGoBillsPage";
 import PayGoContractorsPage from "../pages/PayGoContractorsPage";
 import PayGoDashboardPage from "../pages/PayGoDashboardPage";
 import PayGoPaymentsPage from "../pages/PayGoPaymentsPage";
@@ -62,6 +63,7 @@ type PayGoPage =
   | "pg-analytics"
   | "pg-projects"
   | "pg-contractors"
+  | "pg-bills"
   | "pg-payments"
   | "pg-reports"
   | "pg-users"
@@ -520,6 +522,12 @@ export default function MainLayout() {
       shortcut: "Alt+4",
     },
     {
+      id: "pg-bills" as PayGoPage,
+      label: "Bills",
+      icon: FileText,
+      shortcut: "Alt+0",
+    },
+    {
       id: "pg-payments" as PayGoPage,
       label: "Payments",
       icon: CreditCard,
@@ -614,6 +622,8 @@ export default function MainLayout() {
         return <PayGoProjectsPage />;
       case "pg-contractors":
         return <PayGoContractorsPage />;
+      case "pg-bills":
+        return <PayGoBillsPage />;
       case "pg-payments":
         return <PayGoPaymentsPage />;
       case "pg-reports":

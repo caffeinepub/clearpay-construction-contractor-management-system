@@ -22,12 +22,15 @@ export type PayGoContractor = {
   id: string;
   name: string;
   trade: string;
+  subTrade: string;
   project: string;
   contractingPrice: number;
   unit: string;
   contact: string;
   email: string;
   address: string;
+  attachmentLink1: string;
+  attachmentLink2: string;
   notes: string;
   status: "Active" | "Completed";
 };
@@ -59,9 +62,9 @@ export type PayGoBill = {
   project: string;
   contractor: string;
   trade: string;
+  subTrade: string;
   blockId: string;
   date: string;
-  // Extended fields
   description: string;
   unit: string;
   unitPrice: number;
@@ -77,7 +80,6 @@ export type PayGoBill = {
   attachment1: string;
   attachment2: string;
   engineerName: string;
-  // Workflow
   workflowStatus:
     | "Pending PM Review"
     | "PM Approved"
@@ -85,11 +87,9 @@ export type PayGoBill = {
     | "Billing Approved"
     | "Rejected";
   workflowHistory: WorkflowStep[];
-  // Payment tracking
   paidAmount: number;
   remainingAmount: number;
   paymentStatus: "Unpaid" | "Partially Paid" | "Completed";
-  // Backward compat
   amount: number;
   status: "Pending" | "Approved" | "Paid" | "Rejected";
   year: string;
@@ -176,6 +176,7 @@ const SEED_BILLS: PayGoBill[] = [
     project: "Sunrise Towers",
     contractor: "Ramesh & Sons",
     trade: "Mason",
+    subTrade: "",
     blockId: "BLK-A1",
     date: "2025-01-10",
     description: "Block A foundation masonry work",
@@ -228,6 +229,7 @@ const SEED_BILLS: PayGoBill[] = [
     project: "Green Valley Roads",
     contractor: "Kumar Scaffolding",
     trade: "Scaffolding",
+    subTrade: "",
     blockId: "BLK-R2",
     date: "2025-02-05",
     description: "Road section 2 scaffolding",
@@ -280,6 +282,7 @@ const SEED_BILLS: PayGoBill[] = [
     project: "Sunrise Towers",
     contractor: "Ramesh & Sons",
     trade: "Mason",
+    subTrade: "",
     blockId: "BLK-B2",
     date: "2025-03-15",
     description: "Block B walls masonry",
@@ -313,6 +316,7 @@ const SEED_BILLS: PayGoBill[] = [
     project: "Industrial Shed A",
     contractor: "Kumar Scaffolding",
     trade: "Scaffolding",
+    subTrade: "",
     blockId: "BLK-S1",
     date: "2025-04-01",
     description: "Shed structure scaffolding",
@@ -379,8 +383,8 @@ const SEED_NMR: PayGoNMRBill[] = [
     totalDays: 5,
     ratePerDay: 700,
     totalAmount: 28000,
-    status: "Paid",
-    remarks: "Week 6 road labour",
+    status: "Pending",
+    remarks: "Road crew week 1",
     year: "2025",
     financialYear: "2024-25",
   },
@@ -427,12 +431,15 @@ const SEED_CONTRACTORS: PayGoContractor[] = [
     id: "c1",
     name: "Ramesh & Sons",
     trade: "Mason",
+    subTrade: "",
     project: "Sunrise Towers",
     contractingPrice: 1000,
     unit: "Sft",
     contact: "9876543210",
     email: "ramesh@example.com",
     address: "Chennai, TN",
+    attachmentLink1: "",
+    attachmentLink2: "",
     notes: "",
     status: "Active",
   },
@@ -440,12 +447,15 @@ const SEED_CONTRACTORS: PayGoContractor[] = [
     id: "c2",
     name: "Kumar Scaffolding",
     trade: "Scaffolding",
+    subTrade: "",
     project: "Green Valley Roads",
     contractingPrice: 850,
     unit: "Rft",
     contact: "9876500001",
     email: "kumar@example.com",
     address: "Hyderabad, TS",
+    attachmentLink1: "",
+    attachmentLink2: "",
     notes: "",
     status: "Active",
   },
@@ -453,12 +463,15 @@ const SEED_CONTRACTORS: PayGoContractor[] = [
     id: "c3",
     name: "Kumar Scaffolding",
     trade: "M S",
+    subTrade: "",
     project: "Industrial Shed A",
     contractingPrice: 620,
     unit: "Sft",
     contact: "9876500001",
     email: "kumar@example.com",
     address: "Hyderabad, TS",
+    attachmentLink1: "",
+    attachmentLink2: "",
     notes: "",
     status: "Active",
   },
@@ -466,12 +479,15 @@ const SEED_CONTRACTORS: PayGoContractor[] = [
     id: "c4",
     name: "Ramesh & Sons",
     trade: "Bar bending",
+    subTrade: "",
     project: "Sunrise Towers",
     contractingPrice: 1200,
     unit: "Kg",
     contact: "9876543210",
     email: "ramesh@example.com",
     address: "Chennai, TN",
+    attachmentLink1: "",
+    attachmentLink2: "",
     notes: "",
     status: "Active",
   },
@@ -677,7 +693,7 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
           const effectiveDebit = newReasonForDebit?.trim() ? newDebitAmount : 0;
           const retentionAmount =
             ((b.grossAmount - effectiveDebit) / 100) * b.workRetention;
-          const netAmount = b.grossAmount - effectiveDebit + retentionAmount;
+          const netAmount = b.grossAmount - effectiveDebit - retentionAmount;
 
           return {
             ...b,
@@ -692,10 +708,7 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
             retentionAmount,
             netAmount,
             amount: netAmount,
-            remainingAmount:
-              newWorkflowStatus === "Billing Approved"
-                ? netAmount - b.paidAmount
-                : b.remainingAmount,
+            remainingAmount: netAmount - b.paidAmount,
             workflowHistory: [...b.workflowHistory, historyEntry],
           };
         });
@@ -710,10 +723,10 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
     setBills((prev) => {
       const next = prev.map((b) => {
         if (b.id !== id) return b;
-        const newPaid = b.paidAmount + payAmount;
-        const remaining = b.netAmount - newPaid;
-        const paymentStatus: PayGoBill["paymentStatus"] =
-          remaining <= 0 ? "Completed" : "Partially Paid";
+        const newPaid = (b.paidAmount || 0) + payAmount;
+        const remaining = (b.remainingAmount || 0) - payAmount;
+        let paymentStatus: PayGoBill["paymentStatus"] = "Partially Paid";
+        if (remaining <= 0) paymentStatus = "Completed";
         return {
           ...b,
           paidAmount: newPaid,
@@ -786,6 +799,6 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
 
 export function usePayGo(): PayGoContextValue {
   const ctx = useContext(PayGoContext);
-  if (!ctx) throw new Error("usePayGo must be used inside PayGoProvider");
+  if (!ctx) throw new Error("usePayGo must be used within PayGoProvider");
   return ctx;
 }

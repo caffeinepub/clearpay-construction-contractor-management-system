@@ -20,13 +20,16 @@ import {
   ChevronUp,
   Download,
   Edit2,
+  Eye,
   FileDown,
   FileText,
   Plus,
   Printer,
   Search,
+  Share2,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -83,8 +86,9 @@ export default function PayGoProjectsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pw, setPw] = useState("");
   const [search, setSearch] = useState("");
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(emptyFilters());
+  const [viewItem, setViewItem] = useState<PayGoProject | null>(null);
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
@@ -171,7 +175,6 @@ export default function PayGoProjectsPage() {
       "Start Date",
       "End Date",
       "Budget",
-      "Unit Price",
       "Status",
       "Notes",
     ];
@@ -181,7 +184,6 @@ export default function PayGoProjectsPage() {
       p.startDate,
       p.endDate,
       p.budget,
-      p.unitPrice ?? 0,
       p.status,
       p.notes,
     ]);
@@ -198,6 +200,20 @@ export default function PayGoProjectsPage() {
   const clearFilters = () => {
     setFilters(emptyFilters());
     setSearch("");
+  };
+
+  const handleShare = (p: PayGoProject) => {
+    const text = `Project: ${p.name}\nClient: ${p.client}\nStart: ${fmtDate(p.startDate)}\nEnd: ${fmtDate(p.endDate)}\nBudget: ${formatINR(p.budget)}\nStatus: ${p.status}`;
+    if (navigator.share) {
+      navigator
+        .share({ title: "Project Receipt", text })
+        .catch(() => window.print());
+    } else {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => toast.success("Details copied to clipboard."))
+        .catch(() => window.print());
+    }
   };
 
   const toolbarBtnClass =
@@ -269,26 +285,54 @@ export default function PayGoProjectsPage() {
         </div>
       </div>
 
-      {/* Advanced Filters Card */}
-      <div className="px-4 pt-3 pb-1">
-        <div
-          className="rounded-xl shadow-sm border"
-          style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
+      {/* Filter toggle bar */}
+      <div className="px-4 py-2 bg-white border-b flex items-center justify-start">
+        <button
+          type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
         >
-          {/* Filter header */}
-          <div className="flex items-center justify-between px-4 py-3">
-            <span className="font-semibold text-gray-700 text-sm">
-              Advanced Filters
-              {hasActiveFilters && (
-                <span
-                  className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full"
-                  style={{ background: GREEN, color: "#fff" }}
-                >
-                  Active
-                </span>
-              )}
+          {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {showFilters ? "Hide Filters" : "Show Filters"}
+          {hasActiveFilters && !showFilters && (
+            <span
+              className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full"
+              style={{ background: GREEN, color: "#fff" }}
+            >
+              Active
             </span>
-            <div className="flex items-center gap-2">
+          )}
+        </button>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="ml-4 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+          >
+            Clear Filters
+          </button>
+        )}
+      </div>
+
+      {/* Advanced Filters Card */}
+      {showFilters && (
+        <div className="px-4 pt-3 pb-1">
+          <div
+            className="rounded-xl shadow-sm border"
+            style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-yellow-200">
+              <span className="font-semibold text-gray-700 text-sm">
+                Advanced Filters
+                {hasActiveFilters && (
+                  <span
+                    className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full"
+                    style={{ background: GREEN, color: "#fff" }}
+                  >
+                    Active
+                  </span>
+                )}
+              </span>
               <button
                 type="button"
                 onClick={clearFilters}
@@ -296,24 +340,8 @@ export default function PayGoProjectsPage() {
               >
                 Clear Filters
               </button>
-              <button
-                type="button"
-                onClick={() => setShowFilters((v) => !v)}
-                className="text-xs font-medium text-gray-500 border border-gray-200 rounded px-3 py-1 hover:bg-gray-100 flex items-center gap-1 transition-colors"
-              >
-                {showFilters ? (
-                  <ChevronUp size={12} />
-                ) : (
-                  <ChevronDown size={12} />
-                )}
-                {showFilters ? "Hide Filters" : "Show Filters"}
-              </button>
             </div>
-          </div>
-
-          {/* Filter fields */}
-          {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 pb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 pb-4 pt-3">
               <div>
                 <span className="block text-xs font-semibold text-gray-600 mb-1">
                   Project Name
@@ -344,22 +372,20 @@ export default function PayGoProjectsPage() {
               </div>
               <div>
                 <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  From Date (dd-mm-yyyy)
+                  From Date
                 </span>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={filters.fromDate}
-                    onChange={(e) =>
-                      setFilters((f) => ({ ...f, fromDate: e.target.value }))
-                    }
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                  />
-                </div>
+                <input
+                  type="date"
+                  value={filters.fromDate}
+                  onChange={(e) =>
+                    setFilters((f) => ({ ...f, fromDate: e.target.value }))
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
+                />
               </div>
               <div>
                 <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  To Date (dd-mm-yyyy)
+                  To Date
                 </span>
                 <input
                   type="date"
@@ -372,11 +398,11 @@ export default function PayGoProjectsPage() {
               </div>
               <div>
                 <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Min Unit Price (₹)
+                  Min Budget (₹)
                 </span>
                 <input
                   type="number"
-                  placeholder="Min price"
+                  placeholder="Min budget"
                   value={filters.minPrice}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, minPrice: e.target.value }))
@@ -386,11 +412,11 @@ export default function PayGoProjectsPage() {
               </div>
               <div>
                 <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Max Unit Price (₹)
+                  Max Budget (₹)
                 </span>
                 <input
                   type="number"
-                  placeholder="Max price"
+                  placeholder="Max budget"
                   value={filters.maxPrice}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, maxPrice: e.target.value }))
@@ -399,9 +425,9 @@ export default function PayGoProjectsPage() {
                 />
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Results count */}
       <div className="px-4 pt-2 pb-1">
@@ -486,10 +512,18 @@ export default function PayGoProjectsPage() {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
+                            onClick={() => setViewItem(p)}
+                            title="View"
+                            className="text-emerald-600 hover:text-emerald-800"
+                            data-ocid={`paygo.projects.edit_button.${i + 1}`}
+                          >
+                            <Eye size={15} />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => openEdit(p)}
                             title="Edit"
                             className="text-blue-600 hover:text-blue-800"
-                            data-ocid={`paygo.projects.edit_button.${i + 1}`}
                           >
                             <Edit2 size={15} />
                           </button>
@@ -516,9 +550,85 @@ export default function PayGoProjectsPage() {
         </div>
       </div>
 
+      {/* View Receipt Modal */}
+      {viewItem && (
+        <Dialog open={!!viewItem} onOpenChange={() => setViewItem(null)}>
+          <DialogContent
+            className="max-w-lg"
+            style={{ border: "3px solid #0078D7" }}
+            data-ocid="paygo.projects.modal"
+          >
+            <div className="flex items-center justify-between pb-2 border-b">
+              <h2 className="text-base font-bold" style={{ color: GREEN }}>
+                Project Receipt
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleShare(viewItem)}
+                  title="Share"
+                  className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+                  data-ocid="paygo.projects.secondary_button"
+                >
+                  <Share2 size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  title="Print"
+                  className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  <Printer size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewItem(null)}
+                  title="Close"
+                  className="p-1.5 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors"
+                  data-ocid="paygo.projects.close_button"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm py-2">
+              {(
+                [
+                  ["Project Name", viewItem.name],
+                  ["Client", viewItem.client],
+                  ["Start Date", fmtDate(viewItem.startDate)],
+                  ["End Date", fmtDate(viewItem.endDate)],
+                  ["Budget (₹)", formatINR(viewItem.budget)],
+                  ["Status", viewItem.status],
+                ] as [string, string][]
+              ).map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <span className="w-28 text-gray-500 font-medium shrink-0 text-xs">
+                    {k}:
+                  </span>
+                  <span className="text-gray-800 font-semibold text-xs">
+                    {v || "—"}
+                  </span>
+                </div>
+              ))}
+              {viewItem.notes && (
+                <div className="col-span-2 mt-1">
+                  <span className="text-xs text-gray-500 font-medium">
+                    Notes:
+                  </span>
+                  <p className="text-xs text-gray-700 mt-0.5">
+                    {viewItem.notes}
+                  </p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Add / Edit Dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg" data-ocid="paygo.projects.modal">
+        <DialogContent className="max-w-lg" data-ocid="paygo.projects.dialog">
           <DialogHeader>
             <DialogTitle style={{ color: GREEN }}>
               {editItem ? "Edit Project" : "New Project"}
@@ -566,7 +676,7 @@ export default function PayGoProjectsPage() {
                 }
               />
             </div>
-            <div>
+            <div className="col-span-2">
               <Label className="text-xs font-semibold">Budget (₹)</Label>
               <Input
                 type="number"
@@ -577,18 +687,7 @@ export default function PayGoProjectsPage() {
                 placeholder="0"
               />
             </div>
-            <div>
-              <Label className="text-xs font-semibold">Unit Price (₹)</Label>
-              <Input
-                type="number"
-                value={form.unitPrice || ""}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, unitPrice: Number(e.target.value) }))
-                }
-                placeholder="0"
-              />
-            </div>
-            <div>
+            <div className="col-span-2">
               <Label className="text-xs font-semibold">Status</Label>
               <Select
                 value={form.status}

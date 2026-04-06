@@ -1,74 +1,95 @@
-# BMS – PayGo New Bill Form with Workflow & Payments Flow
+# PayGo (MPH) — Projects, Contractors, and Bills Enhancements
 
 ## Current State
 
-The PayGo (MPH) Bills page (`PayGoBillsPage.tsx`) has a basic New Bill form with fields: Project, Contractor, Trade, Block ID, Date, Amount, Year, Financial Year, Status, Remarks. The `PayGoBill` type in `PayGoContext.tsx` only stores: id, billNo, project, contractor, trade, blockId, date, amount, status (Pending/Approved/Paid/Rejected), remarks, year, financialYear.
-
-There is no:
-- Auto-generated bill number based on project prefix
-- Dynamic contractor-to-trade linkage
-- Unit Price auto-populate from contractor rates
-- Auto-calculated Gross Amount, Retention Amount, Net Amount
-- Conditional Debit logic with reason validation
-- Multi-step approval workflow (PM → QC → Billing Engineer)
-- Payment flow showing approved bills with Pending/Partially Paid/Completed status
-
-The PayGoContractor type stores: id, name, trade (single string), project, contractingPrice, unit, contact, email, address, notes, status.
-
-The PayGoPayment type stores: id, paymentNo, project, date, amount, paymentMode, reference, remarks, status.
+The PayGo module exists with three key pages:
+- `PayGoProjectsPage.tsx`: Filter bar currently shown by default (`showFilters = true`). No View action in the list. +New form includes a Unit Price field.
+- `PayGoContractorsPage.tsx`: Minimal toolbar (only New + Export CSV). No filter bar. Form uses dropdown-only Trade (no Sub-Trade, no attachment links). List has no View action and no Trade/Sub-Trade columns.
+- `PayGoBillsPage.tsx`: Filter bar shown by default. Bills list columns are limited (no SI No, Sub Trade, Qty, No's, Gross Amount, Debits, WR %, Retention Amount, Net Amount, Workflow columns). +New Bill form has helper texts, auto-fill Engineer field, no Sub-Trade, no Calculation Summary box. Debit validation is not enforced. Work Retention/Year/Financial Year visible to all roles.
+- `PayGoContext.tsx`: PayGoContractor type has no `subTrade`, `attachmentLink1`, `attachmentLink2` fields. PayGoBill type has no `subTrade` field.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **New fields to `PayGoBill` type:** description, unit, unitPrice, qty, nos, grossAmount, debitAmount, reasonForDebit, workRetention (%), retentionAmount, netAmount, attachment1, attachment2, engineerName, workflowStatus, workflowHistory (array of step objects), paidAmount, remainingAmount
-- **Bill Number auto-generation:** Based on first 2 letters of project name in uppercase + 3-digit sequence (e.g., Parkville → PA001). Must check existing bills for the same project and assign next number.
-- **Dynamic Contractor → Trade linkage:** After selecting Contractor, Trade dropdown filters to show only trades mapped to that contractor (from PayGoContractor records for the selected project)
-- **Unit Price auto-populate:** Pulls from `contractingPrice` of the matched contractor record for that project+trade combo
-- **Real-time calculations:**
-  - Gross Amount = Unit Price × Qty × No's
-  - Debit Amount only applies if Reason for Debit is non-empty
-  - Retention Amount = (Gross Amount − Debit Amount) / 100 × Work Retention %
-  - Net Amount = Gross Amount − Debit Amount + Retention Amount
-- **Approval Workflow:**
-  - After save: bill status = "Pending PM Review"
-  - PM actions: Add Debit (with reason), Approve (moves to QC), Reject (remarks mandatory)
-  - QC actions: Add Debit (with reason), Approve (moves to Billing Engineer), Reject
-  - Billing Engineer: Approve → bill becomes "Billing Approved" and appears in Payments
-- **workflowStatus values:** "Pending PM Review", "PM Approved", "QC Approved", "Billing Approved", "Rejected"
-- **Payments integration:** Bills with workflowStatus = "Billing Approved" automatically appear in PayGoPaymentsPage as payment entries with status = "Pending"
-- **Pay button in Payments:** Opens a Pay dialog. Full payment → status = "Completed". Partial → status = "Partially Paid", track remaining balance.
-- **Role simulation:** Since we don't have a real role system in PayGo, simulate with a role selector in the header area of PayGo OR use a simple role context. The Bills list shows different action buttons based on current role (Admin/Site Engineer → create; PM/QC/Billing Engineer → approve/reject buttons in view).
-- **Engineer Name auto-fill:** Use logged-in user's name or a stored PayGo user role name
+- **Projects**: View action column with receipt modal; receipt has Share, Print, Close icons in top-right (all functional)
+- **Contractors**: Full toolbar (Print, Export PDF, Import CSV, Export CSV, Download Format, +New Contractor)
+- **Contractors**: Collapsible filter bar (hidden by default) with: Contractor Name, Trade, Project, From Date, To Date, Year, Min Unit Price, Max Unit Price
+- **Contractors**: Sub-Trade field in +New form (free text, manual entry)
+- **Contractors**: Attachment Link 1 and Attachment Link 2 fields in +New form
+- **Contractors**: Trade column and Sub-Trade column in the list
+- **Contractors**: View action in the list with receipt modal; Share, Print, Close icons in top-right
+- **Contractors**: `subTrade`, `attachmentLink1`, `attachmentLink2` fields in PayGoContractor type in context
+- **Bills**: SI No column (row number)
+- **Bills**: Sub Trade column
+- **Bills**: Qty and No's columns
+- **Bills**: Gross Amount column (auto-calc: UnitPrice × Qty × No's)
+- **Bills**: Debits column (combined: Engineer Debit + PM Debit + QC Debit from workflow history)
+- **Bills**: Work Retention % column
+- **Bills**: Retention Amount column (calc: (Gross − Debit) / 100 × WR%)
+- **Bills**: Net Amount column (calc: Gross − Debit − Retention)
+- **Bills**: Workflow column showing current workflow stage with icon (PM / QC / BE / ✔ / ✗)
+- **Bills**: `subTrade` field in PayGoBill type and form
+- **Bills**: Sub-Trade field in +New Bill form (adjacent to Trade, dynamically filtered)
+- **Bills**: Calculation Summary box in form showing: Gross Amount, Effective Debit, Net Amount
+- **Bills**: Attachment 1 and Attachment 2 fields in +New Bill form (already in model, ensure in form UI)
+- **Bills**: Remarks field in form (already in model, ensure in form UI)
+- **Bills**: Debit rule: first 20 chars must be alphanumeric only; special chars only allowed after char 20; debit only applies if reason length > 20 valid chars
+- **Bills**: View action opens full details modal including remarks, reasons, and all workflow history
+- **Bills**: Workflow column action indicator: after SE creates → shows "PM"; after PM approves → "QC"; after QC approves → "BE"; after BE approves → ✔; if rejected → ✗
 
 ### Modify
-- `PayGoBill` type: extend with all new fields above
-- `PayGoContext`: update addBill logic for project-prefix bill numbering; add updateBillWorkflow action; extend payments to support partial pay with paidAmount/remainingAmount tracking
-- `PayGoBillsPage.tsx`: completely replace the New Bill form dialog with the comprehensive form (all new fields, real-time calculations, dynamic dropdowns). Add workflow action buttons (Approve/Reject/Add Debit) in the View dialog based on current workflow step. Bills list shows workflow status column.
-- `PayGoPaymentsPage.tsx`: Show bills with workflowStatus = "Billing Approved" in the payments list. Add a "Pay" button that opens a Pay dialog. Track paidAmount, remainingAmount, update status to Partially Paid or Completed.
+- **Projects**: Filter bar hidden by default (`showFilters = false` initial state)
+- **Projects**: +New form — remove Unit Price field
+- **Contractors**: Trade field in +New form changed from dropdown to free-text input
+- **Bills**: Filter bar hidden by default
+- **Bills**: Remove all helper/placeholder texts: "Auto Generated" near Bill No, "Bill Generated" text, bill number preview below field, "Filter by Contractor" in Trade placeholder, "Auto" near Gross Amount
+- **Bills**: Engineer field changed from auto-fill to manual text input
+- **Bills**: Remove Work Retention, Year, Financial Year fields from +New Bill form UI (keep in data model for backward compat)
+- **Bills**: Work Retention % and Retention Amount fields only shown to Billing Engineer role
+- **Bills**: Debit calculation only applies when Reason for Debit has >20 valid characters
+- **Bills**: View receipt for projects/contractors shows full data (all fields)
 
 ### Remove
-- The simple "Amount" field from the bill form (replaced by Gross Amount, Debit Amount, Net Amount calculations)
-- Manual Status selector in New Bill form (status is driven by workflow now)
+- **Projects**: Unit Price field from +New Project form
+- **Bills**: Helper texts ("Auto Generated", "Bill Generated", bill number preview, "Filter by Contractor", "Auto" label)
+- **Bills**: Work Retention, Year, Financial Year fields from the +New Bill form UI
+- **Bills**: Auto-fill logic for Engineer field (replace with manual input)
 
 ## Implementation Plan
 
-1. **Update `PayGoContext.tsx`:**
-   - Extend `PayGoBill` type with all new fields
-   - Update `addBill` to auto-generate project-prefix bill numbers
-   - Add `updateBillWorkflow(id, step, action, remarks, debitAmount?, reasonForDebit?)` action
-   - Extend `PayGoPayment` type with `billId`, `paidAmount`, `remainingAmount`
-   - Add `payBill(billId, payAmount)` action that creates/updates the payment record
+1. **Update PayGoContext.tsx** — Add `subTrade`, `attachmentLink1`, `attachmentLink2` to `PayGoContractor` type. Add `subTrade` to `PayGoBill` type.
 
-2. **Update `PayGoBillsPage.tsx`:**
-   - Replace the small 2-col form with a full-width comprehensive form dialog
-   - Form fields: Project (dropdown → triggers bill no generation), Bill No (read-only auto), Date, Contractor (dropdown → filters trade), Trade (filtered dropdown), Block ID, Description of Work, Unit, Unit Price (auto from contractor rate, editable), Qty, No's, Gross Amount (read-only calc), Debit Amount, Reason for Debit (textarea), Work Retention %, Retention Amount (read-only calc), Net Amount (read-only calc), Remarks, Attachment 1 (URL input), Attachment 2 (URL input), Engineer Name (auto-filled)
-   - Bills list table: add columns for Gross Amount, Net Amount, Workflow Status
-   - View dialog: show full bill details + workflow history + action buttons based on workflowStatus (Approve, Reject, Add Debit)
-   - Role simulation: show a small "Current Role" selector at the top of the page (Admin, Site Engineer, PM, QC, Billing Engineer)
+2. **Update PayGoProjectsPage.tsx**:
+   - Change `showFilters` initial state to `false`
+   - Remove Unit Price field from the +New/Edit form
+   - Add a View action button per row
+   - Build a View Receipt modal with: all project fields displayed, Share (download PNG), Print (window.print), Close icons in the top-right corner
 
-3. **Update `PayGoPaymentsPage.tsx`:**
-   - Query bills with workflowStatus = "Billing Approved" and add them to the payments list automatically
-   - Show status as Pending/Partially Paid/Completed
-   - Add "Pay" button that opens a Pay dialog with amount input
-   - Track paidAmount and remainingAmount
-   - Update bill status to Completed or Partially Paid based on payment
+3. **Update PayGoContractorsPage.tsx** (full rebuild):
+   - Add full toolbar: Print, Export PDF, Import CSV, Export CSV, Download Format, +New Contractor
+   - Add collapsible filter bar hidden by default with: Contractor Name, Trade, Project, From Date, To Date, Year, Min Unit Price, Max Unit Price
+   - Change Trade field in form to free-text Input
+   - Add Sub-Trade free-text Input in form
+   - Add Attachment Link 1 and Link 2 URL inputs in form
+   - Add Trade and Sub-Trade columns to the list table
+   - Add View action button per row
+   - Build View Receipt modal with Share, Print, Close icons in top-right
+
+4. **Update PayGoBillsPage.tsx** (BillsTab component):
+   - Change filter bar initial state to hidden
+   - Update bills list columns: SI No, Bill No, Project, Trade, Sub Trade, Block ID, Date, Description of Item, Unit, Unit Price, Qty, No's, Gross Amount, Debits, WR %, Retention Amount, Net Amount, Workflow, Actions
+   - Gross Amount = UnitPrice × Qty × No's (display computed)
+   - Debits = sum of all debit amounts from workflowHistory
+   - Retention Amount = (Gross − Debits) / 100 × WR%
+   - Net Amount = Gross − Debits − Retention Amount
+   - Workflow column: show PM/QC/BE text badge or ✔/✗ icon
+   - Remove all helper texts from +New Bill form
+   - Change Engineer field to manual text Input
+   - Add Sub-Trade input field next to Trade
+   - Remove Work Retention, Year, Financial Year from form UI
+   - Add Calculation Summary box below form fields showing Gross Amount, Effective Debit, Net Amount
+   - WR% and Retention Amount fields in form only visible when currentRole === 'Billing Engineer'
+   - Enforce Reason for Debit validation: alphanumeric only for first 20 chars, special chars allowed after char 20; debit only applies if reason length > 20 chars
+   - View action opens a detailed receipt modal showing all fields including remarks and reasons and workflow history
+   - Ensure Attachment 1, Attachment 2, Remarks are visible in the form
+   - After SE/Admin creates bill, workflow status set to "Pending PM Review" and action column shows "PM"

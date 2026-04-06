@@ -27,8 +27,10 @@ import {
   FileText,
   Plus,
   Printer,
+  Share2,
   Trash2,
   Upload,
+  X,
   XCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -127,6 +129,7 @@ type BillFormData = {
   project: string;
   contractor: string;
   trade: string;
+  subTrade: string;
   blockId: string;
   date: string;
   description: string;
@@ -159,6 +162,7 @@ const emptyBillForm = (engineerName = "Admin"): BillFormData => ({
   project: "",
   contractor: "",
   trade: "",
+  subTrade: "",
   blockId: "",
   date: new Date().toISOString().split("T")[0],
   description: "",
@@ -224,6 +228,50 @@ const emptyNMRForm = (): NMRFormData => ({
 
 const toolbarBtnClass =
   "flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors cursor-pointer";
+
+// Helper to compute workflow badge
+function WorkflowBadge({ status }: { status: PayGoBill["workflowStatus"] }) {
+  if (status === "Billing Approved") {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-6 h-6 rounded-full"
+        style={{ background: "#D4EDDA" }}
+      >
+        <CheckCircle size={14} style={{ color: "#155724" }} />
+      </span>
+    );
+  }
+  if (status === "Rejected") {
+    return (
+      <span
+        className="inline-flex items-center justify-center w-6 h-6 rounded-full"
+        style={{ background: "#F8D7DA" }}
+      >
+        <XCircle size={14} style={{ color: "#721C24" }} />
+      </span>
+    );
+  }
+  const labels: Record<string, string> = {
+    "Pending PM Review": "PM",
+    "PM Approved": "QC",
+    "QC Approved": "BE",
+  };
+  const colors: Record<string, { bg: string; color: string }> = {
+    "Pending PM Review": { bg: "#FFF3CD", color: "#856404" },
+    "PM Approved": { bg: "#CCE5FF", color: "#004085" },
+    "QC Approved": { bg: "#E8D5FF", color: "#5a0090" },
+  };
+  const label = labels[status] || status;
+  const style = colors[status] || { bg: "#e2e3e5", color: "#383d41" };
+  return (
+    <span
+      className="px-2 py-0.5 rounded-full text-xs font-bold"
+      style={{ background: style.bg, color: style.color }}
+    >
+      {label}
+    </span>
+  );
+}
 
 // ─── Workflow Action Modal ─────────────────────────────────────────────────────
 type WorkflowActionModalProps = {
@@ -535,7 +583,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
     deleteBill,
     updateBillWorkflow,
   } = usePayGo();
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<BillFilters>(emptyBillFilters());
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<PayGoBill | null>(null);
@@ -543,21 +591,8 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pw, setPw] = useState("");
   const [viewBill, setViewBill] = useState<PayGoBill | null>(null);
-  const [billNoPreview, setBillNoPreview] = useState("");
 
-  // Auto-generate bill no preview when project changes
-  useEffect(() => {
-    if (!form.project || editItem) {
-      setBillNoPreview("");
-      return;
-    }
-    const prefix = form.project.slice(0, 2).toUpperCase();
-    const projectBills = bills.filter((x) => x.billNo.startsWith(prefix));
-    const nextSeq = projectBills.length + 1;
-    setBillNoPreview(`${prefix}${String(nextSeq).padStart(3, "0")}`);
-  }, [form.project, bills, editItem]);
-
-  // Auto-update engineer name when role changes
+  // Auto-update engineer name when role changes (only for new bills)
   useEffect(() => {
     if (!editItem) {
       setForm((f) => ({ ...f, engineerName: currentRole }));
@@ -567,9 +602,11 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
   // Real-time calculations
   useEffect(() => {
     const gross = form.unitPrice * form.qty * form.nos;
-    const effectiveDebit = form.reasonForDebit.trim() ? form.debitAmount : 0;
+    // Apply debit only if reason has more than 20 chars
+    const effectiveDebit =
+      form.reasonForDebit.length > 20 ? form.debitAmount : 0;
     const retention = ((gross - effectiveDebit) / 100) * form.workRetention;
-    const net = gross - effectiveDebit + retention;
+    const net = gross - effectiveDebit - retention;
     setForm((f) => ({
       ...f,
       grossAmount: gross,
@@ -628,7 +665,6 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
     });
   }, [bills, filters]);
 
-  const totalGross = filtered.reduce((s, b) => s + (b.grossAmount || 0), 0);
   const totalNet = filtered.reduce(
     (s, b) => s + (b.netAmount || b.amount || 0),
     0,
@@ -646,6 +682,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
       project: b.project,
       contractor: b.contractor,
       trade: b.trade,
+      subTrade: b.subTrade ?? "",
       blockId: b.blockId,
       date: b.date,
       description: b.description || "",
@@ -714,12 +751,10 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
   const clearFilters = () => setFilters(emptyBillFilters());
 
   const handleContractorChange = (name: string) => {
-    // Reset trade and unit price when contractor changes
     setForm((f) => ({ ...f, contractor: name, trade: "", unitPrice: 0 }));
   };
 
   const handleTradeChange = (trade: string) => {
-    // Auto-populate unit price from contractor rate
     const match = contractors.find(
       (c) => c.name === form.contractor && c.trade === trade,
     );
@@ -729,6 +764,13 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
       unitPrice: match ? match.contractingPrice : f.unitPrice,
       unit: match ? match.unit : f.unit,
     }));
+  };
+
+  const handleReasonChange = (val: string) => {
+    // First 20 chars: only alphanumeric and spaces allowed
+    const first20 = val.slice(0, 20).replace(/[^a-zA-Z0-9 ]/g, "");
+    const rest = val.slice(20);
+    setForm((f) => ({ ...f, reasonForDebit: first20 + rest }));
   };
 
   const handleWorkflowAction = (
@@ -748,9 +790,33 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
       reasonForDebit,
     );
     toast.success(
-      `Bill ${action === "Approved" ? "approved" : action === "Rejected" ? "rejected" : "debit added"} successfully.`,
+      `Bill ${
+        action === "Approved"
+          ? "approved"
+          : action === "Rejected"
+            ? "rejected"
+            : "debit added"
+      } successfully.`,
     );
     setViewBill(null);
+  };
+
+  const handleShare = (b: PayGoBill) => {
+    const grossAmt = b.unitPrice * b.qty * b.nos;
+    const debits = b.workflowHistory
+      .filter((h) => h.action === "Added Debit")
+      .reduce((s, h) => s + (h.debitAmount || 0), 0);
+    const text = `Bill Receipt\nBill No: ${b.billNo}\nProject: ${b.project}\nTrade: ${b.trade}\nSub-Trade: ${b.subTrade || "—"}\nBlock ID: ${b.blockId}\nDate: ${fmtDate(b.date)}\nDescription: ${b.description}\nUnit Price: ${formatINR(b.unitPrice)}\nQty: ${b.qty}\nNo's: ${b.nos}\nGross Amount: ${formatINR(grossAmt)}\nDebits: ${formatINR(debits)}\nNet Amount: ${formatINR(b.netAmount || b.amount)}\nEngineer: ${b.engineerName}\nStatus: ${b.workflowStatus}`;
+    if (navigator.share) {
+      navigator
+        .share({ title: "Bill Receipt", text })
+        .catch(() => window.print());
+    } else {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => toast.success("Details copied to clipboard."))
+        .catch(() => window.print());
+    }
   };
 
   const exportCSV = () => {
@@ -759,6 +825,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
       "Project",
       "Contractor",
       "Trade",
+      "Sub Trade",
       "Block ID",
       "Date",
       "Gross Amount",
@@ -770,6 +837,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
       b.project,
       b.contractor,
       b.trade,
+      b.subTrade ?? "",
       b.blockId,
       b.date,
       b.grossAmount || 0,
@@ -786,6 +854,15 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
 
   const canCreateBill =
     currentRole === "Admin" || currentRole === "Site Engineer";
+
+  const effectiveDebit = (b: PayGoBill) => {
+    return (
+      b.workflowHistory
+        .filter((h) => h.action === "Added Debit")
+        .reduce((s, h) => s + (h.debitAmount || 0), 0) +
+      (b.reasonForDebit && b.reasonForDebit.length > 20 ? b.debitAmount : 0)
+    );
+  };
 
   return (
     <div className="flex flex-col gap-0">
@@ -924,44 +1001,6 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               </div>
               <div>
                 <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Year
-                </span>
-                <select
-                  value={filters.year}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, year: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                >
-                  <option value="">All Years</option>
-                  {YEARS.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Financial Year
-                </span>
-                <select
-                  value={filters.financialYear}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, financialYear: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                >
-                  <option value="">All FY</option>
-                  {FIN_YEARS.map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
                   Start Date
                 </span>
                 <input
@@ -995,7 +1034,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1 hover:bg-red-50 transition-colors"
+                className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1 hover:bg-red-50"
               >
                 Clear Filters
               </button>
@@ -1004,45 +1043,37 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
         </div>
       )}
 
-      {/* Summary totals row */}
-      <div className="px-4 py-2 flex gap-3 flex-wrap">
-        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 text-xs">
-          <span className="text-blue-600 font-semibold">Gross Total:</span>
-          <span className="font-bold text-blue-800">
-            {formatINR(totalGross)}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 text-xs">
-          <span className="text-green-600 font-semibold">Net Total:</span>
-          <span className="font-bold text-green-800">
-            {formatINR(totalNet)}
-          </span>
-        </div>
-      </div>
-
       {/* Table */}
       <div className="px-4 py-3">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs">
               <thead>
                 <tr style={{ background: GREEN }}>
                   {[
-                    "#",
+                    "SI No",
                     "Bill No",
                     "Project",
-                    "Contractor",
                     "Trade",
+                    "Sub Trade",
                     "Block ID",
                     "Date",
-                    "Gross (₹)",
-                    "Net (₹)",
+                    "Description",
+                    "Unit",
+                    "Unit Price",
+                    "Qty",
+                    "No's",
+                    "Gross Amt",
+                    "Debits",
+                    "WR %",
+                    "Retention",
+                    "Net Amt",
                     "Workflow",
                     "Actions",
                   ].map((h) => (
                     <th
                       key={h}
-                      className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap"
+                      className="px-2.5 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap"
                     >
                       {h}
                     </th>
@@ -1053,87 +1084,113 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 {filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={19}
                       className="px-4 py-10 text-center text-gray-400 text-sm"
                       data-ocid="paygo.bills.empty_state"
                     >
-                      No bills found. Try adjusting your filters.
+                      No bills found.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((b, i) => (
-                    <tr
-                      key={b.id}
-                      style={{ background: i % 2 === 0 ? "#FFF8E1" : "#fff" }}
-                      data-ocid={`paygo.bills.item.${i + 1}`}
-                    >
-                      <td className="px-3 py-2.5 text-gray-500">{i + 1}</td>
-                      <td className="px-3 py-2.5 font-mono text-xs font-semibold text-gray-700">
-                        {b.billNo}
-                      </td>
-                      <td className="px-3 py-2.5 text-gray-700 max-w-[100px] truncate">
-                        {b.project}
-                      </td>
-                      <td className="px-3 py-2.5 text-gray-700 max-w-[100px] truncate">
-                        {b.contractor}
-                      </td>
-                      <td className="px-3 py-2.5 text-gray-600">{b.trade}</td>
-                      <td className="px-3 py-2.5 text-gray-600">{b.blockId}</td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
-                        {fmtDate(b.date)}
-                      </td>
-                      <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap">
-                        {formatINR(b.grossAmount || 0)}
-                      </td>
-                      <td
-                        className="px-3 py-2.5 font-medium whitespace-nowrap"
-                        style={{ color: GREEN }}
+                  filtered.map((b, i) => {
+                    const grossAmt = b.unitPrice * b.qty * b.nos;
+                    const debitsTotal = effectiveDebit(b);
+                    const retentionAmt =
+                      ((grossAmt - debitsTotal) / 100) * b.workRetention;
+                    const netAmt = grossAmt - debitsTotal - retentionAmt;
+                    return (
+                      <tr
+                        key={b.id}
+                        style={{ background: i % 2 === 0 ? "#FFF8F0" : "#fff" }}
+                        data-ocid={`paygo.bills.item.${i + 1}`}
                       >
-                        {formatINR(b.netAmount || b.amount)}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span
-                          className="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap"
-                          style={WORKFLOW_STATUS_COLORS[b.workflowStatus]}
+                        <td className="px-2.5 py-2.5 text-gray-500">{i + 1}</td>
+                        <td className="px-2.5 py-2.5 font-mono font-semibold text-gray-700 whitespace-nowrap">
+                          {b.billNo}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-700 max-w-[80px] truncate">
+                          {b.project}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-600">
+                          {b.trade}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-500">
+                          {b.subTrade || "—"}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-600">
+                          {b.blockId}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-600 whitespace-nowrap">
+                          {fmtDate(b.date)}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-600 max-w-[100px] truncate">
+                          {b.description || "—"}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-600">
+                          {b.unit}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-700 whitespace-nowrap">
+                          {formatINR(b.unitPrice)}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-center">{b.qty}</td>
+                        <td className="px-2.5 py-2.5 text-center">{b.nos}</td>
+                        <td className="px-2.5 py-2.5 font-medium text-blue-700 whitespace-nowrap">
+                          {formatINR(grossAmt)}
+                        </td>
+                        <td className="px-2.5 py-2.5 font-medium text-orange-600 whitespace-nowrap">
+                          {formatINR(debitsTotal)}
+                        </td>
+                        <td className="px-2.5 py-2.5 text-gray-600">
+                          {b.workRetention}%
+                        </td>
+                        <td className="px-2.5 py-2.5 font-medium text-purple-600 whitespace-nowrap">
+                          {formatINR(retentionAmt)}
+                        </td>
+                        <td
+                          className="px-2.5 py-2.5 font-medium whitespace-nowrap"
+                          style={{ color: GREEN }}
                         >
-                          {b.workflowStatus}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setViewBill(b)}
-                            title="View"
-                            className="text-blue-500 hover:text-blue-700"
-                            data-ocid={`paygo.bills.edit_button.${i + 1}`}
-                          >
-                            <Eye size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openEdit(b)}
-                            title="Edit"
-                            className="text-gray-500 hover:text-gray-700"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteId(b.id);
-                              setPw("");
-                            }}
-                            title="Delete"
-                            className="text-red-500 hover:text-red-700"
-                            data-ocid={`paygo.bills.delete_button.${i + 1}`}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                          {formatINR(netAmt)}
+                        </td>
+                        <td className="px-2.5 py-2.5">
+                          <WorkflowBadge status={b.workflowStatus} />
+                        </td>
+                        <td className="px-2.5 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setViewBill(b)}
+                              title="View"
+                              className="text-blue-500 hover:text-blue-700"
+                              data-ocid={`paygo.bills.edit_button.${i + 1}`}
+                            >
+                              <Eye size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEdit(b)}
+                              title="Edit"
+                              className="text-gray-500 hover:text-gray-700"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteId(b.id);
+                                setPw("");
+                              }}
+                              title="Delete"
+                              className="text-red-500 hover:text-red-700"
+                              data-ocid={`paygo.bills.delete_button.${i + 1}`}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1168,7 +1225,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 value={form.project}
                 onValueChange={(v) => setForm((f) => ({ ...f, project: v }))}
               >
-                <SelectTrigger data-ocid="paygo.bills.select">
+                <SelectTrigger>
                   <SelectValue placeholder="Select Project" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1180,27 +1237,24 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 </SelectContent>
               </Select>
             </div>
+
             {/* Row 2: Bill No (auto), Date, Engineer */}
             <div>
-              <Label className="text-xs font-semibold">
-                Bill No (Auto-generated)
-              </Label>
+              <Label className="text-xs font-semibold">Bill No</Label>
               <Input
                 value={
                   editItem
-                    ? `${form.project.slice(0, 2).toUpperCase()}—`
-                    : billNoPreview
+                    ? form.project
+                      ? `${form.project.slice(0, 2).toUpperCase()}…`
+                      : ""
+                    : form.project
+                      ? `${form.project.slice(0, 2).toUpperCase()}…`
+                      : ""
                 }
                 readOnly
-                className="bg-gray-50 font-mono text-sm font-semibold"
-                placeholder="Select project first"
-                data-ocid="paygo.bills.input"
+                className="bg-gray-50 text-gray-500"
+                placeholder="Auto-assigned on save"
               />
-              {billNoPreview && !editItem && (
-                <span className="text-xs text-green-600 mt-0.5 block">
-                  Preview: {billNoPreview}
-                </span>
-              )}
             </div>
             <div>
               <Label className="text-xs font-semibold">
@@ -1215,16 +1269,17 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               />
             </div>
             <div>
-              <Label className="text-xs font-semibold">
-                Engineer Name (Bill Generator)
-              </Label>
+              <Label className="text-xs font-semibold">Engineer Name</Label>
               <Input
                 value={form.engineerName}
-                readOnly
-                className="bg-gray-50"
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, engineerName: e.target.value }))
+                }
+                placeholder="Engineer Name"
               />
             </div>
-            {/* Row 3: Contractor, Trade, Block ID */}
+
+            {/* Row 3: Contractor, Trade, Sub-Trade, Block ID */}
             <div>
               <Label className="text-xs font-semibold">
                 Contractor <span className="text-red-500">*</span>
@@ -1246,9 +1301,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               </Select>
             </div>
             <div>
-              <Label className="text-xs font-semibold">
-                Trade (filtered by contractor)
-              </Label>
+              <Label className="text-xs font-semibold">Trade</Label>
               <Select
                 value={form.trade}
                 onValueChange={handleTradeChange}
@@ -1273,6 +1326,16 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               </Select>
             </div>
             <div>
+              <Label className="text-xs font-semibold">Sub-Trade</Label>
+              <Input
+                value={form.subTrade}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, subTrade: e.target.value }))
+                }
+                placeholder="Sub-Trade"
+              />
+            </div>
+            <div>
               <Label className="text-xs font-semibold">Block ID</Label>
               <Input
                 value={form.blockId}
@@ -1282,6 +1345,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 placeholder="e.g. BLK-A1"
               />
             </div>
+
             {/* Row 4: Description (full width) */}
             <div className="col-span-3">
               <Label className="text-xs font-semibold">
@@ -1296,6 +1360,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 placeholder="Describe the work performed..."
               />
             </div>
+
             {/* Row 5: Unit, Unit Price */}
             <div>
               <Label className="text-xs font-semibold">Unit</Label>
@@ -1316,14 +1381,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               </Select>
             </div>
             <div>
-              <Label className="text-xs font-semibold">
-                Unit Price (₹){" "}
-                {form.trade && (
-                  <span className="text-blue-500 text-xs font-normal">
-                    (auto from contractor rate)
-                  </span>
-                )}
-              </Label>
+              <Label className="text-xs font-semibold">Unit Price (₹)</Label>
               <Input
                 type="number"
                 value={form.unitPrice || ""}
@@ -1333,8 +1391,9 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 placeholder="0"
               />
             </div>
-            <div /> {/* spacer */}
-            {/* Row 6: Qty, No's, Gross Amount */}
+            <div />
+
+            {/* Row 6: Qty, No's */}
             <div>
               <Label className="text-xs font-semibold">Quantity (Qty)</Label>
               <Input
@@ -1357,20 +1416,8 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 placeholder="1"
               />
             </div>
-            <div>
-              <Label className="text-xs font-semibold">
-                Gross Amount (₹) — Auto
-              </Label>
-              <Input
-                value={formatINR(form.grossAmount)}
-                readOnly
-                className="font-semibold"
-                style={{ background: "#E3F2FD", color: "#1565C0" }}
-              />
-              <span className="text-xs text-blue-500 mt-0.5 block">
-                Unit Price × Qty × No&apos;s
-              </span>
-            </div>
+            <div />
+
             {/* Row 7: Debit Amount, Reason for Debit */}
             <div>
               <Label className="text-xs font-semibold">Debit Amount (₹)</Label>
@@ -1390,82 +1437,117 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               <Label className="text-xs font-semibold">
                 Reason for Debit
                 <span className="text-orange-500 text-xs font-normal ml-1">
-                  (required to apply debit)
+                  (first 20 chars: no special chars; debit applies only if
+                  &gt;20 chars)
                 </span>
               </Label>
               <Textarea
                 value={form.reasonForDebit}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, reasonForDebit: e.target.value }))
-                }
+                onChange={(e) => handleReasonChange(e.target.value)}
                 rows={2}
-                placeholder="Enter reason for debit (required to activate debit deduction)..."
+                placeholder="Enter reason for debit (min 20 chars to activate debit)..."
               />
-              {form.debitAmount > 0 && !form.reasonForDebit.trim() && (
+              {form.debitAmount > 0 && form.reasonForDebit.length <= 20 && (
                 <span className="text-xs text-orange-500 mt-0.5 block">
-                  ⚠ Debit will not apply until reason is entered
+                  ⚠ Debit will not apply — enter more than 20 characters
+                </span>
+              )}
+              {form.reasonForDebit.length > 0 && (
+                <span className="text-xs text-gray-400 mt-0.5 block">
+                  {form.reasonForDebit.length} chars{" "}
+                  {form.reasonForDebit.length > 20
+                    ? "✅ debit active"
+                    : `(${20 - form.reasonForDebit.length} more needed)`}
                 </span>
               )}
             </div>
-            {/* Row 8: Work Retention %, Retention Amount, Net Amount */}
-            <div>
-              <Label className="text-xs font-semibold">
-                Work Retention (%)
-              </Label>
-              <Input
-                type="number"
-                value={form.workRetention || ""}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    workRetention: Number(e.target.value),
-                  }))
-                }
-                placeholder="5"
-                min={0}
-                max={100}
-              />
+
+            {/* WR% and Retention — only for Billing Engineer */}
+            {currentRole === "Billing Engineer" && (
+              <>
+                <div>
+                  <Label className="text-xs font-semibold">
+                    Work Retention (%)
+                  </Label>
+                  <Input
+                    type="number"
+                    value={form.workRetention || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        workRetention: Number(e.target.value),
+                      }))
+                    }
+                    placeholder="5"
+                    min={0}
+                    max={100}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">
+                    Retention Amount (₹)
+                  </Label>
+                  <Input
+                    value={formatINR(form.retentionAmount)}
+                    readOnly
+                    className="font-semibold"
+                    style={{ background: "#E8F5E9", color: "#2E7D32" }}
+                  />
+                </div>
+                <div />
+              </>
+            )}
+
+            {/* Calculation Summary Box */}
+            <div className="col-span-3">
+              <div
+                className="rounded-xl border p-4"
+                style={{ background: "#F8FFF8", borderColor: GREEN }}
+              >
+                <div className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wide">
+                  Calculation Summary
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-blue-50 rounded-lg p-3">
+                    <div className="text-xs text-blue-500 font-semibold">
+                      Gross Amount
+                    </div>
+                    <div className="font-bold text-blue-800 text-base mt-0.5">
+                      {formatINR(form.grossAmount)}
+                    </div>
+                    <div className="text-xs text-blue-400 mt-0.5">
+                      {form.unitPrice} × {form.qty} × {form.nos}
+                    </div>
+                  </div>
+                  <div className="bg-orange-50 rounded-lg p-3">
+                    <div className="text-xs text-orange-500 font-semibold">
+                      Effective Debit
+                    </div>
+                    <div className="font-bold text-orange-800 text-base mt-0.5">
+                      {formatINR(
+                        form.reasonForDebit.length > 20 ? form.debitAmount : 0,
+                      )}
+                    </div>
+                    {form.debitAmount > 0 &&
+                      form.reasonForDebit.length <= 20 && (
+                        <div className="text-xs text-orange-400 mt-0.5">
+                          (inactive)
+                        </div>
+                      )}
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3">
+                    <div className="text-xs text-green-600 font-semibold">
+                      Net Amount
+                    </div>
+                    <div className="font-bold text-green-800 text-base mt-0.5">
+                      {formatINR(form.netAmount)}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <Label className="text-xs font-semibold">
-                Retention Amount (₹) — Auto
-              </Label>
-              <Input
-                value={formatINR(form.retentionAmount)}
-                readOnly
-                className="font-semibold"
-                style={{ background: "#E8F5E9", color: "#2E7D32" }}
-              />
-              <span className="text-xs text-green-600 mt-0.5 block">
-                (Gross − Debit) / 100 × WR%
-              </span>
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">
-                Net Amount (₹) — Auto
-              </Label>
-              <Input
-                value={formatINR(form.netAmount)}
-                readOnly
-                className="font-semibold text-base"
-                style={{ background: "#E8F5E9", color: "#1B5E20" }}
-              />
-              <span className="text-xs text-green-600 mt-0.5 block">
-                Gross − Debit + Retention
-              </span>
-            </div>
-            {/* Row 9: Remarks, Attachment 1, Attachment 2 */}
-            <div>
-              <Label className="text-xs font-semibold">Remarks</Label>
-              <Textarea
-                value={form.remarks}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, remarks: e.target.value }))
-                }
-                rows={2}
-                placeholder="Additional remarks..."
-              />
-            </div>
+
+            {/* Attachments and Remarks */}
             <div>
               <Label className="text-xs font-semibold">
                 Attachment 1 (Link)
@@ -1492,86 +1574,16 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 type="url"
               />
             </div>
-            {/* Year fields */}
-            <div>
-              <Label className="text-xs font-semibold">Year</Label>
-              <Select
-                value={form.year}
-                onValueChange={(v) => setForm((f) => ({ ...f, year: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {YEARS.map((y) => (
-                    <SelectItem key={y} value={y}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Financial Year</Label>
-              <Select
-                value={form.financialYear}
-                onValueChange={(v) =>
-                  setForm((f) => ({ ...f, financialYear: v }))
+            <div className="col-span-3">
+              <Label className="text-xs font-semibold">Remarks</Label>
+              <Textarea
+                value={form.remarks}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, remarks: e.target.value }))
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Financial Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {FIN_YEARS.map((y) => (
-                    <SelectItem key={y} value={y}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Calculation summary */}
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 mt-2">
-            <div className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">
-              Calculation Summary
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-              <div className="bg-blue-50 rounded p-2">
-                <div className="text-blue-500 font-semibold">Gross Amount</div>
-                <div className="font-bold text-blue-800 text-sm">
-                  {formatINR(form.grossAmount)}
-                </div>
-              </div>
-              <div className="bg-orange-50 rounded p-2">
-                <div className="text-orange-500 font-semibold">
-                  Effective Debit
-                </div>
-                <div className="font-bold text-orange-800 text-sm">
-                  {formatINR(form.reasonForDebit.trim() ? form.debitAmount : 0)}
-                  {form.debitAmount > 0 && !form.reasonForDebit.trim() && (
-                    <span className="text-orange-400 text-xs ml-1">
-                      (inactive)
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="bg-purple-50 rounded p-2">
-                <div className="text-purple-500 font-semibold">
-                  Retention ({form.workRetention}%)
-                </div>
-                <div className="font-bold text-purple-800 text-sm">
-                  {formatINR(form.retentionAmount)}
-                </div>
-              </div>
-              <div className="bg-green-50 rounded p-2">
-                <div className="text-green-600 font-semibold">Net Amount</div>
-                <div className="font-bold text-green-800 text-sm">
-                  {formatINR(form.netAmount)}
-                </div>
-              </div>
+                rows={2}
+                placeholder="Additional remarks..."
+              />
             </div>
           </div>
 
@@ -1597,21 +1609,50 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
         </DialogContent>
       </Dialog>
 
-      {/* View Dialog */}
+      {/* View Bill Receipt Dialog */}
       {viewBill && (
         <Dialog open={!!viewBill} onOpenChange={() => setViewBill(null)}>
           <DialogContent
             className="max-w-2xl max-h-[85vh] overflow-y-auto"
+            style={{ border: "3px solid #FF6B35" }}
             data-ocid="paygo.bills.modal"
           >
-            <DialogHeader>
-              <DialogTitle style={{ color: GREEN }}>
-                Bill Details — {viewBill.billNo}
-              </DialogTitle>
-            </DialogHeader>
+            {/* Receipt header with icons */}
+            <div className="flex items-center justify-between pb-2 border-b">
+              <h2 className="text-base font-bold" style={{ color: GREEN }}>
+                Bill Receipt — {viewBill.billNo}
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleShare(viewBill)}
+                  title="Share"
+                  className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  <Share2 size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  title="Print"
+                  className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  <Printer size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewBill(null)}
+                  title="Close"
+                  className="p-1.5 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition-colors"
+                  data-ocid="paygo.bills.close_button"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
 
             {/* Status badges */}
-            <div className="flex gap-2 flex-wrap mt-1 mb-3">
+            <div className="flex gap-2 flex-wrap mt-2 mb-3">
               <span
                 className="px-3 py-1 rounded-full text-xs font-semibold"
                 style={WORKFLOW_STATUS_COLORS[viewBill.workflowStatus]}
@@ -1628,6 +1669,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               </span>
             </div>
 
+            {/* Core fields */}
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               {(
                 [
@@ -1635,6 +1677,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                   ["Project", viewBill.project],
                   ["Contractor", viewBill.contractor],
                   ["Trade", viewBill.trade],
+                  ["Sub-Trade", viewBill.subTrade || "—"],
                   ["Block ID", viewBill.blockId],
                   ["Date", fmtDate(viewBill.date)],
                   ["Engineer", viewBill.engineerName || "—"],
@@ -1642,26 +1685,25 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                   ["Unit Price", formatINR(viewBill.unitPrice || 0)],
                   ["Qty", String(viewBill.qty || 0)],
                   ["No's", String(viewBill.nos || 1)],
-                  ["Work Retention %", `${viewBill.workRetention || 0}%`],
-                  ["Year", viewBill.year],
-                  ["Financial Year", viewBill.financialYear],
                 ] as [string, string][]
               ).map(([k, v]) => (
                 <div key={k} className="flex gap-2">
-                  <span className="w-32 text-gray-500 font-medium shrink-0">
+                  <span className="w-28 text-gray-500 font-medium shrink-0 text-xs">
                     {k}:
                   </span>
-                  <span className="text-gray-800">{v || "—"}</span>
+                  <span className="text-gray-800 text-xs">{v || "—"}</span>
                 </div>
               ))}
             </div>
 
             {viewBill.description && (
               <div className="mt-3 text-sm">
-                <span className="font-semibold text-gray-600">
+                <span className="font-semibold text-gray-600 text-xs">
                   Description:
                 </span>
-                <p className="text-gray-700 mt-0.5">{viewBill.description}</p>
+                <p className="text-gray-700 mt-0.5 text-xs">
+                  {viewBill.description}
+                </p>
               </div>
             )}
 
@@ -1672,21 +1714,16 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                   Gross Amount
                 </div>
                 <div className="font-bold text-blue-800">
-                  {formatINR(viewBill.grossAmount || 0)}
+                  {formatINR(viewBill.unitPrice * viewBill.qty * viewBill.nos)}
                 </div>
               </div>
               <div className="bg-orange-50 rounded-lg p-3">
                 <div className="text-xs text-orange-500 font-semibold">
-                  Debit Amount
+                  Debits
                 </div>
                 <div className="font-bold text-orange-800">
-                  {formatINR(viewBill.debitAmount || 0)}
+                  {formatINR(effectiveDebit(viewBill))}
                 </div>
-                {viewBill.reasonForDebit && (
-                  <div className="text-xs text-orange-400 mt-0.5">
-                    {viewBill.reasonForDebit}
-                  </div>
-                )}
               </div>
               <div className="bg-purple-50 rounded-lg p-3">
                 <div className="text-xs text-purple-500 font-semibold">
@@ -1759,15 +1796,28 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
               </div>
             )}
 
+            {/* Reason for debit (view only) */}
+            {viewBill.reasonForDebit && (
+              <div className="mt-2 text-xs">
+                <span className="font-semibold text-orange-600">
+                  Reason for Debit:
+                </span>
+                <span className="text-gray-700 ml-1">
+                  {viewBill.reasonForDebit}
+                </span>
+              </div>
+            )}
+
+            {/* Remarks (view only) */}
             {viewBill.remarks && (
-              <div className="mt-2 text-sm">
+              <div className="mt-2 text-xs">
                 <span className="font-semibold text-gray-600">Remarks:</span>
                 <span className="text-gray-700 ml-1">{viewBill.remarks}</span>
               </div>
             )}
 
             {(viewBill.attachment1 || viewBill.attachment2) && (
-              <div className="mt-2 text-sm flex gap-4">
+              <div className="mt-2 text-xs flex gap-4">
                 {viewBill.attachment1 && (
                   <a
                     href={viewBill.attachment1}
@@ -1809,7 +1859,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
           if (!o) setDeleteId(null);
         }}
       >
-        <DialogContent data-ocid="paygo.bills.delete_button">
+        <DialogContent data-ocid="paygo.bills.dialog">
           <DialogHeader>
             <DialogTitle className="text-red-600">Confirm Delete</DialogTitle>
           </DialogHeader>
@@ -1856,7 +1906,7 @@ function NMRBillsTab() {
     updateNMRBill,
     deleteNMRBill,
   } = usePayGo();
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<NMRFilters>(emptyNMRFilters());
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<PayGoNMRBill | null>(null);
@@ -2482,12 +2532,33 @@ function NMRBillsTab() {
       {/* NMR View Dialog */}
       {viewBill && (
         <Dialog open={!!viewBill} onOpenChange={() => setViewBill(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle style={{ color: GREEN }}>
+          <DialogContent
+            className="max-w-md"
+            style={{ border: "3px solid #43A047" }}
+          >
+            <div className="flex items-center justify-between pb-2 border-b">
+              <h2 className="text-base font-bold" style={{ color: GREEN }}>
                 NMR Bill Details
-              </DialogTitle>
-            </DialogHeader>
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  title="Print"
+                  className="p-1.5 rounded hover:bg-gray-100 text-gray-600"
+                >
+                  <Printer size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewBill(null)}
+                  title="Close"
+                  className="p-1.5 rounded hover:bg-red-50 text-gray-500 hover:text-red-600"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
             <div className="space-y-2 py-2 text-sm">
               {(
                 [
@@ -2508,22 +2579,13 @@ function NMRBillsTab() {
                 ] as [string, string][]
               ).map(([k, v]) => (
                 <div key={k} className="flex gap-2">
-                  <span className="w-36 text-gray-500 font-medium shrink-0">
+                  <span className="w-36 text-gray-500 font-medium shrink-0 text-xs">
                     {k}:
                   </span>
-                  <span className="text-gray-800">{v || "—"}</span>
+                  <span className="text-gray-800 text-xs">{v || "—"}</span>
                 </div>
               ))}
             </div>
-            <DialogFooter>
-              <button
-                type="button"
-                onClick={() => setViewBill(null)}
-                className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Close
-              </button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}

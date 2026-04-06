@@ -114,6 +114,74 @@ export type PayGoNMRBill = {
   financialYear: string;
 };
 
+// ─── BOQ Types ─────────────────────────────────────────────────────────────────
+
+export type BOQItem = {
+  id: string;
+  description: string;
+  unit: string;
+  length: number;
+  width: number;
+  height: number;
+  qty: number;
+  isManualQty: boolean;
+  rate: number;
+  amount: number;
+};
+
+export type BOQSubCategory = {
+  id: string;
+  name: string;
+  items: BOQItem[];
+};
+
+export type BOQCategory = {
+  id: string;
+  name: string;
+  subCategories: BOQSubCategory[];
+  isExpanded: boolean;
+};
+
+export type PayGoBOQ = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  title: string;
+  createdDate: string;
+  categories: BOQCategory[];
+};
+
+// ─── Work Order Types ──────────────────────────────────────────────────────────
+
+export type WorkOrderItem = {
+  boqItemId: string;
+  description: string;
+  unit: string;
+  qty: number;
+  rate: number;
+  amount: number;
+};
+
+export type PayGoWorkOrder = {
+  id: string;
+  workOrderNo: string;
+  project: string;
+  contractor: string;
+  boqId: string;
+  scopeOfWork: string;
+  workOrderDate: string;
+  startDate: string;
+  endDate: string;
+  paymentTerms: string;
+  retentionPct: number;
+  specialConditions: string;
+  items: WorkOrderItem[];
+  totalAmount: number;
+  status: "Draft" | "Issued" | "In Progress" | "Completed";
+  version: number;
+  notes: string;
+};
+
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(`paygo_${key}`);
@@ -141,6 +209,8 @@ type PayGoContextValue = {
   payments: PayGoPayment[];
   bills: PayGoBill[];
   nmrBills: PayGoNMRBill[];
+  boqs: PayGoBOQ[];
+  workOrders: PayGoWorkOrder[];
   addProject: (p: Omit<PayGoProject, "id">) => void;
   updateProject: (p: PayGoProject) => void;
   deleteProject: (id: string) => void;
@@ -165,6 +235,15 @@ type PayGoContextValue = {
   addNMRBill: (b: Omit<PayGoNMRBill, "id" | "billNo">) => void;
   updateNMRBill: (b: PayGoNMRBill) => void;
   deleteNMRBill: (id: string) => void;
+  addBOQ: (b: Omit<PayGoBOQ, "id">) => void;
+  updateBOQ: (b: PayGoBOQ) => void;
+  deleteBOQ: (id: string) => void;
+  addWorkOrder: (
+    w: Omit<PayGoWorkOrder, "id" | "workOrderNo" | "version">,
+  ) => void;
+  updateWorkOrder: (w: PayGoWorkOrder) => void;
+  deleteWorkOrder: (id: string) => void;
+  duplicateWorkOrder: (id: string) => void;
 };
 
 const PayGoContext = createContext<PayGoContextValue | null>(null);
@@ -529,6 +608,479 @@ const SEED_PAYMENTS: PayGoPayment[] = [
   },
 ];
 
+// ─── BOQ Seed Data ─────────────────────────────────────────────────────────────
+const g = genId;
+const SEED_BOQS: PayGoBOQ[] = [
+  {
+    id: "boq1",
+    projectId: "proj1",
+    projectName: "Sunrise Towers",
+    title: "Sunrise Towers — Full BOQ",
+    createdDate: "2025-01-01",
+    categories: [
+      {
+        id: "cat-ew",
+        name: "Earthwork",
+        isExpanded: true,
+        subCategories: [
+          {
+            id: "sc-ew1",
+            name: "Excavation",
+            items: [
+              {
+                id: "i-ew1a",
+                description: "Earth excavation for foundation",
+                unit: "Cumtr",
+                length: 20,
+                width: 15,
+                height: 2.5,
+                qty: 750,
+                isManualQty: false,
+                rate: 120,
+                amount: 90000,
+              },
+              {
+                id: "i-ew1b",
+                description: "Rock excavation",
+                unit: "Cumtr",
+                length: 10,
+                width: 8,
+                height: 1.5,
+                qty: 120,
+                isManualQty: false,
+                rate: 350,
+                amount: 42000,
+              },
+            ],
+          },
+          {
+            id: "sc-ew2",
+            name: "Backfilling & Compaction",
+            items: [
+              {
+                id: "i-ew2a",
+                description: "Filling with selected earth",
+                unit: "Cumtr",
+                length: 20,
+                width: 15,
+                height: 1,
+                qty: 300,
+                isManualQty: false,
+                rate: 80,
+                amount: 24000,
+              },
+              {
+                id: "i-ew2b",
+                description: "Compaction by vibro-roller",
+                unit: "Sft",
+                length: 20,
+                width: 15,
+                height: 1,
+                qty: 300,
+                isManualQty: false,
+                rate: 45,
+                amount: 13500,
+              },
+              {
+                id: "i-ew2c",
+                description: "Disposal of surplus earth",
+                unit: "Cumtr",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 50,
+                isManualQty: true,
+                rate: 200,
+                amount: 10000,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "cat-rcc",
+        name: "RCC",
+        isExpanded: false,
+        subCategories: [
+          {
+            id: "sc-rcc1",
+            name: "Footings",
+            items: [
+              {
+                id: "i-rcc1a",
+                description: "M25 concrete for footings",
+                unit: "Cumtr",
+                length: 3,
+                width: 3,
+                height: 0.5,
+                qty: 54,
+                isManualQty: false,
+                rate: 5500,
+                amount: 297000,
+              },
+              {
+                id: "i-rcc1b",
+                description: "Steel reinforcement in footings",
+                unit: "Kg",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 2800,
+                isManualQty: true,
+                rate: 85,
+                amount: 238000,
+              },
+            ],
+          },
+          {
+            id: "sc-rcc2",
+            name: "Columns & Beams",
+            items: [
+              {
+                id: "i-rcc2a",
+                description: "M25 concrete for columns",
+                unit: "Cumtr",
+                length: 0.3,
+                width: 0.3,
+                height: 3,
+                qty: 27,
+                isManualQty: false,
+                rate: 5800,
+                amount: 156600,
+              },
+              {
+                id: "i-rcc2b",
+                description: "M25 concrete for beams",
+                unit: "Cumtr",
+                length: 6,
+                width: 0.23,
+                height: 0.45,
+                qty: 3.11,
+                isManualQty: false,
+                rate: 5800,
+                amount: 18040,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "cat-mas",
+        name: "Masonry",
+        isExpanded: false,
+        subCategories: [
+          {
+            id: "sc-mas1",
+            name: "Brick Walls",
+            items: [
+              {
+                id: "i-mas1a",
+                description: "230mm thick brick wall in CM 1:4",
+                unit: "Sft",
+                length: 50,
+                width: 1,
+                height: 3,
+                qty: 150,
+                isManualQty: false,
+                rate: 95,
+                amount: 14250,
+              },
+              {
+                id: "i-mas1b",
+                description: "115mm thick partition wall",
+                unit: "Sft",
+                length: 30,
+                width: 1,
+                height: 3,
+                qty: 90,
+                isManualQty: false,
+                rate: 65,
+                amount: 5850,
+              },
+            ],
+          },
+          {
+            id: "sc-mas2",
+            name: "Plastering",
+            items: [
+              {
+                id: "i-mas2a",
+                description: "Internal plastering 12mm thick",
+                unit: "Sft",
+                length: 80,
+                width: 1,
+                height: 3,
+                qty: 240,
+                isManualQty: false,
+                rate: 45,
+                amount: 10800,
+              },
+              {
+                id: "i-mas2b",
+                description: "External plastering 20mm thick",
+                unit: "Sft",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 180,
+                isManualQty: true,
+                rate: 60,
+                amount: 10800,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "cat-fin",
+        name: "Finishing",
+        isExpanded: false,
+        subCategories: [
+          {
+            id: "sc-fin1",
+            name: "Flooring",
+            items: [
+              {
+                id: "i-fin1a",
+                description: "Ceramic tile flooring 600x600mm",
+                unit: "Sft",
+                length: 20,
+                width: 15,
+                height: 1,
+                qty: 300,
+                isManualQty: false,
+                rate: 120,
+                amount: 36000,
+              },
+              {
+                id: "i-fin1b",
+                description: "Granite flooring in lobby",
+                unit: "Sft",
+                length: 8,
+                width: 5,
+                height: 1,
+                qty: 40,
+                isManualQty: false,
+                rate: 280,
+                amount: 11200,
+              },
+            ],
+          },
+          {
+            id: "sc-fin2",
+            name: "Painting",
+            items: [
+              {
+                id: "i-fin2a",
+                description: "Emulsion paint 2 coats internal",
+                unit: "Sft",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 4200,
+                isManualQty: true,
+                rate: 18,
+                amount: 75600,
+              },
+              {
+                id: "i-fin2b",
+                description: "Weather coat paint external",
+                unit: "Sft",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 2800,
+                isManualQty: true,
+                rate: 25,
+                amount: 70000,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "cat-elec",
+        name: "Electrical",
+        isExpanded: false,
+        subCategories: [
+          {
+            id: "sc-elec1",
+            name: "Wiring & Conduits",
+            items: [
+              {
+                id: "i-elec1a",
+                description: "1.5 sqmm FR wire in conduit",
+                unit: "Rmtr",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 2000,
+                isManualQty: true,
+                rate: 55,
+                amount: 110000,
+              },
+              {
+                id: "i-elec1b",
+                description: "4 sqmm FR wire in conduit",
+                unit: "Rmtr",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 800,
+                isManualQty: true,
+                rate: 85,
+                amount: 68000,
+              },
+            ],
+          },
+          {
+            id: "sc-elec2",
+            name: "Fixtures & Fittings",
+            items: [
+              {
+                id: "i-elec2a",
+                description: "Modular switches and sockets",
+                unit: "Nos",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 120,
+                isManualQty: true,
+                rate: 350,
+                amount: 42000,
+              },
+              {
+                id: "i-elec2b",
+                description: "LED light fixtures",
+                unit: "Nos",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 80,
+                isManualQty: true,
+                rate: 850,
+                amount: 68000,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "cat-plumb",
+        name: "Plumbing",
+        isExpanded: false,
+        subCategories: [
+          {
+            id: "sc-plumb1",
+            name: "Water Supply",
+            items: [
+              {
+                id: "i-plumb1a",
+                description: "CPVC pipe 25mm dia",
+                unit: "Rmtr",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 400,
+                isManualQty: true,
+                rate: 95,
+                amount: 38000,
+              },
+              {
+                id: "i-plumb1b",
+                description: "GI pipe 50mm dia main line",
+                unit: "Rmtr",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 120,
+                isManualQty: true,
+                rate: 220,
+                amount: 26400,
+              },
+            ],
+          },
+          {
+            id: "sc-plumb2",
+            name: "Sanitary & Drainage",
+            items: [
+              {
+                id: "i-plumb2a",
+                description: "PVC drainage pipe 110mm",
+                unit: "Rmtr",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 350,
+                isManualQty: true,
+                rate: 180,
+                amount: 63000,
+              },
+              {
+                id: "i-plumb2b",
+                description: "Sanitary fixtures per unit",
+                unit: "Nos",
+                length: 0,
+                width: 0,
+                height: 0,
+                qty: 24,
+                isManualQty: true,
+                rate: 8500,
+                amount: 204000,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+const SEED_WORK_ORDERS: PayGoWorkOrder[] = [
+  {
+    id: "wo1",
+    workOrderNo: "SU-WO-001",
+    project: "Sunrise Towers",
+    contractor: "Ramesh & Sons",
+    boqId: "boq1",
+    scopeOfWork:
+      "Masonry work including brick walls, plastering, and finishing for Block A floors 1-5.",
+    workOrderDate: "2025-01-05",
+    startDate: "2025-01-10",
+    endDate: "2025-06-30",
+    paymentTerms:
+      "Monthly billing based on actual work done. Payment within 30 days of approved bill.",
+    retentionPct: 5,
+    specialConditions:
+      "All materials to be approved by Site Engineer before use. Safety norms to be strictly followed.",
+    items: [
+      {
+        boqItemId: "i-mas1a",
+        description: "230mm thick brick wall in CM 1:4",
+        unit: "Sft",
+        qty: 150,
+        rate: 95,
+        amount: 14250,
+      },
+      {
+        boqItemId: "i-mas2a",
+        description: "Internal plastering 12mm thick",
+        unit: "Sft",
+        qty: 240,
+        rate: 45,
+        amount: 10800,
+      },
+    ],
+    totalAmount: 23812,
+    status: "Issued",
+    version: 1,
+    notes: "Initial work order for masonry scope.",
+  },
+];
+
+// Reset genId usage after seed data constants (avoid side effects)
+void g;
+
 export function PayGoProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<PayGoProject[]>(() =>
     loadFromStorage("projects", SEED_PROJECTS),
@@ -548,6 +1100,14 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
 
   const [nmrBills, setNMRBills] = useState<PayGoNMRBill[]>(() =>
     loadFromStorage("nmrBills", SEED_NMR),
+  );
+
+  const [boqs, setBOQs] = useState<PayGoBOQ[]>(() =>
+    loadFromStorage("boqs", SEED_BOQS),
+  );
+
+  const [workOrders, setWorkOrders] = useState<PayGoWorkOrder[]>(() =>
+    loadFromStorage("workorders", SEED_WORK_ORDERS),
   );
 
   const addProject = useCallback((p: Omit<PayGoProject, "id">) => {
@@ -765,6 +1325,82 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // ─── BOQ CRUD ────────────────────────────────────────────────────────────────
+  const addBOQ = useCallback((b: Omit<PayGoBOQ, "id">) => {
+    setBOQs((prev) => {
+      const next = [...prev, { ...b, id: genId() }];
+      saveToStorage("boqs", next);
+      return next;
+    });
+  }, []);
+
+  const updateBOQ = useCallback((b: PayGoBOQ) => {
+    setBOQs((prev) => {
+      const next = prev.map((x) => (x.id === b.id ? b : x));
+      saveToStorage("boqs", next);
+      return next;
+    });
+  }, []);
+
+  const deleteBOQ = useCallback((id: string) => {
+    setBOQs((prev) => {
+      const next = prev.filter((x) => x.id !== id);
+      saveToStorage("boqs", next);
+      return next;
+    });
+  }, []);
+
+  // ─── Work Order CRUD ─────────────────────────────────────────────────────────
+  const addWorkOrder = useCallback(
+    (w: Omit<PayGoWorkOrder, "id" | "workOrderNo" | "version">) => {
+      setWorkOrders((prev) => {
+        const prefix = w.project.slice(0, 2).toUpperCase();
+        const seq = prev.length + 1;
+        const workOrderNo = `${prefix}-WO-${String(seq).padStart(3, "0")}`;
+        const next = [...prev, { ...w, id: genId(), workOrderNo, version: 1 }];
+        saveToStorage("workorders", next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const updateWorkOrder = useCallback((w: PayGoWorkOrder) => {
+    setWorkOrders((prev) => {
+      const next = prev.map((x) => (x.id === w.id ? w : x));
+      saveToStorage("workorders", next);
+      return next;
+    });
+  }, []);
+
+  const deleteWorkOrder = useCallback((id: string) => {
+    setWorkOrders((prev) => {
+      const next = prev.filter((x) => x.id !== id);
+      saveToStorage("workorders", next);
+      return next;
+    });
+  }, []);
+
+  const duplicateWorkOrder = useCallback((id: string) => {
+    setWorkOrders((prev) => {
+      const original = prev.find((x) => x.id === id);
+      if (!original) return prev;
+      const prefix = original.project.slice(0, 2).toUpperCase();
+      const seq = prev.length + 1;
+      const workOrderNo = `${prefix}-WO-${String(seq).padStart(3, "0")}`;
+      const duplicate: PayGoWorkOrder = {
+        ...original,
+        id: genId(),
+        workOrderNo,
+        version: original.version + 1,
+        status: "Draft",
+      };
+      const next = [...prev, duplicate];
+      saveToStorage("workorders", next);
+      return next;
+    });
+  }, []);
+
   return (
     <PayGoContext.Provider
       value={{
@@ -773,6 +1409,8 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
         payments,
         bills,
         nmrBills,
+        boqs,
+        workOrders,
         addProject,
         updateProject,
         deleteProject,
@@ -790,6 +1428,13 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
         addNMRBill,
         updateNMRBill,
         deleteNMRBill,
+        addBOQ,
+        updateBOQ,
+        deleteBOQ,
+        addWorkOrder,
+        updateWorkOrder,
+        deleteWorkOrder,
+        duplicateWorkOrder,
       }}
     >
       {children}

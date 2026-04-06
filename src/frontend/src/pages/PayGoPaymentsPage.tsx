@@ -17,12 +17,16 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  ChevronDown,
+  ChevronUp,
   CreditCard,
   Download,
   Edit2,
+  FileText,
   Plus,
   Printer,
   Trash2,
+  User,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -35,6 +39,14 @@ import { formatINR } from "../utils/money";
 
 const GREEN = "#28A745";
 const DEFAULT_PW = "3554";
+const ROLES = [
+  "Admin",
+  "Site Engineer",
+  "PM",
+  "QC",
+  "Billing Engineer",
+] as const;
+type Role = (typeof ROLES)[number];
 
 type FormData = Omit<PayGoPayment, "id" | "paymentNo">;
 
@@ -237,13 +249,17 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
 }
 
 // ─── Bills Payment Tab ───────────────────────────────────────────────────────
-function BillsPaymentTab() {
+function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
   const { bills, payBill } = usePayGo();
+  const canPayOrEdit =
+    currentRole === "Admin" || currentRole === "Billing Engineer";
   const [payingBill, setPayingBill] = useState<PayGoBill | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState<
     "all" | PayGoBill["paymentStatus"]
   >("all");
   const [filterProject, setFilterProject] = useState("");
+  const [filterContractor, setFilterContractor] = useState("");
 
   const approvedBills = useMemo(
     () => bills.filter((b) => b.workflowStatus === "Billing Approved"),
@@ -255,6 +271,11 @@ function BillsPaymentTab() {
     [approvedBills],
   );
 
+  const contractorNames = useMemo(
+    () => [...new Set(approvedBills.map((b) => b.contractor))],
+    [approvedBills],
+  );
+
   const filtered = useMemo(
     () =>
       approvedBills.filter((b) => {
@@ -262,9 +283,11 @@ function BillsPaymentTab() {
           filterStatus === "all" ||
           (b.paymentStatus || "Unpaid") === filterStatus;
         const mProject = !filterProject || b.project === filterProject;
-        return mStatus && mProject;
+        const mContractor =
+          !filterContractor || b.contractor === filterContractor;
+        return mStatus && mProject && mContractor;
       }),
-    [approvedBills, filterStatus, filterProject],
+    [approvedBills, filterStatus, filterProject, filterContractor],
   );
 
   const totalNet = filtered.reduce(
@@ -311,60 +334,107 @@ function BillsPaymentTab() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="px-4 pb-3">
-        <div
-          className="rounded-xl shadow-sm border flex flex-wrap gap-3 px-4 py-3"
-          style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
+      {/* Filter toggle */}
+      <div className="px-4 py-2 bg-white border-b flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
         >
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-600">
-              Project:
-            </span>
-            <select
-              value={filterProject}
-              onChange={(e) => setFilterProject(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white focus:outline-none"
-            >
-              <option value="">All Projects</option>
-              {projectNames.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-600">
-              Payment Status:
-            </span>
-            <select
-              value={filterStatus}
-              onChange={(e) =>
-                setFilterStatus(e.target.value as typeof filterStatus)
-              }
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white focus:outline-none"
-            >
-              <option value="all">All</option>
-              <option value="Unpaid">Unpaid</option>
-              <option value="Partially Paid">Partially Paid</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </div>
-          {(filterProject || filterStatus !== "all") && (
-            <button
-              type="button"
-              onClick={() => {
-                setFilterProject("");
-                setFilterStatus("all");
-              }}
-              className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50"
-            >
-              Clear Filters
-            </button>
-          )}
-        </div>
+          {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {showFilters ? "Hide Filters" : "Show Filters"}
+        </button>
+        {(filterProject || filterContractor || filterStatus !== "all") && (
+          <button
+            type="button"
+            onClick={() => {
+              setFilterProject("");
+              setFilterContractor("");
+              setFilterStatus("all");
+            }}
+            className="ml-2 text-xs font-medium text-red-500 hover:text-red-700"
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
+
+      {/* Filters card */}
+      {showFilters && (
+        <div className="px-4 pb-3 pt-2">
+          <div
+            className="rounded-xl shadow-sm border p-4"
+            style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">
+                  Project
+                </span>
+                <select
+                  value={filterProject}
+                  onChange={(e) => setFilterProject(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                >
+                  <option value="">All Projects</option>
+                  {projectNames.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">
+                  Contractor
+                </span>
+                <select
+                  value={filterContractor}
+                  onChange={(e) => setFilterContractor(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                >
+                  <option value="">All Contractors</option>
+                  {contractorNames.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">
+                  Payment Status
+                </span>
+                <select
+                  value={filterStatus}
+                  onChange={(e) =>
+                    setFilterStatus(e.target.value as typeof filterStatus)
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                >
+                  <option value="all">All</option>
+                  <option value="Unpaid">Unpaid</option>
+                  <option value="Partially Paid">Partially Paid</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterProject("");
+                  setFilterContractor("");
+                  setFilterStatus("all");
+                }}
+                className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bills Payment Table */}
       <div className="px-4 pb-4">
@@ -451,22 +521,29 @@ function BillsPaymentTab() {
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
-                        {(b.paymentStatus || "Unpaid") !== "Completed" && (
-                          <button
-                            type="button"
-                            onClick={() => setPayingBill(b)}
-                            className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md text-white shadow-sm hover:opacity-90 transition-opacity"
-                            style={{ background: GREEN }}
-                            data-ocid={"paygo.payments.primary_button"}
-                          >
-                            <CreditCard size={12} /> Pay
-                          </button>
-                        )}
+                        {(b.paymentStatus || "Unpaid") !== "Completed" &&
+                          canPayOrEdit && (
+                            <button
+                              type="button"
+                              onClick={() => setPayingBill(b)}
+                              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md text-white shadow-sm hover:opacity-90 transition-opacity"
+                              style={{ background: GREEN }}
+                              data-ocid={"paygo.payments.primary_button"}
+                            >
+                              <CreditCard size={12} /> Pay
+                            </button>
+                          )}
                         {(b.paymentStatus || "Unpaid") === "Completed" && (
                           <span className="text-xs text-green-600 font-semibold">
                             ✔ Paid
                           </span>
                         )}
+                        {(b.paymentStatus || "Unpaid") !== "Completed" &&
+                          !canPayOrEdit && (
+                            <span className="text-xs text-gray-400 italic">
+                              View only
+                            </span>
+                          )}
                       </td>
                     </tr>
                   ))
@@ -490,9 +567,12 @@ function BillsPaymentTab() {
 }
 
 // ─── Payments Tab (existing) ──────────────────────────────────────────────────
-function PaymentsTab() {
+function PaymentsTab({ currentRole }: { currentRole: Role }) {
   const { projects, payments, addPayment, updatePayment, deletePayment } =
     usePayGo();
+  const canPayOrEdit =
+    currentRole === "Admin" || currentRole === "Billing Engineer";
+  const isAdmin = currentRole === "Admin";
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<PayGoPayment | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm());
@@ -606,6 +686,12 @@ function PaymentsTab() {
           </button>
           <button
             type="button"
+            className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors"
+          >
+            <FileText size={14} /> Export PDF
+          </button>
+          <button
+            type="button"
             onClick={exportCSV}
             className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors"
           >
@@ -613,15 +699,17 @@ function PaymentsTab() {
           </button>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={openAdd}
-            className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-sm font-semibold shadow-md hover:opacity-90"
-            style={{ background: GREEN }}
-            data-ocid="paygo.payments.primary_button"
-          >
-            <Plus size={16} /> New Payment
-          </button>
+          {canPayOrEdit && (
+            <button
+              type="button"
+              onClick={openAdd}
+              className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-sm font-semibold shadow-md hover:opacity-90"
+              style={{ background: GREEN }}
+              data-ocid="paygo.payments.primary_button"
+            >
+              <Plus size={16} /> New Payment
+            </button>
+          )}
           <div
             className="rounded-xl px-4 py-2 text-white text-sm font-bold shadow-md flex flex-col items-end"
             style={{ background: "linear-gradient(135deg, #43A047, #1B5E20)" }}
@@ -784,27 +872,31 @@ function PaymentsTab() {
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(p)}
-                            title="Edit"
-                            className="text-gray-500 hover:text-gray-700"
-                            data-ocid={`paygo.payments.edit_button.${i + 1}`}
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteId(p.id);
-                              setPw("");
-                            }}
-                            title="Delete"
-                            className="text-red-500 hover:text-red-700"
-                            data-ocid={`paygo.payments.delete_button.${i + 1}`}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {canPayOrEdit && (
+                            <button
+                              type="button"
+                              onClick={() => openEdit(p)}
+                              title="Edit"
+                              className="text-gray-500 hover:text-gray-700"
+                              data-ocid={`paygo.payments.edit_button.${i + 1}`}
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteId(p.id);
+                                setPw("");
+                              }}
+                              title="Delete"
+                              className="text-red-500 hover:text-red-700"
+                              data-ocid={`paygo.payments.delete_button.${i + 1}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -997,6 +1089,7 @@ type ActivePayTab = "bills" | "payments";
 
 export default function PayGoPaymentsPage() {
   const [activeTab, setActiveTab] = useState<ActivePayTab>("bills");
+  const [currentRole, setCurrentRole] = useState<Role>("Admin");
   const { bills } = usePayGo();
 
   const pendingBillsCount = useMemo(
@@ -1011,41 +1104,61 @@ export default function PayGoPaymentsPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      {/* Tab switcher */}
-      <div className="bg-white border-b px-4 flex gap-0 shadow-sm">
-        <button
-          type="button"
-          onClick={() => setActiveTab("bills")}
-          className="px-5 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2"
-          style={{
-            borderColor: activeTab === "bills" ? "#1976D2" : "transparent",
-            color: activeTab === "bills" ? "#1976D2" : "#6B7280",
-          }}
-          data-ocid="paygo.payments.bills.tab"
-        >
-          <CreditCard size={14} />
-          Bill Payments
-          {pendingBillsCount > 0 && (
-            <span className="bg-orange-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
-              {pendingBillsCount}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("payments")}
-          className="px-5 py-3 text-sm font-semibold border-b-2 transition-colors"
-          style={{
-            borderColor: activeTab === "payments" ? GREEN : "transparent",
-            color: activeTab === "payments" ? GREEN : "#6B7280",
-          }}
-          data-ocid="paygo.payments.general.tab"
-        >
-          General Payments
-        </button>
+      {/* Role Switcher + tab header */}
+      <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-wrap shadow-sm">
+        <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-md px-3 py-1.5">
+          <User size={13} className="text-purple-600" />
+          <select
+            value={currentRole}
+            onChange={(e) => setCurrentRole(e.target.value as Role)}
+            className="text-xs font-semibold text-purple-700 bg-transparent border-none outline-none cursor-pointer"
+          >
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-0 ml-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("bills")}
+            className="px-5 py-2 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2"
+            style={{
+              borderColor: activeTab === "bills" ? "#1976D2" : "transparent",
+              color: activeTab === "bills" ? "#1976D2" : "#6B7280",
+            }}
+            data-ocid="paygo.payments.bills.tab"
+          >
+            <CreditCard size={14} />
+            Bill Payments
+            {pendingBillsCount > 0 && (
+              <span className="bg-orange-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                {pendingBillsCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("payments")}
+            className="px-5 py-2 text-sm font-semibold border-b-2 transition-colors"
+            style={{
+              borderColor: activeTab === "payments" ? GREEN : "transparent",
+              color: activeTab === "payments" ? GREEN : "#6B7280",
+            }}
+            data-ocid="paygo.payments.general.tab"
+          >
+            General Payments
+          </button>
+        </div>
       </div>
 
-      {activeTab === "bills" ? <BillsPaymentTab /> : <PaymentsTab />}
+      {activeTab === "bills" ? (
+        <BillsPaymentTab currentRole={currentRole} />
+      ) : (
+        <PaymentsTab currentRole={currentRole} />
+      )}
     </div>
   );
 }

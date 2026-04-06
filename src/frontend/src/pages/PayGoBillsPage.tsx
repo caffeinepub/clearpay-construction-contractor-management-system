@@ -864,8 +864,70 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
     );
   };
 
+  const totalGross = filtered.reduce(
+    (s, b) => s + b.unitPrice * b.qty * b.nos,
+    0,
+  );
+  const totalDebit = filtered.reduce((s, b) => s + effectiveDebit(b), 0);
+  const totalRetention = filtered.reduce((s, b) => {
+    if (b.workflowStatus !== "Billing Approved") return s;
+    return s + (b.retentionAmount || 0);
+  }, 0);
+
+  const isAdmin = currentRole === "Admin";
+
   return (
     <div className="flex flex-col gap-0">
+      {/* Summary Boxes */}
+      <div className="px-4 pt-3 pb-2 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div
+          className="rounded-xl p-4 shadow-sm flex flex-col gap-1"
+          style={{ background: "linear-gradient(135deg, #1565C0, #1976D2)" }}
+        >
+          <span className="text-xs text-blue-100 font-medium">Gross Total</span>
+          <span className="text-lg font-bold text-white">
+            {formatINR(totalGross)}
+          </span>
+          <span className="text-xs text-blue-200">{filtered.length} bills</span>
+        </div>
+        <div
+          className="rounded-xl p-4 shadow-sm flex flex-col gap-1"
+          style={{ background: "linear-gradient(135deg, #E65100, #F57C00)" }}
+        >
+          <span className="text-xs text-orange-100 font-medium">
+            Debit Total
+          </span>
+          <span className="text-lg font-bold text-white">
+            {formatINR(totalDebit)}
+          </span>
+          <span className="text-xs text-orange-200">all debits combined</span>
+        </div>
+        <div
+          className="rounded-xl p-4 shadow-sm flex flex-col gap-1"
+          style={{ background: "linear-gradient(135deg, #6A1B9A, #8E24AA)" }}
+        >
+          <span className="text-xs text-purple-100 font-medium">
+            Retention Total
+          </span>
+          <span className="text-lg font-bold text-white">
+            {formatINR(totalRetention)}
+          </span>
+          <span className="text-xs text-purple-200">BE-approved bills</span>
+        </div>
+        <div
+          className="rounded-xl p-4 shadow-sm flex flex-col gap-1"
+          style={{ background: "linear-gradient(135deg, #1B5E20, #2E7D32)" }}
+        >
+          <span className="text-xs text-green-100 font-medium">Net Total</span>
+          <span className="text-lg font-bold text-white">
+            {formatINR(totalNet)}
+          </span>
+          <span className="text-xs text-green-200">
+            gross - debit - retention
+          </span>
+        </div>
+      </div>
+
       {/* Toolbar */}
       <div className="bg-white border-b shadow-sm px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -879,15 +941,25 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
           <button type="button" className={toolbarBtnClass}>
             <FileText size={14} /> Export PDF
           </button>
-          <button type="button" className={toolbarBtnClass}>
-            <Upload size={14} /> Import CSV
-          </button>
-          <button type="button" onClick={exportCSV} className={toolbarBtnClass}>
-            <Download size={14} /> Export CSV
-          </button>
-          <button type="button" className={toolbarBtnClass}>
-            <FileDown size={14} /> Download Format
-          </button>
+          {isAdmin && (
+            <button type="button" className={toolbarBtnClass}>
+              <Upload size={14} /> Import CSV
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={exportCSV}
+              className={toolbarBtnClass}
+            >
+              <Download size={14} /> Export CSV
+            </button>
+          )}
+          {isAdmin && (
+            <button type="button" className={toolbarBtnClass}>
+              <FileDown size={14} /> Download Format
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {canCreateBill && (
@@ -1141,10 +1213,14 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                           {formatINR(debitsTotal)}
                         </td>
                         <td className="px-2.5 py-2.5 text-gray-600">
-                          {b.workRetention}%
+                          {b.workflowStatus === "Billing Approved"
+                            ? `${b.workRetention}%`
+                            : "0%"}
                         </td>
                         <td className="px-2.5 py-2.5 font-medium text-purple-600 whitespace-nowrap">
-                          {formatINR(retentionAmt)}
+                          {b.workflowStatus === "Billing Approved"
+                            ? formatINR(retentionAmt)
+                            : formatINR(0)}
                         </td>
                         <td
                           className="px-2.5 py-2.5 font-medium whitespace-nowrap"
@@ -1166,26 +1242,30 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                             >
                               <Eye size={13} />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => openEdit(b)}
-                              title="Edit"
-                              className="text-gray-500 hover:text-gray-700"
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDeleteId(b.id);
-                                setPw("");
-                              }}
-                              title="Delete"
-                              className="text-red-500 hover:text-red-700"
-                              data-ocid={`paygo.bills.delete_button.${i + 1}`}
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => openEdit(b)}
+                                title="Edit"
+                                className="text-gray-500 hover:text-gray-700"
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                            )}
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteId(b.id);
+                                  setPw("");
+                                }}
+                                title="Delete"
+                                className="text-red-500 hover:text-red-700"
+                                data-ocid={`paygo.bills.delete_button.${i + 1}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1807,6 +1887,58 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                 </span>
               </div>
             )}
+
+            {/* Debit Breakdown */}
+            <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3">
+              <div className="text-xs font-bold text-orange-700 mb-2 uppercase tracking-wide">
+                Debit Breakdown
+              </div>
+              {(() => {
+                const engineerDebit =
+                  viewBill.reasonForDebit && viewBill.reasonForDebit.length > 20
+                    ? viewBill.debitAmount
+                    : 0;
+                const pmDebit = viewBill.workflowHistory
+                  .filter((h) => h.step === "PM" && h.action === "Added Debit")
+                  .reduce((s, h) => s + (h.debitAmount || 0), 0);
+                const qcDebit = viewBill.workflowHistory
+                  .filter((h) => h.step === "QC" && h.action === "Added Debit")
+                  .reduce((s, h) => s + (h.debitAmount || 0), 0);
+                const totalDeb = engineerDebit + pmDebit + qcDebit;
+                return (
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center bg-white rounded p-2">
+                      <div className="text-xs text-gray-500">
+                        Engineer Debit
+                      </div>
+                      <div className="font-bold text-orange-700">
+                        {formatINR(engineerDebit)}
+                      </div>
+                    </div>
+                    <div className="text-center bg-white rounded p-2">
+                      <div className="text-xs text-gray-500">PM Debit</div>
+                      <div className="font-bold text-orange-700">
+                        {formatINR(pmDebit)}
+                      </div>
+                    </div>
+                    <div className="text-center bg-white rounded p-2">
+                      <div className="text-xs text-gray-500">QC Debit</div>
+                      <div className="font-bold text-orange-700">
+                        {formatINR(qcDebit)}
+                      </div>
+                    </div>
+                    <div className="text-center bg-orange-100 rounded p-2 border border-orange-300">
+                      <div className="text-xs text-gray-600 font-semibold">
+                        Total Debit
+                      </div>
+                      <div className="font-bold text-orange-900">
+                        {formatINR(totalDeb)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
 
             {/* Remarks (view only) */}
             {viewBill.remarks && (

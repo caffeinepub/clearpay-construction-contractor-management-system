@@ -10,8 +10,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
   Bot,
+  ClipboardList,
   CreditCard,
   FileBarChart,
+  FileSignature,
   FileText,
   FolderKanban,
   Grid3X3,
@@ -41,6 +43,7 @@ import ContractorsPage from "../pages/ContractorsPage";
 import DashboardPage from "../pages/DashboardPage";
 import PayGoAIPage from "../pages/PayGoAIPage";
 import PayGoAnalyticsPage from "../pages/PayGoAnalyticsPage";
+import PayGoBOQPage from "../pages/PayGoBOQPage";
 import PayGoBillsPage from "../pages/PayGoBillsPage";
 import PayGoContractorsPage from "../pages/PayGoContractorsPage";
 import PayGoDashboardPage from "../pages/PayGoDashboardPage";
@@ -48,6 +51,7 @@ import PayGoPaymentsPage from "../pages/PayGoPaymentsPage";
 import PayGoProjectsPage from "../pages/PayGoProjectsPage";
 import PayGoReportsPage from "../pages/PayGoReportsPage";
 import PayGoUsersPage from "../pages/PayGoUsersPage";
+import PayGoWorkOrderPage from "../pages/PayGoWorkOrderPage";
 import PaymentsPage from "../pages/PaymentsPage";
 import ProjectsPage from "../pages/ProjectsPage";
 import ReportsPage from "../pages/ReportsPage";
@@ -67,7 +71,9 @@ type PayGoPage =
   | "pg-payments"
   | "pg-reports"
   | "pg-users"
-  | "pg-ai";
+  | "pg-ai"
+  | "pg-boq"
+  | "pg-workorder";
 
 type TickerMessage = { id: string; html: string };
 
@@ -552,6 +558,18 @@ export default function MainLayout() {
       icon: Bot,
       shortcut: "Alt+8",
     },
+    {
+      id: "pg-boq" as PayGoPage,
+      label: "BOQ",
+      icon: ClipboardList,
+      adminOnly: false,
+    },
+    {
+      id: "pg-workorder" as PayGoPage,
+      label: "Work Orders",
+      icon: FileSignature,
+      adminOnly: false,
+    },
   ];
 
   const paygoNavItems = allPaygoNavItems.filter((item) => {
@@ -632,6 +650,10 @@ export default function MainLayout() {
         return <PayGoUsersPage />;
       case "pg-ai":
         return <PayGoAIPage />;
+      case "pg-boq":
+        return <PayGoBOQPage />;
+      case "pg-workorder":
+        return <PayGoWorkOrderPage />;
       default:
         return <PayGoDashboardPage />;
     }

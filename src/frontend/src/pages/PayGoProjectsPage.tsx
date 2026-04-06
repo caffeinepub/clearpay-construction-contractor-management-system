@@ -29,6 +29,7 @@ import {
   Share2,
   Trash2,
   Upload,
+  User,
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -38,6 +39,15 @@ import { formatINR } from "../utils/money";
 
 const GREEN = "#28A745";
 const DEFAULT_PW = "3554";
+
+const ROLES = [
+  "Admin",
+  "Site Engineer",
+  "PM",
+  "QC",
+  "Billing Engineer",
+] as const;
+type Role = (typeof ROLES)[number];
 
 type FormData = Omit<PayGoProject, "id">;
 
@@ -79,6 +89,9 @@ function fmtDate(d: string): string {
 
 export default function PayGoProjectsPage() {
   const { projects, addProject, updateProject, deleteProject } = usePayGo();
+
+  const [currentRole, setCurrentRole] = useState<Role>("Admin");
+  const isAdmin = currentRole === "Admin";
 
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<PayGoProject | null>(null);
@@ -236,6 +249,22 @@ export default function PayGoProjectsPage() {
       {/* Toolbar */}
       <div className="bg-white border-b shadow-sm px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Role switcher */}
+          <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-md px-3 py-1.5">
+            <User size={13} className="text-purple-600" />
+            <select
+              value={currentRole}
+              onChange={(e) => setCurrentRole(e.target.value as Role)}
+              className="text-xs font-semibold text-purple-700 bg-transparent border-none outline-none cursor-pointer"
+            >
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={handlePrint}
@@ -246,25 +275,31 @@ export default function PayGoProjectsPage() {
           <button type="button" className={toolbarBtnClass}>
             <FileText size={14} /> Export PDF
           </button>
-          <button type="button" className={toolbarBtnClass}>
-            <Upload size={14} /> Import CSV
-          </button>
+          {isAdmin && (
+            <button type="button" className={toolbarBtnClass}>
+              <Upload size={14} /> Import CSV
+            </button>
+          )}
           <button type="button" onClick={exportCSV} className={toolbarBtnClass}>
             <Download size={14} /> Export CSV
           </button>
-          <button type="button" className={toolbarBtnClass}>
-            <FileDown size={14} /> Download Format
-          </button>
+          {isAdmin && (
+            <button type="button" className={toolbarBtnClass}>
+              <FileDown size={14} /> Download Format
+            </button>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={openAdd}
-          className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-sm font-semibold shadow-md hover:opacity-90 transition-opacity"
-          style={{ background: GREEN }}
-          data-ocid="paygo.projects.primary_button"
-        >
-          <Plus size={16} /> New Project
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={openAdd}
+            className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-sm font-semibold shadow-md hover:opacity-90 transition-opacity"
+            style={{ background: GREEN }}
+            data-ocid="paygo.projects.primary_button"
+          >
+            <Plus size={16} /> New Project
+          </button>
+        )}
       </div>
 
       {/* Search bar */}
@@ -519,26 +554,30 @@ export default function PayGoProjectsPage() {
                           >
                             <Eye size={15} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => openEdit(p)}
-                            title="Edit"
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteId(p.id);
-                              setPw("");
-                            }}
-                            title="Delete"
-                            className="text-red-600 hover:text-red-800"
-                            data-ocid={`paygo.projects.delete_button.${i + 1}`}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => openEdit(p)}
+                              title="Edit"
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteId(p.id);
+                                setPw("");
+                              }}
+                              title="Delete"
+                              className="text-red-600 hover:text-red-800"
+                              data-ocid={`paygo.projects.delete_button.${i + 1}`}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -626,161 +665,165 @@ export default function PayGoProjectsPage() {
         </Dialog>
       )}
 
-      {/* Add / Edit Dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg" data-ocid="paygo.projects.dialog">
-          <DialogHeader>
-            <DialogTitle style={{ color: GREEN }}>
-              {editItem ? "Edit Project" : "New Project"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <div className="col-span-2">
-              <Label className="text-xs font-semibold">Project Name *</Label>
-              <Input
-                value={form.name}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, name: e.target.value }))
-                }
-                placeholder="Project Name"
-                data-ocid="paygo.projects.input"
-              />
+      {/* Add / Edit Dialog — admin only */}
+      {isAdmin && (
+        <Dialog open={formOpen} onOpenChange={setFormOpen}>
+          <DialogContent className="max-w-lg" data-ocid="paygo.projects.dialog">
+            <DialogHeader>
+              <DialogTitle style={{ color: GREEN }}>
+                {editItem ? "Edit Project" : "New Project"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3 py-2">
+              <div className="col-span-2">
+                <Label className="text-xs font-semibold">Project Name *</Label>
+                <Input
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  placeholder="Project Name"
+                  data-ocid="paygo.projects.input"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-semibold">Client *</Label>
+                <Input
+                  value={form.client}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, client: e.target.value }))
+                  }
+                  placeholder="Client Name"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">Start Date</Label>
+                <Input
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, startDate: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold">End Date</Label>
+                <Input
+                  type="date"
+                  value={form.endDate}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, endDate: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-semibold">Budget (₹)</Label>
+                <Input
+                  type="number"
+                  value={form.budget || ""}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, budget: Number(e.target.value) }))
+                  }
+                  placeholder="0"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-semibold">Status</Label>
+                <Select
+                  value={form.status}
+                  onValueChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      status: v as PayGoProject["status"],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs font-semibold">Notes</Label>
+                <Textarea
+                  value={form.notes}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, notes: e.target.value }))
+                  }
+                  rows={2}
+                />
+              </div>
             </div>
-            <div className="col-span-2">
-              <Label className="text-xs font-semibold">Client *</Label>
-              <Input
-                value={form.client}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, client: e.target.value }))
-                }
-                placeholder="Client Name"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Start Date</Label>
-              <Input
-                type="date"
-                value={form.startDate}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, startDate: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">End Date</Label>
-              <Input
-                type="date"
-                value={form.endDate}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, endDate: e.target.value }))
-                }
-              />
-            </div>
-            <div className="col-span-2">
-              <Label className="text-xs font-semibold">Budget (₹)</Label>
-              <Input
-                type="number"
-                value={form.budget || ""}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, budget: Number(e.target.value) }))
-                }
-                placeholder="0"
-              />
-            </div>
-            <div className="col-span-2">
-              <Label className="text-xs font-semibold">Status</Label>
-              <Select
-                value={form.status}
-                onValueChange={(v) =>
-                  setForm((f) => ({
-                    ...f,
-                    status: v as PayGoProject["status"],
-                  }))
-                }
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => setFormOpen(false)}
+                className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                data-ocid="paygo.projects.cancel_button"
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-2">
-              <Label className="text-xs font-semibold">Notes</Label>
-              <Textarea
-                value={form.notes}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, notes: e.target.value }))
-                }
-                rows={2}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setFormOpen(false)}
-              className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
-              data-ocid="paygo.projects.cancel_button"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              className="rounded-md px-4 py-2 text-sm text-white font-semibold"
-              style={{ background: GREEN }}
-              data-ocid="paygo.projects.submit_button"
-            >
-              Save
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="rounded-md px-4 py-2 text-sm text-white font-semibold"
+                style={{ background: GREEN }}
+                data-ocid="paygo.projects.submit_button"
+              >
+                Save
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
-      {/* Delete Confirm */}
-      <Dialog
-        open={!!deleteId}
-        onOpenChange={(o) => {
-          if (!o) setDeleteId(null);
-        }}
-      >
-        <DialogContent data-ocid="paygo.projects.dialog">
-          <DialogHeader>
-            <DialogTitle className="text-red-600">Confirm Delete</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-gray-600">
-            Enter admin password to delete this project.
-          </p>
-          <Input
-            type="password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            placeholder="Enter admin password"
-            data-ocid="paygo.projects.input"
-          />
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setDeleteId(null)}
-              className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
-              data-ocid="paygo.projects.cancel_button"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmDelete}
-              className="bg-red-600 text-white hover:bg-red-700 rounded-md px-4 py-2 text-sm font-semibold"
-              data-ocid="paygo.projects.delete_button"
-            >
-              Delete
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Delete Confirm — admin only */}
+      {isAdmin && (
+        <Dialog
+          open={!!deleteId}
+          onOpenChange={(o) => {
+            if (!o) setDeleteId(null);
+          }}
+        >
+          <DialogContent data-ocid="paygo.projects.dialog">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Confirm Delete</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-gray-600">
+              Enter admin password to delete this project.
+            </p>
+            <Input
+              type="password"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              placeholder="Enter admin password"
+              data-ocid="paygo.projects.input"
+            />
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => setDeleteId(null)}
+                className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                data-ocid="paygo.projects.cancel_button"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="bg-red-600 text-white hover:bg-red-700 rounded-md px-4 py-2 text-sm font-semibold"
+                data-ocid="paygo.projects.delete_button"
+              >
+                Delete
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

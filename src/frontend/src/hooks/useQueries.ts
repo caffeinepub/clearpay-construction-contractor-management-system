@@ -11,7 +11,7 @@ import type {
   ProjectAnalyticsData,
   UserProfile,
   UserRole,
-} from "../backend";
+} from "../types";
 import { useActor } from "./useActor";
 
 // Optimized stale times for better performance and reduced backend calls

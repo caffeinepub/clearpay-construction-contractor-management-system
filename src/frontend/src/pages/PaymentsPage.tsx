@@ -54,7 +54,6 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { type Payment, PaymentMode } from "../backend";
 import { ActionButton } from "../components/ActionButton";
 import { BulkDeleteButton } from "../components/BulkDeleteButton";
 import { DateInput } from "../components/DateInput";
@@ -79,6 +78,7 @@ import {
   parseCSV,
   validatePaymentCSVData,
 } from "../lib/exportUtils";
+import { type Payment, PaymentMode } from "../types";
 
 type SortField =
   | "date"

@@ -1,8 +1,8 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { FileDown, Printer, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import { PaymentMode } from "../backend";
 import { useGetAllPayments, useGetAllProjects } from "../hooks/useQueries";
+import { PaymentMode } from "../types";
 import { formatINR } from "../utils/money";
 import { shareReceiptAsImage } from "../utils/receiptShare";
 

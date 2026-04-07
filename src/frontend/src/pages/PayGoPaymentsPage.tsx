@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  ArrowUpDown,
   ChevronDown,
   ChevronUp,
   CreditCard,
@@ -25,10 +26,12 @@ import {
   FileText,
   Plus,
   Printer,
+  Share2,
   Trash2,
   User,
+  X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   type PayGoBill,
@@ -39,6 +42,15 @@ import { formatINR } from "../utils/money";
 
 const GREEN = "#28A745";
 const DEFAULT_PW = "3554";
+const MPH_ADDRESS = [
+  "MPH Developers",
+  "Plot No. 164A & 164B, Isnapur,",
+  "Patancheru, Sangareddy,",
+  "Hyderabad - 502307",
+  "info@mphdevelopers.com",
+  "www.mphdevelopers.com",
+];
+
 const ROLES = [
   "Admin",
   "Site Engineer",
@@ -47,7 +59,6 @@ const ROLES = [
   "Billing Engineer",
 ] as const;
 type Role = (typeof ROLES)[number];
-
 type FormData = Omit<PayGoPayment, "id" | "paymentNo">;
 
 const emptyForm = (): FormData => ({
@@ -78,15 +89,376 @@ function fmtDate(d: string): string {
   return d;
 }
 
-// ─── Pay Bill Dialog ─────────────────────────────────────────────────────
+// ─── Payment Receipt Component ─────────────────────────────────────────────────
+function PaymentReceipt({ bill }: { bill: PayGoBill }) {
+  const netAmt = bill.netAmount || bill.amount || 0;
+  const entries = bill.paymentEntries || [];
+  const totalPaid = entries.reduce((s, e) => s + e.amount, 0);
+  const outstanding = Math.max(0, netAmt - totalPaid);
+  const today = fmtDate(new Date().toISOString().split("T")[0]);
+  const isFullyPaid = outstanding <= 0;
+
+  return (
+    <div
+      className="relative bg-white rounded p-0"
+      style={{
+        fontFamily: "'Century Gothic', Arial, sans-serif",
+        minWidth: 560,
+      }}
+    >
+      {/* Watermark */}
+      <div
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        style={{ zIndex: 1 }}
+      >
+        <img
+          src="/assets/logo mkt.png"
+          alt=""
+          style={{
+            opacity: 0.07,
+            width: 280,
+            height: 280,
+            objectFit: "contain",
+          }}
+        />
+      </div>
+
+      <div className="relative" style={{ zIndex: 2 }}>
+        {/* Header row */}
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <div className="text-xl font-bold" style={{ color: GREEN }}>
+              Payment Receipt
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-base font-bold" style={{ color: GREEN }}>
+              {bill.billNo}
+            </div>
+            <div className="text-xs text-gray-500">Bill No.</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-gray-500">Date</div>
+            <div className="text-sm font-semibold text-gray-700">{today}</div>
+          </div>
+        </div>
+
+        {/* Company / Contractor box */}
+        <div
+          className="grid grid-cols-2 border rounded-lg overflow-hidden mb-3"
+          style={{ borderColor: "#e5e7eb" }}
+        >
+          <div
+            className="p-3 border-r"
+            style={{ borderColor: "#e5e7eb", background: "#F0FFF4" }}
+          >
+            <div className="font-bold text-sm mb-1.5" style={{ color: GREEN }}>
+              {MPH_ADDRESS[0]}
+            </div>
+            {MPH_ADDRESS.slice(1).map((line) => (
+              <div key={line} className="text-xs text-gray-600 leading-relaxed">
+                {line}
+              </div>
+            ))}
+          </div>
+          <div className="p-3" style={{ background: "#F8F9FF" }}>
+            <div className="font-bold text-xs text-gray-500 mb-1.5 uppercase tracking-wide">
+              TO
+            </div>
+            <div className="text-sm font-bold text-gray-800">
+              {bill.contractor}
+            </div>
+            <div className="text-xs text-gray-600 mt-1">
+              <span className="font-medium">Trade:</span> {bill.trade || "—"}
+            </div>
+            {bill.subTrade && (
+              <div className="text-xs text-gray-600">
+                <span className="font-medium">Sub Trade:</span> {bill.subTrade}
+              </div>
+            )}
+            <div className="text-xs text-gray-600">
+              <span className="font-medium">W.O No:</span> {bill.blockId || "—"}
+            </div>
+          </div>
+        </div>
+
+        {/* Project / Block */}
+        <div className="flex gap-6 mb-3 text-sm">
+          <div>
+            <span className="font-semibold text-gray-600">Project: </span>
+            <span className="text-gray-800 font-bold">{bill.project}</span>
+          </div>
+          {bill.blockId && (
+            <div>
+              <span className="font-semibold text-gray-600">Block: </span>
+              <span className="text-gray-800">{bill.blockId}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Payment Table */}
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr style={{ background: "#1B5E20" }}>
+              <th className="px-3 py-2 text-left text-white font-semibold text-xs whitespace-nowrap w-12">
+                SI No
+              </th>
+              <th className="px-3 py-2 text-left text-white font-semibold text-xs w-28">
+                Date
+              </th>
+              <th className="px-3 py-2 text-left text-white font-semibold text-xs">
+                Details Of Payment
+              </th>
+              <th className="px-3 py-2 text-right text-white font-semibold text-xs whitespace-nowrap w-36">
+                Amount ₹
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Row 1: Net Amount */}
+            <tr style={{ background: "#F0FFF4" }}>
+              <td className="px-3 py-2 text-gray-500 font-mono text-xs">1</td>
+              <td className="px-3 py-2 text-xs text-gray-400">—</td>
+              <td
+                className="px-3 py-2 font-bold text-sm"
+                style={{ color: GREEN }}
+              >
+                Net Amount
+              </td>
+              <td
+                className="px-3 py-2 text-right font-bold text-sm"
+                style={{ color: GREEN }}
+              >
+                {formatINR(netAmt)}
+              </td>
+            </tr>
+
+            {/* Payment entries */}
+            {entries.map((entry, idx) => (
+              <tr
+                key={entry.id}
+                style={{ background: idx % 2 === 0 ? "#EBF5FF" : "#fff" }}
+              >
+                <td className="px-3 py-2 text-gray-500 font-mono text-xs">
+                  {idx + 2}
+                </td>
+                <td className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">
+                  {fmtDate(entry.date)}
+                </td>
+                <td
+                  className="px-3 py-2 font-semibold text-sm"
+                  style={{ color: "#1565C0" }}
+                >
+                  Payment {idx + 1}
+                  {entry.paymentMode && (
+                    <span className="text-xs font-normal text-gray-500 ml-2">
+                      ({entry.paymentMode})
+                    </span>
+                  )}
+                  {entry.reference && (
+                    <span className="text-xs font-normal text-gray-400 ml-1">
+                      Ref: {entry.reference}
+                    </span>
+                  )}
+                </td>
+                <td
+                  className="px-3 py-2 text-right font-semibold text-sm"
+                  style={{ color: "#1565C0" }}
+                >
+                  {formatINR(entry.amount)}
+                </td>
+              </tr>
+            ))}
+
+            {/* Outstanding row */}
+            <tr style={{ background: isFullyPaid ? "#F0FFF4" : "#FFF5F5" }}>
+              <td className="px-3 py-2 text-gray-500 font-mono text-xs">
+                {entries.length + 2}
+              </td>
+              <td className="px-3 py-2 text-xs text-gray-400">—</td>
+              <td
+                className="px-3 py-2 font-bold text-sm"
+                style={{ color: isFullyPaid ? GREEN : "#D32F2F" }}
+              >
+                Outstanding
+              </td>
+              <td
+                className="px-3 py-2 text-right font-bold text-sm"
+                style={{ color: isFullyPaid ? GREEN : "#D32F2F" }}
+              >
+                {formatINR(outstanding)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Summary strip */}
+        <div className="mt-3 flex justify-between items-center text-xs text-gray-500 border-t pt-2">
+          <span>
+            Total Paid:{" "}
+            <span className="font-semibold" style={{ color: GREEN }}>
+              {formatINR(totalPaid)}
+            </span>
+          </span>
+          <span>
+            Status:{" "}
+            <span
+              className="font-semibold"
+              style={{
+                color:
+                  bill.paymentStatus === "Completed"
+                    ? GREEN
+                    : bill.paymentStatus === "Partially Paid"
+                      ? "#1565C0"
+                      : "#D32F2F",
+              }}
+            >
+              {bill.paymentStatus || "Unpaid"}
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── View Receipt Modal ──────────────────────────────────────────────────────
+function ViewReceiptModal({
+  bill,
+  onClose,
+}: {
+  bill: PayGoBill;
+  onClose: () => void;
+}) {
+  const receiptRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = () => {
+    const content = receiptRef.current;
+    if (!content) return;
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html><head><title>Payment Receipt - ${bill.billNo}</title>
+      <style>
+        @page { size: A4 portrait; margin: 20mm; }
+        body { font-family: 'Century Gothic', Arial, sans-serif; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #e5e7eb; padding: 6px 10px; font-size: 11px; }
+        th { background: #1B5E20 !important; color: white !important; -webkit-print-color-adjust: exact; }
+        .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); opacity: 0.07; width: 250px; pointer-events: none; }
+      </style></head><body>
+      <img class="watermark" src="/assets/logo mkt.png" />
+      ${content.innerHTML}
+      </body></html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
+  const handleShare = useCallback(() => {
+    try {
+      // Use print-to-PDF as a reliable cross-browser share/save approach
+      const content = receiptRef.current;
+      if (!content) return;
+      const printWindow = window.open("", "_blank", "width=900,height=700");
+      if (!printWindow) {
+        toast.error("Could not open print window. Check popup blocker.");
+        return;
+      }
+      printWindow.document.write(`
+        <html><head><title>Payment Receipt - ${bill.billNo}</title>
+        <style>
+          @page { size: A4 portrait; margin: 15mm; }
+          body { font-family: 'Century Gothic', Arial, sans-serif; margin: 0; padding: 0; }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #e5e7eb; padding: 6px 10px; font-size: 11px; }
+          th { background: #1B5E20 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); opacity: 0.07; width: 250px; pointer-events: none; z-index: -1; }
+          @media print { .no-print { display: none; } }
+        </style></head><body>
+        <img class="watermark" src="/assets/logo mkt.png" />
+        ${content.innerHTML}
+        <script>window.onload = function() { window.print(); }<\/script>
+        </body></html>
+      `);
+      printWindow.document.close();
+      toast.success("Receipt opened — save as PDF from the print dialog.");
+    } catch {
+      toast.error("Could not share receipt.");
+    }
+  }, [bill.billNo]);
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        data-ocid="paygo.payments.receipt.modal"
+      >
+        {/* Modal header toolbar */}
+        <div className="flex items-center justify-between border-b pb-2 mb-3">
+          <h3 className="text-sm font-bold text-gray-600">
+            Payment Receipt —{" "}
+            <span style={{ color: GREEN }}>{bill.billNo}</span>
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              title="Print"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-50 text-gray-600 transition-colors"
+              data-ocid="paygo.payments.receipt.print"
+            >
+              <Printer size={13} /> Print
+            </button>
+            <button
+              type="button"
+              onClick={handleShare}
+              title="Share as Image"
+              className="flex items-center gap-1 px-3 py-1.5 text-xs border border-blue-300 rounded hover:bg-blue-50 text-blue-600 transition-colors"
+              data-ocid="paygo.payments.receipt.share"
+            >
+              <Share2 size={13} /> Share
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 hover:bg-red-50 rounded text-gray-400 hover:text-red-500 transition-colors"
+              data-ocid="paygo.payments.receipt.close"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* Receipt content */}
+        <div ref={receiptRef} className="bg-white p-4">
+          <PaymentReceipt bill={bill} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Pay Bill Dialog ──────────────────────────────────────────────────────────
 type PayBillDialogProps = {
   bill: PayGoBill;
   onClose: () => void;
-  onPay: (billId: string, amount: number) => void;
+  onPay: (billId: string, amount: number, mode?: string, ref?: string) => void;
 };
 
 function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
   const [payAmt, setPayAmt] = useState<number>(bill.remainingAmount || 0);
+  const [payMode, setPayMode] = useState("Account");
+  const [payRef, setPayRef] = useState("");
 
   const handlePay = () => {
     if (payAmt <= 0) {
@@ -95,11 +467,11 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
     }
     if (payAmt > (bill.remainingAmount || 0)) {
       toast.error(
-        `Payment cannot exceed remaining amount: ${formatINR(bill.remainingAmount || 0)}`,
+        `Cannot exceed outstanding: ${formatINR(bill.remainingAmount || 0)}`,
       );
       return;
     }
-    onPay(bill.id, payAmt);
+    onPay(bill.id, payAmt, payMode, payRef);
     toast.success(
       payAmt >= (bill.remainingAmount || 0)
         ? "Full payment processed. Bill marked as Completed."
@@ -108,8 +480,9 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
     onClose();
   };
 
-  const willBePartial = payAmt < (bill.remainingAmount || 0) && payAmt > 0;
   const willBeComplete = payAmt >= (bill.remainingAmount || 0) && payAmt > 0;
+  const willBePartial = payAmt < (bill.remainingAmount || 0) && payAmt > 0;
+  const netAmt = bill.netAmount || bill.amount || 0;
 
   return (
     <Dialog
@@ -126,7 +499,6 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
         </DialogHeader>
 
         <div className="space-y-3 py-2">
-          {/* Bill summary */}
           <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1.5">
             <div className="flex justify-between">
               <span className="text-gray-500">Bill No:</span>
@@ -143,7 +515,7 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
             <div className="flex justify-between border-t pt-1.5 mt-1.5">
               <span className="text-gray-500">Net Amount:</span>
               <span className="font-bold" style={{ color: GREEN }}>
-                {formatINR(bill.netAmount || bill.amount)}
+                {formatINR(netAmt)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -153,14 +525,13 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500 font-semibold">Remaining:</span>
+              <span className="text-gray-500 font-semibold">Outstanding:</span>
               <span className="font-bold text-red-600">
                 {formatINR(bill.remainingAmount || 0)}
               </span>
             </div>
           </div>
 
-          {/* Pay amount input */}
           <div>
             <Label className="text-xs font-semibold">
               Pay Amount (₹)
@@ -180,7 +551,31 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
             />
           </div>
 
-          {/* Quick fill buttons */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-semibold">Payment Mode</Label>
+              <select
+                value={payMode}
+                onChange={(e) => setPayMode(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+              >
+                <option value="Account">Account / NEFT</option>
+                <option value="Cash">Cash</option>
+                <option value="Cheque">Cheque</option>
+                <option value="UPI">UPI</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Reference No.</Label>
+              <Input
+                value={payRef}
+                onChange={(e) => setPayRef(e.target.value)}
+                placeholder="NEFT/UTR/Ref..."
+                className="mt-1"
+              />
+            </div>
+          </div>
+
           <div className="flex gap-2">
             <button
               type="button"
@@ -200,7 +595,6 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
             </button>
           </div>
 
-          {/* Outcome preview */}
           {payAmt > 0 && (
             <div
               className="rounded-lg px-3 py-2 text-xs font-semibold"
@@ -248,18 +642,33 @@ function PayBillDialog({ bill, onClose, onPay }: PayBillDialogProps) {
   );
 }
 
-// ─── Bills Payment Tab ───────────────────────────────────────────────────────
+// ─── Bills Payment Tab ────────────────────────────────────────────────────────
+type SortKey =
+  | "billNo"
+  | "project"
+  | "contractor"
+  | "netAmount"
+  | "paidAmount"
+  | "remainingAmount"
+  | "paymentStatus";
+type SortDir = "asc" | "desc";
+
 function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
   const { bills, payBill } = usePayGo();
   const canPayOrEdit =
     currentRole === "Admin" || currentRole === "Billing Engineer";
+  const isAdminOrBE =
+    currentRole === "Admin" || currentRole === "Billing Engineer";
   const [payingBill, setPayingBill] = useState<PayGoBill | null>(null);
+  const [viewBill, setViewBill] = useState<PayGoBill | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState<
     "all" | PayGoBill["paymentStatus"]
   >("all");
   const [filterProject, setFilterProject] = useState("");
   const [filterContractor, setFilterContractor] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("billNo");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const approvedBills = useMemo(
     () => bills.filter((b) => b.workflowStatus === "Billing Approved"),
@@ -270,25 +679,49 @@ function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
     () => [...new Set(approvedBills.map((b) => b.project))],
     [approvedBills],
   );
-
   const contractorNames = useMemo(
     () => [...new Set(approvedBills.map((b) => b.contractor))],
     [approvedBills],
   );
 
-  const filtered = useMemo(
-    () =>
-      approvedBills.filter((b) => {
-        const mStatus =
-          filterStatus === "all" ||
-          (b.paymentStatus || "Unpaid") === filterStatus;
-        const mProject = !filterProject || b.project === filterProject;
-        const mContractor =
-          !filterContractor || b.contractor === filterContractor;
-        return mStatus && mProject && mContractor;
-      }),
-    [approvedBills, filterStatus, filterProject, filterContractor],
-  );
+  const filtered = useMemo(() => {
+    let result = approvedBills.filter((b) => {
+      const mStatus =
+        filterStatus === "all" ||
+        (b.paymentStatus || "Unpaid") === filterStatus;
+      const mProject = !filterProject || b.project === filterProject;
+      const mContractor =
+        !filterContractor || b.contractor === filterContractor;
+      return mStatus && mProject && mContractor;
+    });
+
+    result = [...result].sort((a, b) => {
+      let av: string | number = a[sortKey] ?? "";
+      let bv: string | number = b[sortKey] ?? "";
+      if (typeof av === "number" && typeof bv === "number") {
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      av = String(av).toLowerCase();
+      bv = String(bv).toLowerCase();
+      return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    return result;
+  }, [
+    approvedBills,
+    filterStatus,
+    filterProject,
+    filterContractor,
+    sortKey,
+    sortDir,
+  ]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
 
   const totalNet = filtered.reduce(
     (s, b) => s + (b.netAmount || b.amount || 0),
@@ -300,41 +733,60 @@ function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
     0,
   );
 
+  const SortIcon = ({ k }: { k: SortKey }) =>
+    sortKey === k ? (
+      sortDir === "asc" ? (
+        <ChevronUp size={11} className="inline ml-0.5" />
+      ) : (
+        <ChevronDown size={11} className="inline ml-0.5" />
+      )
+    ) : (
+      <ArrowUpDown size={10} className="inline ml-0.5 opacity-40" />
+    );
+
+  const clearFilters = () => {
+    setFilterProject("");
+    setFilterContractor("");
+    setFilterStatus("all");
+  };
+
   return (
     <div className="flex flex-col gap-0">
       {/* Summary cards */}
       <div className="px-4 py-3 flex gap-3 flex-wrap">
-        <div
-          className="rounded-xl px-4 py-3 text-white font-bold shadow-md flex flex-col"
-          style={{ background: "linear-gradient(135deg, #1976D2, #0D47A1)" }}
-        >
-          <span className="text-xs font-normal opacity-90">
-            Total Net Bills
-          </span>
-          <span className="text-lg">{formatINR(totalNet)}</span>
-          <span className="text-xs opacity-75">
-            {filtered.length} bills approved
-          </span>
-        </div>
-        <div
-          className="rounded-xl px-4 py-3 text-white font-bold shadow-md flex flex-col"
-          style={{ background: "linear-gradient(135deg, #43A047, #1B5E20)" }}
-        >
-          <span className="text-xs font-normal opacity-90">Total Paid</span>
-          <span className="text-lg">{formatINR(totalPaid)}</span>
-        </div>
-        <div
-          className="rounded-xl px-4 py-3 text-white font-bold shadow-md flex flex-col"
-          style={{ background: "linear-gradient(135deg, #E53935, #B71C1C)" }}
-        >
-          <span className="text-xs font-normal opacity-90">
-            Total Remaining
-          </span>
-          <span className="text-lg">{formatINR(totalRemaining)}</span>
-        </div>
+        {[
+          {
+            label: "Total Net Bills",
+            value: totalNet,
+            sub: `${filtered.length} bills`,
+            grad: "linear-gradient(135deg,#1976D2,#0D47A1)",
+          },
+          {
+            label: "Total Paid",
+            value: totalPaid,
+            sub: "",
+            grad: "linear-gradient(135deg,#43A047,#1B5E20)",
+          },
+          {
+            label: "Total Outstanding",
+            value: totalRemaining,
+            sub: "",
+            grad: "linear-gradient(135deg,#E53935,#B71C1C)",
+          },
+        ].map((c) => (
+          <div
+            key={c.label}
+            className="rounded-xl px-4 py-3 text-white font-bold shadow-md flex flex-col"
+            style={{ background: c.grad }}
+          >
+            <span className="text-xs font-normal opacity-90">{c.label}</span>
+            <span className="text-lg">{formatINR(c.value)}</span>
+            {c.sub && <span className="text-xs opacity-75">{c.sub}</span>}
+          </div>
+        ))}
       </div>
 
-      {/* Filter toggle */}
+      {/* Filter toggle bar */}
       <div className="px-4 py-2 bg-white border-b flex items-center gap-2">
         <button
           type="button"
@@ -347,11 +799,7 @@ function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
         {(filterProject || filterContractor || filterStatus !== "all") && (
           <button
             type="button"
-            onClick={() => {
-              setFilterProject("");
-              setFilterContractor("");
-              setFilterStatus("all");
-            }}
+            onClick={clearFilters}
             className="ml-2 text-xs font-medium text-red-500 hover:text-red-700"
           >
             Clear Filters
@@ -367,40 +815,40 @@ function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
             style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
           >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Project
-                </span>
-                <select
-                  value={filterProject}
-                  onChange={(e) => setFilterProject(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                >
-                  <option value="">All Projects</option>
-                  {projectNames.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Contractor
-                </span>
-                <select
-                  value={filterContractor}
-                  onChange={(e) => setFilterContractor(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                >
-                  <option value="">All Contractors</option>
-                  {contractorNames.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {[
+                {
+                  label: "Project",
+                  value: filterProject,
+                  set: setFilterProject,
+                  opts: projectNames,
+                  placeholder: "All Projects",
+                },
+                {
+                  label: "Contractor",
+                  value: filterContractor,
+                  set: setFilterContractor,
+                  opts: contractorNames,
+                  placeholder: "All Contractors",
+                },
+              ].map((f) => (
+                <div key={f.label}>
+                  <span className="block text-xs font-semibold text-gray-600 mb-1">
+                    {f.label}
+                  </span>
+                  <select
+                    value={f.value}
+                    onChange={(e) => f.set(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                  >
+                    <option value="">{f.placeholder}</option>
+                    {f.opts.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
               <div>
                 <span className="block text-xs font-semibold text-gray-600 mb-1">
                   Payment Status
@@ -422,11 +870,7 @@ function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
-                onClick={() => {
-                  setFilterProject("");
-                  setFilterContractor("");
-                  setFilterStatus("all");
-                }}
+                onClick={clearFilters}
                 className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50"
               >
                 Clear Filters
@@ -443,22 +887,28 @@ function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: "#1976D2" }}>
-                  {[
-                    "#",
-                    "Bill No",
-                    "Project",
-                    "Contractor",
-                    "Net Amount",
-                    "Paid",
-                    "Remaining",
-                    "Payment Status",
-                    "Actions",
-                  ].map((h) => (
+                  {(
+                    [
+                      ["#", null],
+                      ["Bill No", "billNo"],
+                      ["Project", "project"],
+                      ["Contractor", "contractor"],
+                      ["Net Amount", "netAmount"],
+                      ["Paid", "paidAmount"],
+                      ["Outstanding", "remainingAmount"],
+                      ["Payment Status", "paymentStatus"],
+                      ["Actions", null],
+                    ] as [string, SortKey | null][]
+                  ).map(([h, k]) => (
                     <th
                       key={h}
                       className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap"
+                      style={{ cursor: k ? "pointer" : "default" }}
+                      onClick={() => k && toggleSort(k)}
+                      onKeyDown={(e) => e.key === "Enter" && k && toggleSort(k)}
                     >
                       {h}
+                      {k && <SortIcon k={k} />}
                     </th>
                   ))}
                 </tr>
@@ -521,29 +971,57 @@ function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
-                        {(b.paymentStatus || "Unpaid") !== "Completed" &&
-                          canPayOrEdit && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* View Receipt button */}
+                          <button
+                            type="button"
+                            onClick={() => setViewBill(b)}
+                            title="View Receipt"
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+                            data-ocid={`paygo.payments.view_button.${i + 1}`}
+                          >
+                            <FileText size={11} /> View
+                          </button>
+
+                          {/* Print (Admin + BE only) */}
+                          {isAdminOrBE && (
                             <button
                               type="button"
-                              onClick={() => setPayingBill(b)}
-                              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md text-white shadow-sm hover:opacity-90 transition-opacity"
-                              style={{ background: GREEN }}
-                              data-ocid={"paygo.payments.primary_button"}
+                              onClick={() => setViewBill(b)}
+                              title="Print Receipt"
+                              className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+                              data-ocid={`paygo.payments.print_button.${i + 1}`}
                             >
-                              <CreditCard size={12} /> Pay
+                              <Printer size={11} /> Print
                             </button>
                           )}
-                        {(b.paymentStatus || "Unpaid") === "Completed" && (
-                          <span className="text-xs text-green-600 font-semibold">
-                            ✔ Paid
-                          </span>
-                        )}
-                        {(b.paymentStatus || "Unpaid") !== "Completed" &&
-                          !canPayOrEdit && (
-                            <span className="text-xs text-gray-400 italic">
-                              View only
+
+                          {/* Pay button */}
+                          {(b.paymentStatus || "Unpaid") !== "Completed" &&
+                            canPayOrEdit && (
+                              <button
+                                type="button"
+                                onClick={() => setPayingBill(b)}
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded text-white shadow-sm hover:opacity-90 transition-opacity"
+                                style={{ background: GREEN }}
+                                data-ocid={`paygo.payments.primary_button.${i + 1}`}
+                              >
+                                <CreditCard size={11} /> Pay
+                              </button>
+                            )}
+
+                          {(b.paymentStatus || "Unpaid") === "Completed" && (
+                            <span className="text-xs text-green-600 font-semibold">
+                              ✔ Paid
                             </span>
                           )}
+                          {(b.paymentStatus || "Unpaid") !== "Completed" &&
+                            !canPayOrEdit && (
+                              <span className="text-xs text-gray-400 italic">
+                                View only
+                              </span>
+                            )}
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -559,14 +1037,19 @@ function BillsPaymentTab({ currentRole }: { currentRole: Role }) {
         <PayBillDialog
           bill={payingBill}
           onClose={() => setPayingBill(null)}
-          onPay={payBill}
+          onPay={(id, amount, mode, ref) => payBill(id, amount, mode, ref)}
         />
+      )}
+
+      {/* View Receipt Modal */}
+      {viewBill && (
+        <ViewReceiptModal bill={viewBill} onClose={() => setViewBill(null)} />
       )}
     </div>
   );
 }
 
-// ─── Payments Tab (existing) ──────────────────────────────────────────────────
+// ─── Payments Tab ─────────────────────────────────────────────────────────────
 function PaymentsTab({ currentRole }: { currentRole: Role }) {
   const { projects, payments, addPayment, updatePayment, deletePayment } =
     usePayGo();
@@ -578,6 +1061,7 @@ function PaymentsTab({ currentRole }: { currentRole: Role }) {
   const [form, setForm] = useState<FormData>(emptyForm());
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pw, setPw] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     project: "",
     mode: "",
@@ -671,6 +1155,7 @@ function PaymentsTab({ currentRole }: { currentRole: Role }) {
     () => [...new Set(projects.map((p) => p.name))],
     [projects],
   );
+  const clearFilters = () => setFilters({ project: "", mode: "", status: "" });
 
   return (
     <div className="flex flex-col gap-0">
@@ -727,71 +1212,96 @@ function PaymentsTab({ currentRole }: { currentRole: Role }) {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="px-4 pt-3 pb-1">
-        <div
-          className="rounded-xl shadow-sm border flex flex-wrap gap-4 px-4 py-3"
-          style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
+      {/* Filter toggle */}
+      <div className="px-4 py-2 bg-white border-b flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
         >
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-600">
-              Project:
-            </span>
-            <select
-              value={filters.project}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, project: e.target.value }))
-              }
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
-            >
-              <option value="">All</option>
-              {projectNames.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-600">Mode:</span>
-            <select
-              value={filters.mode}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, mode: e.target.value }))
-              }
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
-            >
-              <option value="">All</option>
-              <option value="Account">Account</option>
-              <option value="Cash">Cash</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-600">Status:</span>
-            <select
-              value={filters.status}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, status: e.target.value }))
-              }
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
-            >
-              <option value="">All</option>
-              <option value="Pending">Pending</option>
-              <option value="Completed">Completed</option>
-              <option value="Partial">Partial</option>
-            </select>
-          </div>
-          {(filters.project || filters.mode || filters.status) && (
-            <button
-              type="button"
-              onClick={() => setFilters({ project: "", mode: "", status: "" })}
-              className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+          {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {showFilters ? "Hide Filters" : "Show Filters"}
+        </button>
+        {(filters.project || filters.mode || filters.status) && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="ml-2 text-xs font-medium text-red-500 hover:text-red-700"
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
+
+      {/* Filters */}
+      {showFilters && (
+        <div className="px-4 pt-2 pb-3">
+          <div
+            className="rounded-xl shadow-sm border flex flex-wrap gap-4 px-4 py-3"
+            style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-600">
+                Project:
+              </span>
+              <select
+                value={filters.project}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, project: e.target.value }))
+                }
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
+              >
+                <option value="">All</option>
+                {projectNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-600">Mode:</span>
+              <select
+                value={filters.mode}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, mode: e.target.value }))
+                }
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
+              >
+                <option value="">All</option>
+                <option value="Account">Account</option>
+                <option value="Cash">Cash</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-600">
+                Status:
+              </span>
+              <select
+                value={filters.status}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, status: e.target.value }))
+                }
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm bg-white"
+              >
+                <option value="">All</option>
+                <option value="Pending">Pending</option>
+                <option value="Completed">Completed</option>
+                <option value="Partial">Partial</option>
+              </select>
+            </div>
+            {(filters.project || filters.mode || filters.status) && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50 self-end"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="px-4 py-3">
@@ -1084,7 +1594,7 @@ function PaymentsTab({ currentRole }: { currentRole: Role }) {
   );
 }
 
-// ─── Main Export ────────────────────────────────────────────────────────────
+// ─── Main Export ──────────────────────────────────────────────────────────────
 type ActivePayTab = "bills" | "payments";
 
 export default function PayGoPaymentsPage() {
@@ -1104,7 +1614,7 @@ export default function PayGoPaymentsPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      {/* Role Switcher + tab header */}
+      {/* Role Switcher + Tabs */}
       <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-wrap shadow-sm">
         <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-md px-3 py-1.5">
           <User size={13} className="text-purple-600" />

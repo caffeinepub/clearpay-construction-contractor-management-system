@@ -1,0 +1,334 @@
+type http_request_result = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type http_header = 
+ record {
+   name: text;
+   value: text;
+ };
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type UserProfile = 
+ record {
+   accessProjects: vec text;
+   active: bool;
+   contact: text;
+   email: text;
+   fullName: text;
+   role: UserRole;
+ };
+type ProjectFilters = 
+ record {
+   client: opt text;
+   fromDate: opt text;
+   maxUnitPrice: opt float64;
+   minUnitPrice: opt float64;
+   search: opt text;
+   toDate: opt text;
+ };
+type ProjectAnalyticsData = 
+ record {
+   id: text;
+   name: text;
+   outstandingAmount: float64;
+ };
+type Project = 
+ record {
+   address: text;
+   attachmentLinks: vec text;
+   client: text;
+   contactNumber: text;
+   endDate: text;
+   estimatedAmount: float64;
+   id: text;
+   location: text;
+   name: text;
+   notes: text;
+   quantity: float64;
+   startDate: text;
+   unitPrice: float64;
+ };
+type PaymentMode = 
+ variant {
+   account;
+   cash;
+ };
+type PaymentFilters = 
+ record {
+   fromDate: opt text;
+   maxAmount: opt float64;
+   minAmount: opt float64;
+   paymentMode: opt PaymentMode;
+   projectId: opt text;
+   reference: opt text;
+   search: opt text;
+   toDate: opt text;
+ };
+type Payment = 
+ record {
+   amount: float64;
+   date: text;
+   id: text;
+   paymentMode: PaymentMode;
+   projectId: text;
+   reference: text;
+   remarks: opt text;
+ };
+type ImportRequest = 
+ record {
+   billsData: vec Bill;
+   clientsData: vec Client;
+   paymentsData: vec Payment;
+   projectsData: vec Project;
+   usersData: vec record {
+                    principal;
+                    UserProfile;
+                  };
+ };
+type DashboardMetrics = 
+ record {
+   outstanding: float64;
+   totalBills: float64;
+   totalGst: float64;
+   totalPayments: float64;
+ };
+type Client = 
+ record {
+   address: text;
+   contact: text;
+   email: text;
+   id: text;
+   name: text;
+   notes: text;
+ };
+type BillKey = 
+ record {
+   billNumber: text;
+   projectId: text;
+ };
+type BillFilters = 
+ record {
+   billNumber: opt text;
+   blockId: opt text;
+   client: opt text;
+   fromDate: opt text;
+   includesGst: opt bool;
+   maxAmount: opt float64;
+   minAmount: opt float64;
+   projectId: opt text;
+   search: opt text;
+   toDate: opt text;
+ };
+type Bill = 
+ record {
+   amount: float64;
+   billNumber: text;
+   blockId: opt text;
+   date: text;
+   description: text;
+   includesGst: bool;
+   projectId: text;
+   quantity: float64;
+   remarks: opt text;
+   unit: text;
+   unitPrice: float64;
+ };
+service : {
+  addBill: (bill: Bill) -> ();
+  addClient: (client: Client) -> ();
+  addContractor: (name: text, trades: vec text, projectId: text, date: 
+   text, contractingPrice: float64, unit: text, contact1: text, contact2:
+   text, email: text, address: text, link1: text, link2: text, note: 
+   text, woNo: text) -> (text);
+  addContractorBill: (contractorId: text, projectId: text, billNo: text,
+   date: text, item: text, area: float64, unit: text, unitPrice: float64,
+   remarks: text, blockId: text, workRetention: float64, workRetentionAmount:
+   float64) -> (text);
+  addContractorPayment: (contractorId: text, projectId: text, paymentNo:
+   text, date: text, amount: float64, paymentMode: text, remarks: text) ->
+   (text);
+  addPayment: (payment: Payment) -> ();
+  addProject: (project: Project) -> ();
+  addSftEntry: (contractorId: text, projectId: text, billNo: text, slabNo:
+   text, footings: float64, rw: float64, columns: float64, beams: float64,
+   slab: float64, oht: float64, remarks: text) -> (text);
+  addUser: (profile: UserProfile) -> (principal);
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  bulkDeleteBillsWithPassword: (password: text, billKeys: vec BillKey) -> ();
+  bulkDeletePayments: (password: text, ids: vec text) -> ();
+  changeAdminPassword: (adminEmail: text, oldPwd: text, newPwd: text,
+   confirmPwd: text, newQuestion: text, newAnswer: text) -> (bool);
+  deleteBill: (projectId: text, billNumber: text, password: text) -> ();
+  deleteClient: (id: text, password: text) -> ();
+  deleteContractorBills: (ids: vec text, password: text) -> ();
+  deleteContractorPayments: (ids: vec text, password: text) -> ();
+  deleteContractors: (ids: vec text, password: text) -> ();
+  deletePayment: (id: text, password: text) -> ();
+  deleteProject: (id: text, password: text) -> ();
+  deleteSftEntries: (ids: vec text, password: text) -> ();
+  deleteUsers: (password: text, principalIds: vec text) -> ();
+  filterBills: (billFilters: BillFilters) -> (vec Bill) query;
+  filterBillsByProject: (projectId: text) -> (vec Bill) query;
+  filterPayments: (filters: PaymentFilters) -> (vec Payment) query;
+  filterProjects: (filters: ProjectFilters) -> (vec Project) query;
+  getAdminPasswordQuestion: () -> (opt text) query;
+  getAllBills: () -> (vec Bill) query;
+  getAllClients: () -> (vec Client) query;
+  getAllPayments: () -> (vec Payment) query;
+  getAllProjectNames: () -> (vec text) query;
+  getAllProjects: () -> (vec Project) query;
+  getBillDetails: (projectId: text, billNumber: text) -> (opt Bill) query;
+  getCallerUserProfile: () -> (opt UserProfile) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getCompletedProjectIds: () -> (vec text) query;
+  getDashboardMetrics: () -> (DashboardMetrics) query;
+  getDefaultAdminProfile: () -> (opt UserProfile) query;
+  getGreetingMessage: (null) -> (text) query;
+  getHintQuestion: () -> (opt text) query;
+  getOutstandingAmount: () -> (float64) query;
+  getPaymentDetails: (paymentId: text) -> (opt Payment) query;
+  getProjectMapLocations: () -> (vec record {
+                                       text;
+                                       text;
+                                     }) query;
+  getProjectSummary: (projectId: text) ->
+   (opt
+     record {
+       accountPayments: float64;
+       cashPayments: float64;
+       gstOutstanding: float64;
+       outstanding: float64;
+       project: Project;
+       totalBills: float64;
+       totalPayments: float64;
+     }) query;
+  getProjectWiseAnalyticsData: (sortBy: text) ->
+   (vec ProjectAnalyticsData) query;
+  getSortedBills: (sortBy: opt text, ascending: bool) -> (vec Bill) query;
+  getTickerMessages: () -> (vec record {
+                                  text;
+                                  text;
+                                }) query;
+  getTotalGst: () -> (float64) query;
+  getUserAccess: (email: text) -> (vec text) query;
+  getUserProfile: (user: principal) -> (opt UserProfile) query;
+  hasActiveProfile: (email: text) -> (bool) query;
+  hasProfileSetup: () -> (bool) query;
+  importData: (request: ImportRequest, password: text) -> ();
+  initializeAccessControl: () -> ();
+  isAdminPasswordSet: () -> (bool) query;
+  isCallerAdmin: () -> (bool) query;
+  linkMasterAdminPrincipal: () -> (bool);
+  linkUserByEmail: (email: text) -> (bool);
+  listContractorBills: () ->
+   (vec
+     record {
+       amount: float64;
+       area: float64;
+       billNo: text;
+       blockId: text;
+       contractorId: text;
+       date: text;
+       id: text;
+       item: text;
+       projectId: text;
+       remarks: text;
+       unit: text;
+       unitPrice: float64;
+       workRetention: float64;
+       workRetentionAmount: float64;
+     }) query;
+  listContractorPayments: () ->
+   (vec
+     record {
+       amount: float64;
+       contractorId: text;
+       date: text;
+       id: text;
+       paymentMode: text;
+       paymentNo: text;
+       projectId: text;
+       remarks: text;
+     }) query;
+  listContractors: () ->
+   (vec
+     record {
+       address: text;
+       completed: bool;
+       contact1: text;
+       contact2: text;
+       contractingPrice: float64;
+       date: text;
+       email: text;
+       id: text;
+       link1: text;
+       link2: text;
+       name: text;
+       note: text;
+       projectId: text;
+       trades: vec text;
+       unit: text;
+       woNo: text;
+     }) query;
+  listSftEntries: () ->
+   (vec
+     record {
+       beams: float64;
+       billNo: text;
+       columns: float64;
+       contractorId: text;
+       footings: float64;
+       id: text;
+       oht: float64;
+       projectId: text;
+       remarks: text;
+       rw: float64;
+       slab: float64;
+       slabNo: text;
+       totalSft: float64;
+     }) query;
+  listUsers: () -> (vec record {
+                          principal;
+                          UserProfile;
+                        }) query;
+  revealAdminPassword: (answer: text) -> (opt text);
+  saveCallerUserProfile: (profile: UserProfile) -> ();
+  saveTickerMessages: (msgs: vec record {
+                                   text;
+                                   text;
+                                 }) -> ();
+  setHintQuestionAndAnswer: (question: text, answer: text) -> ();
+  setProjectMapLocation: (projectId: text, location: text) -> ();
+  toggleContractorCompleted: (id: text) -> ();
+  toggleProjectCompleted: (id: text) -> ();
+  transform: (input: http_request_result) -> (http_request_result) query;
+  updateBill: (bill: Bill, password: text) -> ();
+  updateClient: (client: Client, password: text) -> ();
+  updateContractor: (id: text, name: text, trades: vec text, projectId: 
+   text, date: text, contractingPrice: float64, unit: text, contact1: 
+   text, contact2: text, email: text, address: text, link1: text, link2:
+   text, note: text, password: text, woNo: text) -> ();
+  updateContractorBill: (id: text, contractorId: text, projectId: text,
+   billNo: text, date: text, item: text, area: float64, unit: text,
+   unitPrice: float64, remarks: text, password: text, blockId: text,
+   workRetention: float64, workRetentionAmount: float64) -> ();
+  updateContractorPayment: (id: text, contractorId: text, projectId: 
+   text, paymentNo: text, date: text, amount: float64, paymentMode: text,
+   remarks: text, password: text) -> ();
+  updatePayment: (payment: Payment, password: text) -> ();
+  updateProject: (project: Project, password: text) -> ();
+  updateSftEntry: (id: text, contractorId: text, projectId: text, billNo:
+   text, slabNo: text, footings: float64, rw: float64, columns: float64,
+   beams: float64, slab: float64, oht: float64, remarks: text, password:
+   text) -> ();
+  updateUser: (userPrincipal: principal, profile: UserProfile) -> ();
+  validateActiveUser: (email: text) -> () query;
+  verifyHintAnswer: (answer: text) -> (text);
+}

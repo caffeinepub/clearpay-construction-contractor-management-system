@@ -47,7 +47,6 @@ import {
   YAxis,
 } from "recharts";
 import { toast } from "sonner";
-import type { PaymentMode } from "../backend";
 import ChartZoomModal from "../components/ChartZoomModal";
 import { DateInput } from "../components/DateInput";
 import ProjectLocationsMap from "../components/ProjectLocationsMap";
@@ -59,6 +58,7 @@ import {
   useGetCompletedProjectIds,
   useGetProjectMapLocations,
 } from "../hooks/useQueries";
+import type { PaymentMode } from "../types";
 
 export default function DashboardPage() {
   const [filterOpen, setFilterOpen] = useState(false);

@@ -5,7 +5,7 @@ import {
   PaymentMode,
   type Project,
   UserProfile,
-} from "../backend";
+} from "../types";
 
 // CSV Export
 export function exportToCSV(data: any[], filename: string) {

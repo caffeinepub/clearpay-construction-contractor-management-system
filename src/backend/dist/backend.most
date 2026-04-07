@@ -1,0 +1,213 @@
+// Version: 1.0.0
+type AdminPasswordData__204322768 =
+  {hintAnswer : ?Text; hintQuestion : ?Text; password : Text};
+type BillKey__903240139 = {billNumber : Text; projectId : Text};
+type Bill__255701916 =
+  {
+    amount : Float;
+    billNumber : Text;
+    blockId : ?Text;
+    date : Text;
+    description : Text;
+    includesGst : Bool;
+    projectId : Text;
+    quantity : Float;
+    remarks : ?Text;
+    unit : Text;
+    unitPrice : Float
+  };
+type Client__171211559 =
+  {
+    address : Text;
+    contact : Text;
+    email : Text;
+    id : Text;
+    name : Text;
+    notes : Text
+  };
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type PaymentMode__936494874 = {#account; #cash};
+type Payment__159206904 =
+  {
+    amount : Float;
+    date : Text;
+    id : Text;
+    paymentMode : PaymentMode__936494874;
+    projectId : Text;
+    reference : Text;
+    remarks : ?Text
+  };
+type Project__762223144 =
+  {
+    address : Text;
+    attachmentLinks : [Text];
+    client : Text;
+    contactNumber : Text;
+    endDate : Text;
+    estimatedAmount : Float;
+    id : Text;
+    location : Text;
+    name : Text;
+    notes : Text;
+    quantity : Float;
+    startDate : Text;
+    unitPrice : Float
+  };
+type UserProfile__491224006 =
+  {
+    accessProjects : [Text];
+    active : Bool;
+    contact : Text;
+    email : Text;
+    fullName : Text;
+    role : UserRole__184338194
+  };
+type UserRole__184338194 = UserRole__599675725;
+type UserRole__599675725 = {#admin; #guest; #user};
+actor {
+  stable DEFAULT_ADMIN_CONTACT : Text;
+  stable DEFAULT_ADMIN_EMAIL : Text;
+  stable DEFAULT_ADMIN_NAME : Text;
+  stable accessControlState :
+    {
+      var adminAssigned : Bool;
+      userRoles : Map__605269027<Principal, UserRole__599675725>
+    };
+  stable var adminPasswordData : ?AdminPasswordData__204322768;
+  stable var bills :
+    {
+      var root : Node__46230540<BillKey__903240139, Bill__255701916>;
+      var size : Nat__490723111
+    };
+  stable var cBillBlockIdMap :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable var cBillWorkRetentionAmtMap :
+    {var root : Node__46230540<Text, Float>; var size : Nat__490723111};
+  stable var cBillWorkRetentionMap :
+    {var root : Node__46230540<Text, Float>; var size : Nat__490723111};
+  stable var clients :
+    {
+      var root : Node__46230540<Text, Client__171211559>;
+      var size : Nat__490723111
+    };
+  stable var completedProjectIds :
+    {var root : Node__46230540<Text, Bool>; var size : Nat__490723111};
+  stable var contractorBills :
+    {
+      var root :
+        Node__46230540<Text,
+                        {
+                          amount : Float;
+                          area : Float;
+                          billNo : Text;
+                          contractorId : Text;
+                          date : Text;
+                          id : Text;
+                          item : Text;
+                          projectId : Text;
+                          remarks : Text;
+                          unit : Text;
+                          unitPrice : Float
+                        }>;
+      var size : Nat__490723111
+    };
+  stable var contractorCompletedMap :
+    {var root : Node__46230540<Text, Bool>; var size : Nat__490723111};
+  stable var contractorIdCounter : Nat;
+  stable var contractorPayments :
+    {
+      var root :
+        Node__46230540<Text,
+                        {
+                          amount : Float;
+                          contractorId : Text;
+                          date : Text;
+                          id : Text;
+                          paymentMode : Text;
+                          paymentNo : Text;
+                          projectId : Text;
+                          remarks : Text
+                        }>;
+      var size : Nat__490723111
+    };
+  stable var contractorWoNoMap :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable var contractors :
+    {
+      var root :
+        Node__46230540<Text,
+                        {
+                          address : Text;
+                          contact1 : Text;
+                          contact2 : Text;
+                          contractingPrice : Float;
+                          date : Text;
+                          email : Text;
+                          id : Text;
+                          link1 : Text;
+                          link2 : Text;
+                          name : Text;
+                          note : Text;
+                          projectId : Text;
+                          trades : [Text];
+                          unit : Text
+                        }>;
+      var size : Nat__490723111
+    };
+  stable var defaultAdminPrincipal : ?Principal;
+  stable gstRatePercent : Nat;
+  stable var isInitialized : Bool;
+  stable var payments :
+    {
+      var root : Node__46230540<Text, Payment__159206904>;
+      var size : Nat__490723111
+    };
+  stable var projectMapLocations :
+    {var root : Node__46230540<Text, Text>; var size : Nat__490723111};
+  stable var projects :
+    {
+      var root : Node__46230540<Text, Project__762223144>;
+      var size : Nat__490723111
+    };
+  stable var sftEntries :
+    {
+      var root :
+        Node__46230540<Text,
+                        {
+                          beams : Float;
+                          billNo : Text;
+                          columns : Float;
+                          contractorId : Text;
+                          footings : Float;
+                          id : Text;
+                          oht : Float;
+                          projectId : Text;
+                          remarks : Text;
+                          rw : Float;
+                          slab : Float;
+                          slabNo : Text;
+                          totalSft : Float
+                        }>;
+      var size : Nat__490723111
+    };
+  stable var sftIdCounter : Nat;
+  stable var tickerMessages : [(Text, Text)];
+  stable var userPrincipalCounter : Nat;
+  stable var userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfile__491224006>;
+      var size : Nat__490723111
+    }
+};

@@ -36,6 +36,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  type NMRLabourRow,
   type PayGoBill,
   type PayGoNMRBill,
   type WorkflowStep,
@@ -214,6 +215,10 @@ const emptyNMRForm = (): NMRFormData => ({
   project: "",
   contractor: "",
   trade: "",
+  subTrade: "",
+  blockId: "",
+  description: "",
+  rows: [],
   weekFrom: "",
   weekTo: "",
   labourCount: 0,
@@ -221,6 +226,8 @@ const emptyNMRForm = (): NMRFormData => ({
   ratePerDay: 0,
   totalAmount: 0,
   status: "Pending",
+  workflowStatus: "Pending PM Review",
+  workflowHistory: [],
   remarks: "",
   year: "",
   financialYear: "",
@@ -729,6 +736,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
         paidAmount: 0,
         remainingAmount: form.netAmount,
         paymentStatus: "Unpaid",
+        paymentEntries: [],
         amount: form.netAmount,
         status: "Pending",
       });
@@ -1242,6 +1250,108 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
                             >
                               <Eye size={13} />
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const grossAmt = b.unitPrice * b.qty * b.nos;
+                                const debits =
+                                  b.workflowHistory
+                                    .filter((h) => h.action === "Added Debit")
+                                    .reduce(
+                                      (s, h) => s + (h.debitAmount || 0),
+                                      0,
+                                    ) +
+                                  (b.reasonForDebit &&
+                                  b.reasonForDebit.length > 20
+                                    ? b.debitAmount
+                                    : 0);
+                                const w = window.open(
+                                  "",
+                                  "_blank",
+                                  "width=900,height=700",
+                                );
+                                if (!w) {
+                                  window.print();
+                                  return;
+                                }
+                                w.document.write(`<!DOCTYPE html><html><head><title>Bill ${b.billNo}</title><style>
+                                  body{font-family:Arial,sans-serif;margin:24px;color:#222;}
+                                  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+                                  .title{font-size:22px;font-weight:bold;}
+                                  .bill-no{font-size:20px;font-weight:bold;color:#D32F2F;text-align:center;}
+                                  .date{font-size:12px;text-align:right;}
+                                  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0;border:1px solid #ccc;padding:12px;border-radius:6px;}
+                                  .col-label{font-size:11px;color:#555;font-weight:600;}
+                                  .col-val{font-size:12px;font-weight:700;}
+                                  table{width:100%;border-collapse:collapse;margin:12px 0;}
+                                  th{background:#1565C0;color:#fff;padding:7px 10px;font-size:11px;text-align:left;}
+                                  td{padding:6px 10px;font-size:11px;border-bottom:1px solid #eee;}
+                                  tr:nth-child(even)td{background:#f5f9ff;}
+                                  .totals{margin-top:8px;text-align:right;}
+                                  .totals div{padding:3px 0;font-size:12px;}
+                                  .total-row{font-weight:bold;font-size:14px;}
+                                  .debit-note{margin:10px 0;padding:8px;background:#FFF8E1;border-left:3px solid #FFA000;font-size:11px;}
+                                  .sig-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:24px;}
+                                  .sig-box{text-align:center;border-top:1px solid #888;padding-top:4px;font-size:10px;color:#555;}
+                                  @media print{body{margin:8mm;}}
+                                </style></head><body>
+                                <div class="header">
+                                  <div class="title">Bill</div>
+                                  <div class="bill-no">${b.billNo}</div>
+                                  <div class="date">${b.date.split("-").reverse().join("-")}</div>
+                                </div>
+                                <div class="two-col">
+                                  <div>
+                                    <div class="col-label">Company</div><div class="col-val">MPH Developers</div>
+                                    <div class="col-label" style="margin-top:6px">Project</div><div class="col-val">${b.project}</div>
+                                    <div class="col-label" style="margin-top:6px">Block ID</div><div class="col-val">${b.blockId || "—"}</div>
+                                  </div>
+                                  <div>
+                                    <div class="col-label">Contractor</div><div class="col-val">${b.contractor}</div>
+                                     <div class="col-label" style="margin-top:6px">Trade / Sub-Trade</div><div class="col-val">${b.trade}${b.subTrade ? ` / ${b.subTrade}` : ""}</div>
+                                    <div class="col-label" style="margin-top:6px">Engineer</div><div class="col-val">${b.engineerName || "—"}</div>
+                                  </div>
+                                </div>
+                                ${b.description ? `<div style="font-size:12px;margin:8px 0;"><strong>Description:</strong> ${b.description}</div>` : ""}
+                                <table>
+                                  <thead><tr><th>SI No</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price ₹</th><th>No's</th><th>Amount ₹</th></tr></thead>
+                                  <tbody>
+                                    <tr>
+                                      <td>1</td>
+                                      <td>${b.description || b.blockId}</td>
+                                      <td>${b.qty}</td>
+                                      <td>${b.unit}</td>
+                                      <td>${b.unitPrice.toLocaleString("en-IN")}</td>
+                                      <td>${b.nos}</td>
+                                      <td>${grossAmt.toLocaleString("en-IN")}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                                <div class="totals">
+                                  <div>SUBTOTAL: ₹${grossAmt.toLocaleString("en-IN")}</div>
+                                  <div style="color:#D32F2F">TOTAL DEBITS: ₹${debits.toLocaleString("en-IN")}</div>
+                                  ${b.workflowStatus === "Billing Approved" ? `<div style="color:#D32F2F">WORK RETENTION (${b.workRetention}%): ₹${(b.retentionAmount || 0).toLocaleString("en-IN")}</div>` : ""}
+                                  <div class="total-row">TOTAL: ₹${(b.netAmount || b.amount).toLocaleString("en-IN")}</div>
+                                </div>
+                                ${b.reasonForDebit && b.reasonForDebit.length > 20 ? `<div class="debit-note"><strong>Debit Note:</strong> ${b.reasonForDebit}</div>` : ""}
+                                <div class="sig-row">
+                                  <div class="sig-box">Contractor</div>
+                                  <div class="sig-box">Site Engineer</div>
+                                  <div class="sig-box">PM</div>
+                                  <div class="sig-box">QC</div>
+                                  <div class="sig-box">Billing Engineer / MD</div>
+                                </div>
+                                </body></html>`);
+                                w.document.close();
+                                w.focus();
+                                setTimeout(() => w.print(), 400);
+                              }}
+                              title="Print"
+                              className="text-purple-500 hover:text-purple-700"
+                              data-ocid={`paygo.bills.print_button.${i + 1}`}
+                            >
+                              <Printer size={13} />
+                            </button>
                             {isAdmin && (
                               <button
                                 type="button"
@@ -1322,18 +1432,19 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
             <div>
               <Label className="text-xs font-semibold">Bill No</Label>
               <Input
-                value={
-                  editItem
-                    ? form.project
-                      ? `${form.project.slice(0, 2).toUpperCase()}…`
-                      : ""
-                    : form.project
-                      ? `${form.project.slice(0, 2).toUpperCase()}…`
-                      : ""
-                }
+                value={(() => {
+                  if (!form.project) return "";
+                  const prefix = form.project.slice(0, 2).toUpperCase();
+                  if (editItem) return editItem.billNo;
+                  const existing = bills.filter((b) =>
+                    b.billNo.startsWith(prefix),
+                  );
+                  const next = existing.length + 1;
+                  return `${prefix}${String(next).padStart(3, "0")}`;
+                })()}
                 readOnly
-                className="bg-gray-50 text-gray-500"
-                placeholder="Auto-assigned on save"
+                className="bg-gray-50 text-gray-500 font-mono font-semibold"
+                placeholder="Select project first"
               />
             </div>
             <div>
@@ -1693,7 +1804,7 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
       {viewBill && (
         <Dialog open={!!viewBill} onOpenChange={() => setViewBill(null)}>
           <DialogContent
-            className="max-w-2xl max-h-[85vh] overflow-y-auto"
+            className="max-w-2xl max-h-[85vh] overflow-y-auto [&>button:last-child]:hidden"
             style={{ border: "3px solid #FF6B35" }}
             data-ocid="paygo.bills.modal"
           >
@@ -2029,7 +2140,41 @@ function BillsTab({ currentRole }: { currentRole: Role }) {
 }
 
 // ─── NMR Bills Tab Component ──────────────────────────────────────────────────
-function NMRBillsTab() {
+// NMR Labour row default rates (stored in localStorage)
+const NMR_RATES_KEY = "paygo_nmr_rates";
+function loadNMRRates(): {
+  mason: number;
+  maleHelper: number;
+  femaleHelper: number;
+} {
+  try {
+    const raw = localStorage.getItem(NMR_RATES_KEY);
+    return raw
+      ? JSON.parse(raw)
+      : { mason: 500, maleHelper: 400, femaleHelper: 350 };
+  } catch {
+    return { mason: 500, maleHelper: 400, femaleHelper: 350 };
+  }
+}
+function saveNMRRates(rates: {
+  mason: number;
+  maleHelper: number;
+  femaleHelper: number;
+}) {
+  localStorage.setItem(NMR_RATES_KEY, JSON.stringify(rates));
+}
+function genNMRId(): string {
+  return `nmr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+}
+function calcRowAmount(row: NMRLabourRow): number {
+  return (
+    row.masonCount * row.masonRate +
+    row.maleHelperCount * row.maleHelperRate +
+    row.femaleHelperCount * row.femaleHelperRate
+  );
+}
+
+function NMRBillsTab({ currentRole }: { currentRole: Role }) {
   const {
     projects,
     contractors,
@@ -2046,6 +2191,27 @@ function NMRBillsTab() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pw, setPw] = useState("");
   const [viewBill, setViewBill] = useState<PayGoNMRBill | null>(null);
+  // NMR per-row labour table state
+  const [nmrRows, setNMRRows] = useState<NMRLabourRow[]>([
+    {
+      id: genNMRId(),
+      description: "",
+      date: new Date().toISOString().split("T")[0],
+      masonCount: 0,
+      masonRate: 500,
+      maleHelperCount: 0,
+      maleHelperRate: 400,
+      femaleHelperCount: 0,
+      femaleHelperRate: 350,
+      amount: 0,
+    },
+  ]);
+  const [nmrRates, setNMRRates] = useState(loadNMRRates);
+  const [rateEditPw, setRateEditPw] = useState("");
+  const [rateEditOpen, setRateEditOpen] = useState(false);
+  const [importRef, setImportRef] = useState<HTMLInputElement | null>(null);
+
+  const isAdmin = currentRole === "Admin";
 
   const projectNames = useMemo(
     () => [...new Set(projects.map((p) => p.name))],
@@ -2071,9 +2237,23 @@ function NMRBillsTab() {
 
   const totalAmount = filtered.reduce((s, b) => s + b.totalAmount, 0);
 
+  const defaultRow = (): NMRLabourRow => ({
+    id: genNMRId(),
+    description: "",
+    date: new Date().toISOString().split("T")[0],
+    masonCount: 0,
+    masonRate: nmrRates.mason,
+    maleHelperCount: 0,
+    maleHelperRate: nmrRates.maleHelper,
+    femaleHelperCount: 0,
+    femaleHelperRate: nmrRates.femaleHelper,
+    amount: 0,
+  });
+
   const openAdd = () => {
     setEditItem(null);
     setForm(emptyNMRForm());
+    setNMRRows([defaultRow()]);
     setFormOpen(true);
   };
   const openEdit = (b: PayGoNMRBill) => {
@@ -2082,35 +2262,75 @@ function NMRBillsTab() {
       project: b.project,
       contractor: b.contractor,
       trade: b.trade,
+      subTrade: b.subTrade,
+      blockId: b.blockId,
+      description: b.description,
+      rows: b.rows,
       weekFrom: b.weekFrom,
       weekTo: b.weekTo,
-      labourCount: b.labourCount,
-      totalDays: b.totalDays,
-      ratePerDay: b.ratePerDay,
+      labourCount: b.labourCount ?? 0,
+      totalDays: b.totalDays ?? 0,
+      ratePerDay: b.ratePerDay ?? 0,
       totalAmount: b.totalAmount,
       status: b.status,
+      workflowStatus: b.workflowStatus,
+      workflowHistory: b.workflowHistory,
       remarks: b.remarks,
       year: b.year,
       financialYear: b.financialYear,
     });
+    setNMRRows(
+      b.rows.length > 0 ? b.rows.map((r) => ({ ...r })) : [defaultRow()],
+    );
     setFormOpen(true);
   };
 
-  const autoCalcTotal = (f: NMRFormData) =>
-    (f.labourCount || 0) * (f.totalDays || 0) * (f.ratePerDay || 0);
+  const updateRow = (idx: number, patch: Partial<NMRLabourRow>) => {
+    setNMRRows((rows) =>
+      rows.map((r, i) => {
+        if (i !== idx) return r;
+        const updated = { ...r, ...patch };
+        updated.amount = calcRowAmount(updated);
+        return updated;
+      }),
+    );
+  };
+  const addRow = () => setNMRRows((rows) => [...rows, defaultRow()]);
+  const removeRow = (idx: number) => {
+    if (idx === 0) return;
+    setNMRRows((rows) => rows.filter((_, i) => i !== idx));
+  };
 
   const handleSave = () => {
     if (!form.project || !form.contractor) {
       toast.error("Project and Contractor are required.");
       return;
     }
-    const finalForm = { ...form, totalAmount: autoCalcTotal(form) };
+    const rowsWithAmounts = nmrRows.map((r) => ({
+      ...r,
+      amount: calcRowAmount(r),
+    }));
+    const totalAmt = rowsWithAmounts.reduce((s, r) => s + r.amount, 0);
+    const finalForm: NMRFormData = {
+      ...form,
+      rows: rowsWithAmounts,
+      totalAmount: totalAmt,
+      labourCount: rowsWithAmounts.reduce(
+        (s, r) => s + r.masonCount + r.maleHelperCount + r.femaleHelperCount,
+        0,
+      ),
+      totalDays: rowsWithAmounts.length,
+      ratePerDay: 0,
+      workflowStatus: editItem ? form.workflowStatus : "Pending PM Review",
+      workflowHistory: editItem ? form.workflowHistory : [],
+      status: editItem ? form.status : "Pending",
+    };
     if (editItem) {
       updateNMRBill({ ...editItem, ...finalForm });
       toast.success("NMR Bill updated.");
     } else {
       addNMRBill(finalForm);
-      toast.success("NMR Bill added.");
+      toast.success("NMR Bill created and sent for PM review.");
     }
     setFormOpen(false);
   };
@@ -2126,8 +2346,139 @@ function NMRBillsTab() {
     setPw("");
   };
 
+  const exportNMRCSV = () => {
+    const h = [
+      "Bill No",
+      "Project",
+      "Contractor",
+      "Trade",
+      "Week From",
+      "Week To",
+      "Labour Count",
+      "Total Days",
+      "Rate/Day",
+      "Total Amount",
+      "Status",
+    ];
+    const rows = filtered.map((b) => [
+      b.billNo,
+      b.project,
+      b.contractor,
+      b.trade,
+      b.weekFrom,
+      b.weekTo,
+      b.labourCount ?? 0,
+      b.totalDays ?? 0,
+      b.ratePerDay ?? 0,
+      b.totalAmount,
+      b.status,
+    ]);
+    const csv = [h, ...rows].map((r) => r.join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "mph-nmr-bills.csv";
+    a.click();
+    toast.success("NMR CSV exported.");
+  };
+
+  const downloadNMRFormat = () => {
+    const h = [
+      "Project",
+      "Contractor",
+      "Trade",
+      "Sub Trade",
+      "Block ID",
+      "Week From",
+      "Week To",
+      "Description",
+      "Year",
+      "Financial Year",
+      "Remarks",
+    ];
+    const csv = [
+      h,
+      [
+        "Sunrise Towers",
+        "Ramesh & Sons",
+        "Mason",
+        "",
+        "BLK-A1",
+        "2025-01-01",
+        "2025-01-07",
+        "Foundation work",
+        "2025",
+        "2024-25",
+        "",
+      ],
+    ]
+      .map((r) => r.join(","))
+      .join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "nmr-bills-format.csv";
+    a.click();
+    toast.success("Format downloaded.");
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = (evt.target?.result as string) || "";
+      const lines = text.split("\n").filter(Boolean);
+      if (lines.length < 2) {
+        toast.error("No data rows found.");
+        return;
+      }
+      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const idx = (name: string) => headers.findIndex((h) => h.includes(name));
+      let count = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",");
+        const project = cols[idx("project")]?.trim() || "";
+        const contractor = cols[idx("contractor")]?.trim() || "";
+        if (!project || !contractor) continue;
+        addNMRBill({
+          project,
+          contractor,
+          trade: cols[idx("trade")]?.trim() || "",
+          subTrade: cols[idx("sub")]?.trim() || "",
+          blockId: cols[idx("block")]?.trim() || "",
+          weekFrom: cols[idx("week from")]?.trim() || "",
+          weekTo: cols[idx("week to")]?.trim() || "",
+          description: cols[idx("desc")]?.trim() || "",
+          rows: [],
+          totalAmount: 0,
+          labourCount: 0,
+          totalDays: 0,
+          ratePerDay: 0,
+          status: "Pending",
+          workflowStatus: "Pending PM Review",
+          workflowHistory: [],
+          remarks: cols[idx("remark")]?.trim() || "",
+          year:
+            cols[idx("year")]?.trim() || new Date().getFullYear().toString(),
+          financialYear: cols[idx("financial")]?.trim() || "",
+        });
+        count++;
+      }
+      toast.success(`Imported ${count} NMR bill(s).`);
+      e.target.value = "";
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="flex flex-col gap-0">
+      {/* Hidden import file input */}
+      <input
+        type="file"
+        accept=".csv"
+        ref={(el) => setImportRef(el)}
+        onChange={handleImportCSV}
+        className="hidden"
+      />
       {/* Toolbar */}
       <div className="bg-white border-b shadow-sm px-4 py-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -2141,15 +2492,31 @@ function NMRBillsTab() {
           <button type="button" className={toolbarBtnClass}>
             <FileText size={14} /> Export PDF
           </button>
-          <button type="button" className={toolbarBtnClass}>
-            <Upload size={14} /> Import CSV
-          </button>
-          <button type="button" className={toolbarBtnClass}>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => importRef?.click()}
+              className={toolbarBtnClass}
+            >
+              <Upload size={14} /> Import CSV
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={exportNMRCSV}
+            className={toolbarBtnClass}
+          >
             <Download size={14} /> Export CSV
           </button>
-          <button type="button" className={toolbarBtnClass}>
-            <FileDown size={14} /> Download Format
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={downloadNMRFormat}
+              className={toolbarBtnClass}
+            >
+              <FileDown size={14} /> Download Format
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -2381,11 +2748,13 @@ function NMRBillsTab() {
                         {fmtDate(b.weekTo)}
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        {b.labourCount}
+                        {b.labourCount ?? 0}
                       </td>
-                      <td className="px-3 py-2.5 text-center">{b.totalDays}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        {b.totalDays ?? 0}
+                      </td>
                       <td className="px-3 py-2.5 text-right">
-                        {formatINR(b.ratePerDay)}
+                        {formatINR(b.ratePerDay ?? 0)}
                       </td>
                       <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap text-right">
                         {formatINR(b.totalAmount)}
@@ -2408,25 +2777,29 @@ function NMRBillsTab() {
                           >
                             <Eye size={14} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => openEdit(b)}
-                            title="Edit"
-                            className="text-gray-500 hover:text-gray-700"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteId(b.id);
-                              setPw("");
-                            }}
-                            title="Delete"
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => openEdit(b)}
+                              title="Edit"
+                              className="text-gray-500 hover:text-gray-700"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteId(b.id);
+                                setPw("");
+                              }}
+                              title="Delete"
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2438,14 +2811,14 @@ function NMRBillsTab() {
         </div>
       </div>
 
-      {/* NMR Form Dialog */}
+      {/* NMR Form Dialog — per-row labour table */}
       <Dialog
         open={formOpen}
         onOpenChange={(o) => {
           if (!o) setFormOpen(false);
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle style={{ color: GREEN }}>
               {editItem ? "Edit NMR Bill" : "New NMR Bill"}
@@ -2453,7 +2826,7 @@ function NMRBillsTab() {
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-2">
             <div>
-              <Label className="text-xs font-semibold">Project</Label>
+              <Label className="text-xs font-semibold">Project *</Label>
               <Select
                 value={form.project}
                 onValueChange={(v) => setForm((f) => ({ ...f, project: v }))}
@@ -2471,7 +2844,7 @@ function NMRBillsTab() {
               </Select>
             </div>
             <div>
-              <Label className="text-xs font-semibold">Contractor</Label>
+              <Label className="text-xs font-semibold">Contractor *</Label>
               <Select
                 value={form.contractor}
                 onValueChange={(v) => {
@@ -2506,22 +2879,14 @@ function NMRBillsTab() {
               />
             </div>
             <div>
-              <Label className="text-xs font-semibold">Year</Label>
-              <Select
-                value={form.year}
-                onValueChange={(v) => setForm((f) => ({ ...f, year: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  {YEARS.map((y) => (
-                    <SelectItem key={y} value={y}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-semibold">Sub-Trade</Label>
+              <Input
+                value={form.subTrade}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, subTrade: e.target.value }))
+                }
+                placeholder="Sub-Trade"
+              />
             </div>
             <div>
               <Label className="text-xs font-semibold">Week From</Label>
@@ -2544,50 +2909,22 @@ function NMRBillsTab() {
               />
             </div>
             <div>
-              <Label className="text-xs font-semibold">Labour Count</Label>
-              <Input
-                type="number"
-                value={form.labourCount || ""}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    labourCount: Number(e.target.value),
-                  }))
-                }
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Total Days</Label>
-              <Input
-                type="number"
-                value={form.totalDays || ""}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, totalDays: Number(e.target.value) }))
-                }
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">Rate/Day (₹)</Label>
-              <Input
-                type="number"
-                value={form.ratePerDay || ""}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, ratePerDay: Number(e.target.value) }))
-                }
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-semibold">
-                Total Amount (₹) — auto
-              </Label>
-              <Input
-                value={formatINR(autoCalcTotal(form))}
-                readOnly
-                className="bg-gray-50 font-semibold"
-              />
+              <Label className="text-xs font-semibold">Year</Label>
+              <Select
+                value={form.year}
+                onValueChange={(v) => setForm((f) => ({ ...f, year: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEARS.map((y) => (
+                    <SelectItem key={y} value={y}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="text-xs font-semibold">Financial Year</Label>
@@ -2609,39 +2946,205 @@ function NMRBillsTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label className="text-xs font-semibold">Status</Label>
-              <Select
-                value={form.status}
-                onValueChange={(v) =>
-                  setForm((f) => ({
-                    ...f,
-                    status: v as PayGoNMRBill["status"],
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Approved">Approved</SelectItem>
-                  <SelectItem value="Paid">Paid</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div className="col-span-2">
-              <Label className="text-xs font-semibold">Remarks</Label>
+              <Label className="text-xs font-semibold">Description</Label>
               <Textarea
-                value={form.remarks}
+                value={form.description}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, remarks: e.target.value }))
+                  setForm((f) => ({ ...f, description: e.target.value }))
                 }
                 rows={2}
+                placeholder="Description of work..."
               />
             </div>
           </div>
-          <DialogFooter>
+
+          {/* Per-row Labour Table */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold text-gray-700">
+                Labour Entries
+              </span>
+              <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setRateEditOpen(true)}
+                    title="Edit /Day rates (Admin)"
+                    className="flex items-center gap-1 text-xs text-blue-600 border border-blue-300 rounded px-2 py-1 hover:bg-blue-50"
+                  >
+                    <Edit2 size={11} /> Rates
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={addRow}
+                  className="flex items-center gap-1 text-xs text-white rounded px-2 py-1"
+                  style={{ background: GREEN }}
+                  title="Add row"
+                >
+                  <Plus size={12} /> Add Row
+                </button>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ background: "#E8F5E9" }}>
+                    {[
+                      "SI",
+                      "Description",
+                      "Date",
+                      "Mason",
+                      "/Day",
+                      "Male Helper",
+                      "/Day",
+                      "Female Helper",
+                      "/Day",
+                      "Amount",
+                      "",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="px-2 py-2 text-left font-semibold text-gray-600 whitespace-nowrap"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {nmrRows.map((row, idx) => (
+                    <tr
+                      key={row.id}
+                      style={{ background: idx % 2 === 0 ? "#fff" : "#F9FBE7" }}
+                    >
+                      <td className="px-2 py-1.5 text-gray-500">{idx + 1}</td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          className="w-28 border border-gray-200 rounded px-1.5 py-1 text-xs"
+                          value={row.description}
+                          onChange={(e) =>
+                            updateRow(idx, { description: e.target.value })
+                          }
+                          placeholder="Work desc"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="date"
+                          className="border border-gray-200 rounded px-1.5 py-1 text-xs"
+                          value={row.date}
+                          onChange={(e) =>
+                            updateRow(idx, { date: e.target.value })
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="number"
+                          className="w-14 border border-gray-200 rounded px-1.5 py-1 text-xs"
+                          value={row.masonCount || ""}
+                          onChange={(e) =>
+                            updateRow(idx, {
+                              masonCount: Number(e.target.value),
+                            })
+                          }
+                          placeholder="0"
+                          min="0"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <span className="text-gray-600">₹{row.masonRate}</span>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="number"
+                          className="w-14 border border-gray-200 rounded px-1.5 py-1 text-xs"
+                          value={row.maleHelperCount || ""}
+                          onChange={(e) =>
+                            updateRow(idx, {
+                              maleHelperCount: Number(e.target.value),
+                            })
+                          }
+                          placeholder="0"
+                          min="0"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <span className="text-gray-600">
+                          ₹{row.maleHelperRate}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="number"
+                          className="w-14 border border-gray-200 rounded px-1.5 py-1 text-xs"
+                          value={row.femaleHelperCount || ""}
+                          onChange={(e) =>
+                            updateRow(idx, {
+                              femaleHelperCount: Number(e.target.value),
+                            })
+                          }
+                          placeholder="0"
+                          min="0"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <span className="text-gray-600">
+                          ₹{row.femaleHelperRate}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5 font-semibold text-green-700 whitespace-nowrap">
+                        {formatINR(calcRowAmount(row))}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {idx > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => removeRow(idx)}
+                            className="text-red-500 hover:text-red-700"
+                            title="Remove row"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: "#E8F5E9" }}>
+                    <td
+                      colSpan={9}
+                      className="px-2 py-2 text-right font-bold text-xs text-gray-700"
+                    >
+                      Total Amount:
+                    </td>
+                    <td className="px-2 py-2 font-bold text-green-700 text-xs whitespace-nowrap">
+                      {formatINR(
+                        nmrRows.reduce((s, r) => s + calcRowAmount(r), 0),
+                      )}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <Label className="text-xs font-semibold">Remarks</Label>
+            <Textarea
+              value={form.remarks}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, remarks: e.target.value }))
+              }
+              rows={2}
+            />
+          </div>
+
+          <DialogFooter className="mt-3">
             <button
               type="button"
               onClick={() => setFormOpen(false)}
@@ -2655,17 +3158,112 @@ function NMRBillsTab() {
               className="rounded-md px-4 py-2 text-sm text-white font-semibold"
               style={{ background: GREEN }}
             >
-              Save
+              Save NMR Bill
             </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Rate Edit Modal — Admin only with password */}
+      {rateEditOpen && (
+        <Dialog open={rateEditOpen} onOpenChange={setRateEditOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle style={{ color: GREEN }}>
+                Edit /Day Rates
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <p className="text-xs text-gray-500">
+                Enter admin password to edit the default /Day rates. Changes
+                persist in your browser.
+              </p>
+              <div>
+                <Label className="text-xs font-semibold">Admin Password</Label>
+                <Input
+                  type="password"
+                  value={rateEditPw}
+                  onChange={(e) => setRateEditPw(e.target.value)}
+                  placeholder="Enter admin password"
+                />
+              </div>
+              {rateEditPw === DEFAULT_PW && (
+                <>
+                  <div>
+                    <Label className="text-xs font-semibold">
+                      Mason /Day Rate (₹)
+                    </Label>
+                    <Input
+                      type="number"
+                      value={nmrRates.mason}
+                      onChange={(e) => {
+                        const updated = {
+                          ...nmrRates,
+                          mason: Number(e.target.value),
+                        };
+                        setNMRRates(updated);
+                        saveNMRRates(updated);
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">
+                      Male Helper /Day Rate (₹)
+                    </Label>
+                    <Input
+                      type="number"
+                      value={nmrRates.maleHelper}
+                      onChange={(e) => {
+                        const updated = {
+                          ...nmrRates,
+                          maleHelper: Number(e.target.value),
+                        };
+                        setNMRRates(updated);
+                        saveNMRRates(updated);
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">
+                      Female Helper /Day Rate (₹)
+                    </Label>
+                    <Input
+                      type="number"
+                      value={nmrRates.femaleHelper}
+                      onChange={(e) => {
+                        const updated = {
+                          ...nmrRates,
+                          femaleHelper: Number(e.target.value),
+                        };
+                        setNMRRates(updated);
+                        saveNMRRates(updated);
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            <DialogFooter>
+              <button
+                type="button"
+                onClick={() => {
+                  setRateEditOpen(false);
+                  setRateEditPw("");
+                }}
+                className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* NMR View Dialog */}
       {viewBill && (
         <Dialog open={!!viewBill} onOpenChange={() => setViewBill(null)}>
           <DialogContent
-            className="max-w-md"
+            className="max-w-lg max-h-[85vh] overflow-y-auto [&>button:last-child]:hidden"
             style={{ border: "3px solid #43A047" }}
           >
             <div className="flex items-center justify-between pb-2 border-b">
@@ -2691,33 +3289,142 @@ function NMRBillsTab() {
                 </button>
               </div>
             </div>
-            <div className="space-y-2 py-2 text-sm">
+            {/* Workflow badge */}
+            <div className="mt-2 mb-1">
+              <WorkflowBadge
+                status={viewBill.workflowStatus as PayGoBill["workflowStatus"]}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 py-2 text-sm">
               {(
                 [
                   ["Bill No", viewBill.billNo],
                   ["Project", viewBill.project],
                   ["Contractor", viewBill.contractor],
                   ["Trade", viewBill.trade],
+                  ["Sub-Trade", viewBill.subTrade || "—"],
                   ["Week From", fmtDate(viewBill.weekFrom)],
                   ["Week To", fmtDate(viewBill.weekTo)],
-                  ["Labour Count", String(viewBill.labourCount)],
-                  ["Total Days", String(viewBill.totalDays)],
-                  ["Rate/Day", formatINR(viewBill.ratePerDay)],
                   ["Total Amount", formatINR(viewBill.totalAmount)],
-                  ["Year", viewBill.year],
-                  ["Financial Year", viewBill.financialYear],
                   ["Status", viewBill.status],
                   ["Remarks", viewBill.remarks],
                 ] as [string, string][]
               ).map(([k, v]) => (
                 <div key={k} className="flex gap-2">
-                  <span className="w-36 text-gray-500 font-medium shrink-0 text-xs">
+                  <span className="w-28 text-gray-500 font-medium shrink-0 text-xs">
                     {k}:
                   </span>
                   <span className="text-gray-800 text-xs">{v || "—"}</span>
                 </div>
               ))}
             </div>
+            {/* Labour rows table */}
+            {viewBill.rows && viewBill.rows.length > 0 && (
+              <div className="mt-3 overflow-x-auto rounded border border-gray-200">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr style={{ background: GREEN }}>
+                      {[
+                        "SI",
+                        "Description",
+                        "Date",
+                        "Mason",
+                        "Male Helper",
+                        "Female Helper",
+                        "Amount",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className="px-2 py-2 text-left text-white font-semibold whitespace-nowrap"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewBill.rows.map((r, idx) => (
+                      <tr
+                        key={r.id}
+                        style={{
+                          background: idx % 2 === 0 ? "#fff" : "#F1F8E9",
+                        }}
+                      >
+                        <td className="px-2 py-1.5">{idx + 1}</td>
+                        <td className="px-2 py-1.5">{r.description || "—"}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          {fmtDate(r.date)}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {r.masonCount} × ₹{r.masonRate}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {r.maleHelperCount} × ₹{r.maleHelperRate}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {r.femaleHelperCount} × ₹{r.femaleHelperRate}
+                        </td>
+                        <td className="px-2 py-1.5 font-semibold text-green-700">
+                          {formatINR(r.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: "#E8F5E9" }}>
+                      <td
+                        colSpan={6}
+                        className="px-2 py-2 text-right font-bold text-xs"
+                      >
+                        Total:
+                      </td>
+                      <td className="px-2 py-2 font-bold text-green-700 text-xs">
+                        {formatINR(viewBill.totalAmount)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+            {/* Workflow History */}
+            {viewBill.workflowHistory &&
+              viewBill.workflowHistory.length > 0 && (
+                <div className="mt-3">
+                  <h4 className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">
+                    Workflow History
+                  </h4>
+                  <div className="space-y-1">
+                    {viewBill.workflowHistory.map((h, idx) => (
+                      <div
+                        key={`${h.timestamp}-${idx}`}
+                        className="text-xs p-2 rounded"
+                        style={{
+                          background:
+                            h.action === "Rejected" ? "#FFF5F5" : "#F0FFF4",
+                        }}
+                      >
+                        <span
+                          className="font-bold"
+                          style={{
+                            color: h.action === "Rejected" ? "#D32F2F" : GREEN,
+                          }}
+                        >
+                          {h.step}
+                        </span>
+                        <span className="text-gray-500 mx-1">→</span>
+                        <span className="font-semibold text-gray-700">
+                          {h.action}
+                        </span>
+                        {h.remarks && (
+                          <span className="text-gray-500 ml-1">
+                            ({h.remarks})
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
           </DialogContent>
         </Dialog>
       )}
@@ -2836,7 +3543,7 @@ export default function PayGoBillsPage() {
       {activeTab === "bills" ? (
         <BillsTab currentRole={currentRole} />
       ) : (
-        <NMRBillsTab />
+        <NMRBillsTab currentRole={currentRole} />
       )}
     </div>
   );

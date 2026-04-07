@@ -7,8 +7,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
+  ArrowUpDown,
   ChevronDown,
   ChevronRight,
   Download,
@@ -31,14 +31,32 @@ import { formatINR } from "../utils/money";
 
 const GREEN = "#28A745";
 
+const BOQ_UNITS = [
+  "Sft",
+  "Sqm",
+  "Rmt",
+  "Cum",
+  "Nos",
+  "Kg",
+  "MT",
+  "LS",
+  "Mtr",
+  "Ltr",
+  "Cumtr",
+  "Rmtr",
+] as const;
+
+type ItemSortKey = "description" | "unit" | "rate" | "amount";
+
 function genId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 function calcItemAmount(item: BOQItem): number {
+  const nos = item.nos ?? 1;
   const qty = item.isManualQty
     ? item.qty
-    : item.length * item.width * item.height;
+    : (item.length || 0) * (item.width || 0) * (item.height || 0) * nos || 0;
   return qty * item.rate;
 }
 
@@ -69,6 +87,9 @@ export default function PayGoBOQPage() {
   const [addCatOpen, setAddCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [printOpen, setPrintOpen] = useState(false);
+  const [itemSort, setItemSort] = useState<
+    Record<string, { key: ItemSortKey; dir: "asc" | "desc" }>
+  >({});
 
   const projectNames = useMemo(() => projects.map((p) => p.name), [projects]);
 
@@ -85,7 +106,6 @@ export default function PayGoBOQPage() {
   const handleProjectSelect = (name: string) => {
     setSelectedProject(name);
     if (!boqs.find((b) => b.projectName === name)) {
-      // Auto-create a new BOQ for this project
       const proj = projects.find((p) => p.name === name);
       if (proj) {
         addBOQ({
@@ -156,6 +176,7 @@ export default function PayGoBOQPage() {
       id: `item-${genId()}`,
       description: "New Item",
       unit: "Sft",
+      nos: 1,
       length: 0,
       width: 0,
       height: 0,
@@ -217,11 +238,13 @@ export default function PayGoBOQPage() {
                       items: sc.items.map((item) => {
                         if (item.id !== itemId) return item;
                         const updated = { ...item, [field]: value };
-                        // Recalculate qty and amount
+                        const nos = updated.nos ?? 1;
                         const qty = updated.isManualQty
                           ? updated.qty
-                          : updated.length * updated.width * updated.height ||
-                            0;
+                          : (updated.length || 0) *
+                              (updated.width || 0) *
+                              (updated.height || 0) *
+                              nos || 0;
                         const amount = qty * updated.rate;
                         return { ...updated, qty, amount };
                       }),
@@ -282,6 +305,38 @@ export default function PayGoBOQPage() {
     }));
   };
 
+  const toggleItemSort = (subId: string, key: ItemSortKey) => {
+    setItemSort((prev) => {
+      const cur = prev[subId];
+      if (cur?.key === key) {
+        return {
+          ...prev,
+          [subId]: { key, dir: cur.dir === "asc" ? "desc" : "asc" },
+        };
+      }
+      return { ...prev, [subId]: { key, dir: "asc" } };
+    });
+  };
+
+  const getSortedItems = (subId: string, items: BOQItem[]): BOQItem[] => {
+    const s = itemSort[subId];
+    if (!s) return items;
+    return [...items].sort((a, b) => {
+      let av: string | number = a[s.key] ?? "";
+      let bv: string | number = b[s.key] ?? "";
+      if (s.key === "amount") {
+        av = calcItemAmount(a);
+        bv = calcItemAmount(b);
+      }
+      if (typeof av === "number" && typeof bv === "number") {
+        return s.dir === "asc" ? av - bv : bv - av;
+      }
+      return s.dir === "asc"
+        ? String(av).localeCompare(String(bv))
+        : String(bv).localeCompare(String(av));
+    });
+  };
+
   const exportCSV = () => {
     if (!activeBOQ) return;
     const rows: string[][] = [
@@ -290,6 +345,7 @@ export default function PayGoBOQPage() {
         "Sub-Category",
         "Description",
         "Unit",
+        "No's",
         "Length",
         "Width",
         "Height",
@@ -301,14 +357,16 @@ export default function PayGoBOQPage() {
     for (const cat of activeBOQ.categories) {
       for (const sub of cat.subCategories) {
         for (const item of sub.items) {
+          const nos = item.nos ?? 1;
           const qty = item.isManualQty
             ? item.qty
-            : item.length * item.width * item.height;
+            : (item.length || 0) * (item.width || 0) * (item.height || 0) * nos;
           rows.push([
             cat.name,
             sub.name,
             item.description,
             item.unit,
+            String(nos),
             String(item.length),
             String(item.width),
             String(item.height),
@@ -329,6 +387,20 @@ export default function PayGoBOQPage() {
 
   const toolbarBtnClass =
     "flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors cursor-pointer";
+
+  const SortIndicator = ({
+    subId,
+    col,
+  }: { subId: string; col: ItemSortKey }) => {
+    const s = itemSort[subId];
+    if (!s || s.key !== col)
+      return <ArrowUpDown size={9} className="inline ml-0.5 opacity-30" />;
+    return s.dir === "asc" ? (
+      <ChevronDown size={9} className="inline ml-0.5" />
+    ) : (
+      <ChevronRight size={9} className="inline ml-0.5 rotate-[-90deg]" />
+    );
+  };
 
   return (
     <div
@@ -375,7 +447,6 @@ export default function PayGoBOQPage() {
             </button>
           )}
         </div>
-        {/* Project selector */}
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-gray-600">Project:</span>
           <select
@@ -461,296 +532,374 @@ export default function PayGoBOQPage() {
 
                     {/* Sub-categories */}
                     {cat.isExpanded &&
-                      cat.subCategories.map((sub) => (
-                        <div key={sub.id}>
-                          {/* Sub-category header */}
-                          <div
-                            className="flex items-center justify-between px-6 py-1.5"
-                            style={{ background: "#EDF7FF" }}
-                          >
-                            <span className="text-xs font-semibold text-blue-700">
-                              {sub.name}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-blue-800">
-                                {formatINR(calcSubTotal(sub))}
+                      cat.subCategories.map((sub) => {
+                        const sortedItems = getSortedItems(sub.id, sub.items);
+                        const srt = itemSort[sub.id];
+                        return (
+                          <div key={sub.id}>
+                            {/* Sub-category header */}
+                            <div
+                              className="flex items-center justify-between px-6 py-1.5"
+                              style={{ background: "#EDF7FF" }}
+                            >
+                              <span className="text-xs font-semibold text-blue-700">
+                                {sub.name}
                               </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  renameSubCategory(cat.id, sub.id)
-                                }
-                                className="text-blue-400 hover:text-blue-600"
-                              >
-                                <Pencil size={11} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => addItem(cat.id, sub.id)}
-                                className="text-xs px-2 py-0.5 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
-                              >
-                                + Item
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  deleteSubCategory(cat.id, sub.id)
-                                }
-                                className="text-red-400 hover:text-red-600"
-                              >
-                                <Trash2 size={11} />
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-blue-800">
+                                  {formatINR(calcSubTotal(sub))}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    renameSubCategory(cat.id, sub.id)
+                                  }
+                                  className="text-blue-400 hover:text-blue-600"
+                                >
+                                  <Pencil size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => addItem(cat.id, sub.id)}
+                                  className="text-xs px-2 py-0.5 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                                >
+                                  + Item
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    deleteSubCategory(cat.id, sub.id)
+                                  }
+                                  className="text-red-400 hover:text-red-600"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Items table */}
-                          {sub.items.length > 0 && (
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-xs">
-                                <thead>
-                                  <tr className="bg-gray-50 border-b border-t">
-                                    {[
-                                      "#",
-                                      "Description",
-                                      "Unit",
-                                      "Length",
-                                      "Width",
-                                      "Height",
-                                      "Qty",
-                                      "Mode",
-                                      "Rate",
-                                      "Amount",
-                                      "",
-                                    ].map((h) => (
-                                      <th
-                                        key={h}
-                                        className="px-2 py-1.5 text-left text-gray-600 font-semibold whitespace-nowrap"
-                                      >
-                                        {h}
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {sub.items.map((item, idx) => {
-                                    const qty = item.isManualQty
-                                      ? item.qty
-                                      : item.length *
-                                          item.width *
-                                          item.height || 0;
-                                    const amount = qty * item.rate;
-                                    return (
-                                      <tr
-                                        key={item.id}
-                                        className="border-b hover:bg-yellow-50"
-                                        data-ocid={`paygo.boq.item.${idx + 1}`}
-                                      >
-                                        <td className="px-2 py-1.5 text-gray-400">
-                                          {idx + 1}
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          <input
-                                            value={item.description}
-                                            onChange={(e) =>
-                                              updateItemField(
-                                                cat.id,
-                                                sub.id,
-                                                item.id,
-                                                "description",
-                                                e.target.value,
-                                              )
-                                            }
-                                            className="w-full border-0 bg-transparent text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 min-w-[120px]"
-                                          />
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          <input
-                                            value={item.unit}
-                                            onChange={(e) =>
-                                              updateItemField(
-                                                cat.id,
-                                                sub.id,
-                                                item.id,
-                                                "unit",
-                                                e.target.value,
-                                              )
-                                            }
-                                            className="w-14 border-0 bg-transparent text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 text-center"
-                                          />
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          <input
-                                            type="number"
-                                            value={item.length || ""}
-                                            onChange={(e) =>
-                                              updateItemField(
-                                                cat.id,
-                                                sub.id,
-                                                item.id,
-                                                "length",
-                                                Number(e.target.value),
-                                              )
-                                            }
-                                            disabled={item.isManualQty}
-                                            className="w-14 border-0 bg-transparent text-center text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 disabled:text-gray-300"
-                                          />
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          <input
-                                            type="number"
-                                            value={item.width || ""}
-                                            onChange={(e) =>
-                                              updateItemField(
-                                                cat.id,
-                                                sub.id,
-                                                item.id,
-                                                "width",
-                                                Number(e.target.value),
-                                              )
-                                            }
-                                            disabled={item.isManualQty}
-                                            className="w-14 border-0 bg-transparent text-center text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 disabled:text-gray-300"
-                                          />
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          <input
-                                            type="number"
-                                            value={item.height || ""}
-                                            onChange={(e) =>
-                                              updateItemField(
-                                                cat.id,
-                                                sub.id,
-                                                item.id,
-                                                "height",
-                                                Number(e.target.value),
-                                              )
-                                            }
-                                            disabled={item.isManualQty}
-                                            className="w-14 border-0 bg-transparent text-center text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 disabled:text-gray-300"
-                                          />
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          {item.isManualQty ? (
+                            {/* Items table */}
+                            {sub.items.length > 0 && (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-gray-50 border-b border-t">
+                                      {(
+                                        [
+                                          ["#", null],
+                                          ["Description", "description"],
+                                          ["Unit", "unit"],
+                                          ["No's", null],
+                                          ["Length", null],
+                                          ["Width", null],
+                                          ["Height", null],
+                                          ["Qty", null],
+                                          ["Mode", null],
+                                          ["Rate", "rate"],
+                                          ["Amount", "amount"],
+                                          ["", null],
+                                        ] as [string, ItemSortKey | null][]
+                                      ).map(([h, k]) => (
+                                        <th
+                                          key={`${sub.id}-${h}`}
+                                          className="px-2 py-1.5 text-left text-gray-600 font-semibold whitespace-nowrap"
+                                          style={{
+                                            cursor: k ? "pointer" : "default",
+                                          }}
+                                          onClick={() =>
+                                            k && toggleItemSort(sub.id, k)
+                                          }
+                                          onKeyDown={(e) =>
+                                            e.key === "Enter" &&
+                                            k &&
+                                            toggleItemSort(sub.id, k)
+                                          }
+                                        >
+                                          {h}
+                                          {k && (
+                                            <SortIndicator
+                                              subId={sub.id}
+                                              col={k}
+                                            />
+                                          )}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {sortedItems.map((item, idx) => {
+                                      const nos = item.nos ?? 1;
+                                      const qty = item.isManualQty
+                                        ? item.qty
+                                        : (item.length || 0) *
+                                            (item.width || 0) *
+                                            (item.height || 0) *
+                                            nos || 0;
+                                      const amount = qty * item.rate;
+                                      return (
+                                        <tr
+                                          key={item.id}
+                                          className="border-b hover:bg-yellow-50"
+                                          data-ocid={`paygo.boq.item.${idx + 1}`}
+                                        >
+                                          <td className="px-2 py-1.5 text-gray-400">
+                                            {idx + 1}
+                                          </td>
+
+                                          {/* Description */}
+                                          <td className="px-2 py-1.5">
                                             <input
-                                              type="number"
-                                              value={item.qty || ""}
+                                              value={item.description}
                                               onChange={(e) =>
                                                 updateItemField(
                                                   cat.id,
                                                   sub.id,
                                                   item.id,
-                                                  "qty",
+                                                  "description",
+                                                  e.target.value,
+                                                )
+                                              }
+                                              className="w-full border-0 bg-transparent text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 min-w-[120px]"
+                                            />
+                                          </td>
+
+                                          {/* Unit dropdown */}
+                                          <td className="px-2 py-1.5">
+                                            <select
+                                              value={item.unit}
+                                              onChange={(e) =>
+                                                updateItemField(
+                                                  cat.id,
+                                                  sub.id,
+                                                  item.id,
+                                                  "unit",
+                                                  e.target.value,
+                                                )
+                                              }
+                                              className="w-20 border border-gray-200 bg-white text-gray-700 text-xs rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-300"
+                                            >
+                                              {BOQ_UNITS.map((u) => (
+                                                <option key={u} value={u}>
+                                                  {u}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </td>
+
+                                          {/* No's */}
+                                          <td className="px-2 py-1.5">
+                                            <input
+                                              type="number"
+                                              value={nos || ""}
+                                              onChange={(e) =>
+                                                updateItemField(
+                                                  cat.id,
+                                                  sub.id,
+                                                  item.id,
+                                                  "nos",
                                                   Number(e.target.value),
                                                 )
                                               }
-                                              className="w-16 border-0 bg-transparent text-center font-semibold text-blue-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5"
+                                              disabled={item.isManualQty}
+                                              className="w-14 border-0 bg-transparent text-center text-orange-700 font-semibold focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 disabled:text-gray-300"
+                                              min={1}
                                             />
-                                          ) : (
-                                            <span className="text-blue-700 font-semibold">
-                                              {qty.toFixed(2)}
-                                            </span>
-                                          )}
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              updateItemField(
-                                                cat.id,
-                                                sub.id,
-                                                item.id,
-                                                "isManualQty",
-                                                !item.isManualQty,
-                                              )
-                                            }
-                                            className="text-xs px-1.5 py-0.5 rounded border transition-colors"
-                                            style={{
-                                              background: item.isManualQty
-                                                ? "#FFF3E0"
-                                                : "#E8F5E9",
-                                              borderColor: item.isManualQty
-                                                ? "#FF8A65"
-                                                : GREEN,
-                                              color: item.isManualQty
-                                                ? "#E64A19"
-                                                : GREEN,
-                                            }}
-                                            title={
-                                              item.isManualQty
-                                                ? "Switch to auto (L×W×H)"
-                                                : "Switch to manual qty"
-                                            }
+                                          </td>
+
+                                          {/* Length */}
+                                          <td className="px-2 py-1.5">
+                                            <input
+                                              type="number"
+                                              value={item.length || ""}
+                                              onChange={(e) =>
+                                                updateItemField(
+                                                  cat.id,
+                                                  sub.id,
+                                                  item.id,
+                                                  "length",
+                                                  Number(e.target.value),
+                                                )
+                                              }
+                                              disabled={item.isManualQty}
+                                              className="w-14 border-0 bg-transparent text-center text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 disabled:text-gray-300"
+                                            />
+                                          </td>
+
+                                          {/* Width */}
+                                          <td className="px-2 py-1.5">
+                                            <input
+                                              type="number"
+                                              value={item.width || ""}
+                                              onChange={(e) =>
+                                                updateItemField(
+                                                  cat.id,
+                                                  sub.id,
+                                                  item.id,
+                                                  "width",
+                                                  Number(e.target.value),
+                                                )
+                                              }
+                                              disabled={item.isManualQty}
+                                              className="w-14 border-0 bg-transparent text-center text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 disabled:text-gray-300"
+                                            />
+                                          </td>
+
+                                          {/* Height */}
+                                          <td className="px-2 py-1.5">
+                                            <input
+                                              type="number"
+                                              value={item.height || ""}
+                                              onChange={(e) =>
+                                                updateItemField(
+                                                  cat.id,
+                                                  sub.id,
+                                                  item.id,
+                                                  "height",
+                                                  Number(e.target.value),
+                                                )
+                                              }
+                                              disabled={item.isManualQty}
+                                              className="w-14 border-0 bg-transparent text-center text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5 disabled:text-gray-300"
+                                            />
+                                          </td>
+
+                                          {/* Qty */}
+                                          <td className="px-2 py-1.5">
+                                            {item.isManualQty ? (
+                                              <input
+                                                type="number"
+                                                value={item.qty || ""}
+                                                onChange={(e) =>
+                                                  updateItemField(
+                                                    cat.id,
+                                                    sub.id,
+                                                    item.id,
+                                                    "qty",
+                                                    Number(e.target.value),
+                                                  )
+                                                }
+                                                className="w-16 border-0 bg-transparent text-center font-semibold text-blue-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5"
+                                              />
+                                            ) : (
+                                              <span className="text-blue-700 font-semibold">
+                                                {qty.toFixed(2)}
+                                              </span>
+                                            )}
+                                          </td>
+
+                                          {/* Mode (Auto/Manual toggle) */}
+                                          <td className="px-2 py-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                updateItemField(
+                                                  cat.id,
+                                                  sub.id,
+                                                  item.id,
+                                                  "isManualQty",
+                                                  !item.isManualQty,
+                                                )
+                                              }
+                                              className="text-xs px-1.5 py-0.5 rounded border transition-colors"
+                                              style={{
+                                                background: item.isManualQty
+                                                  ? "#FFF3E0"
+                                                  : "#E8F5E9",
+                                                borderColor: item.isManualQty
+                                                  ? "#FF8A65"
+                                                  : GREEN,
+                                                color: item.isManualQty
+                                                  ? "#E64A19"
+                                                  : GREEN,
+                                              }}
+                                              title={
+                                                item.isManualQty
+                                                  ? "Switch to auto (L×W×H×No's)"
+                                                  : "Switch to manual qty"
+                                              }
+                                            >
+                                              {item.isManualQty
+                                                ? "Manual"
+                                                : "Auto"}
+                                            </button>
+                                          </td>
+
+                                          {/* Rate */}
+                                          <td className="px-2 py-1.5">
+                                            <input
+                                              type="number"
+                                              value={item.rate || ""}
+                                              onChange={(e) =>
+                                                updateItemField(
+                                                  cat.id,
+                                                  sub.id,
+                                                  item.id,
+                                                  "rate",
+                                                  Number(e.target.value),
+                                                )
+                                              }
+                                              className="w-20 border-0 bg-transparent text-center text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5"
+                                            />
+                                          </td>
+
+                                          {/* Amount */}
+                                          <td
+                                            className="px-2 py-1.5 font-semibold whitespace-nowrap"
+                                            style={{ color: GREEN }}
                                           >
-                                            {item.isManualQty
-                                              ? "Manual"
-                                              : "Auto"}
-                                          </button>
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          <input
-                                            type="number"
-                                            value={item.rate || ""}
-                                            onChange={(e) =>
-                                              updateItemField(
-                                                cat.id,
-                                                sub.id,
-                                                item.id,
-                                                "rate",
-                                                Number(e.target.value),
-                                              )
-                                            }
-                                            className="w-20 border-0 bg-transparent text-center text-gray-700 focus:outline-none focus:bg-white focus:border focus:border-blue-300 focus:rounded px-1 py-0.5"
-                                          />
-                                        </td>
-                                        <td
-                                          className="px-2 py-1.5 font-semibold whitespace-nowrap"
-                                          style={{ color: GREEN }}
-                                        >
-                                          {formatINR(amount)}
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              deleteItem(
-                                                cat.id,
-                                                sub.id,
-                                                item.id,
-                                              )
-                                            }
-                                            className="text-red-400 hover:text-red-600"
-                                          >
-                                            <X size={12} />
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                                <tfoot>
-                                  <tr className="bg-blue-50">
-                                    <td
-                                      colSpan={9}
-                                      className="px-2 py-1.5 text-xs font-semibold text-blue-700 text-right"
-                                    >
-                                      Sub-Total:
-                                    </td>
-                                    <td className="px-2 py-1.5 font-bold text-blue-800 whitespace-nowrap">
-                                      {formatINR(calcSubTotal(sub))}
-                                    </td>
-                                    <td />
-                                  </tr>
-                                </tfoot>
-                              </table>
-                            </div>
-                          )}
-                          {sub.items.length === 0 && (
-                            <div className="pl-12 py-2 text-xs text-gray-400 italic">
-                              No items yet — click &quot;+ Item&quot; to add
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                                            {formatINR(amount)}
+                                          </td>
+
+                                          {/* Delete */}
+                                          <td className="px-2 py-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                deleteItem(
+                                                  cat.id,
+                                                  sub.id,
+                                                  item.id,
+                                                )
+                                              }
+                                              className="text-red-400 hover:text-red-600"
+                                            >
+                                              <X size={12} />
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr className="bg-blue-50">
+                                      <td
+                                        colSpan={10}
+                                        className="px-2 py-1.5 text-xs font-semibold text-blue-700 text-right"
+                                      >
+                                        Sub-Total:
+                                      </td>
+                                      <td className="px-2 py-1.5 font-bold text-blue-800 whitespace-nowrap">
+                                        {formatINR(calcSubTotal(sub))}
+                                      </td>
+                                      <td />
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            )}
+                            {sub.items.length === 0 && (
+                              <div className="pl-12 py-2 text-xs text-gray-400 italic">
+                                No items yet — click &quot;+ Item&quot; to add
+                              </div>
+                            )}
+                            {/* Sort hint when items exist */}
+                            {sub.items.length > 1 && srt && (
+                              <div className="pl-6 pb-1 text-xs text-gray-400 italic">
+                                Sorted by {srt.key} ({srt.dir})
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     {cat.isExpanded && cat.subCategories.length === 0 && (
                       <div className="pl-6 py-2 text-xs text-gray-400 italic">
                         No sub-categories yet — click &quot;+ Sub-Category&quot;
@@ -904,7 +1053,7 @@ export default function PayGoBOQPage() {
             {/* BOQ Header */}
             <div className="text-center py-3 border-b">
               <div className="text-lg font-bold text-gray-800">
-                MPH Construction
+                MPH Developers
               </div>
               <div className="text-sm font-semibold text-gray-600">
                 Bill of Quantities
@@ -942,6 +1091,9 @@ export default function PayGoBOQPage() {
                               <th className="border border-gray-200 px-2 py-1 text-center">
                                 Unit
                               </th>
+                              <th className="border border-gray-200 px-2 py-1 text-center">
+                                No's
+                              </th>
                               <th className="border border-gray-200 px-2 py-1 text-right">
                                 Qty
                               </th>
@@ -955,9 +1107,13 @@ export default function PayGoBOQPage() {
                           </thead>
                           <tbody>
                             {sub.items.map((item) => {
+                              const nos = item.nos ?? 1;
                               const qty = item.isManualQty
                                 ? item.qty
-                                : item.length * item.width * item.height || 0;
+                                : (item.length || 0) *
+                                    (item.width || 0) *
+                                    (item.height || 0) *
+                                    nos || 0;
                               return (
                                 <tr key={item.id}>
                                   <td className="border border-gray-200 px-2 py-1">
@@ -965,6 +1121,9 @@ export default function PayGoBOQPage() {
                                   </td>
                                   <td className="border border-gray-200 px-2 py-1 text-center">
                                     {item.unit}
+                                  </td>
+                                  <td className="border border-gray-200 px-2 py-1 text-center">
+                                    {nos}
                                   </td>
                                   <td className="border border-gray-200 px-2 py-1 text-right">
                                     {qty.toFixed(2)}
@@ -982,7 +1141,7 @@ export default function PayGoBOQPage() {
                           <tfoot>
                             <tr className="bg-blue-50">
                               <td
-                                colSpan={4}
+                                colSpan={5}
                                 className="border border-gray-200 px-2 py-1 text-right font-bold text-blue-700"
                               >
                                 Sub-Total:

@@ -11,10 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import type { UserProfile } from "../backend";
-import { UserRole } from "../backend";
 import { useActor } from "../hooks/useActor";
 import { useSaveCallerUserProfile } from "../hooks/useQueries";
+import type { UserProfile } from "../types";
+import { UserRole } from "../types";
 
 interface ProfileSetupPageProps {
   onBypass?: () => void;

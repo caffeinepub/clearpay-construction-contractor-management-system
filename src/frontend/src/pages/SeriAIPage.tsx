@@ -5,7 +5,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Info, Send, Share2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { PaymentMode } from "../backend";
 import { useActor } from "../hooks/useActor";
 import {
   useGetAllBills,
@@ -14,6 +13,7 @@ import {
   useGetAllProjects,
   useGetCallerUserProfile,
 } from "../hooks/useQueries";
+import { PaymentMode } from "../types";
 import { shareReceiptAsImage } from "../utils/receiptShare";
 
 type Message = {

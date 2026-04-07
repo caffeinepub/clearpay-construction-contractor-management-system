@@ -32,7 +32,6 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { type UserProfile, UserRole } from "../backend";
 import { ActionButton } from "../components/ActionButton";
 import { AppHeader } from "../components/AppHeader";
 import { MultiSelectFilter } from "../components/MultiSelectFilter";
@@ -46,6 +45,7 @@ import {
   useListUsers,
   useUpdateUser,
 } from "../hooks/useQueries";
+import { type UserProfile, UserRole } from "../types";
 import { generatePrincipalId } from "../utils/principalId";
 
 const DEFAULT_ADMIN_EMAIL = "jogaraoseri.er@mktconstructions.com";

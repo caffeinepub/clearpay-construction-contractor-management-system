@@ -106,15 +106,6 @@ export interface ProjectFilters {
   'fromDate' : [] | [string],
   'minUnitPrice' : [] | [number],
 }
-export interface TransformationInput {
-  'context' : Uint8Array,
-  'response' : http_request_result,
-}
-export interface TransformationOutput {
-  'status' : bigint,
-  'body' : Uint8Array,
-  'headers' : Array<http_header>,
-}
 export interface UserProfile {
   'active' : boolean,
   'contact' : string,
@@ -126,17 +117,6 @@ export interface UserProfile {
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
-export interface _CaffeineStorageCreateCertificateResult {
-  'method' : string,
-  'blob_hash' : string,
-}
-export interface _CaffeineStorageRefillInformation {
-  'proposed_top_up_amount' : [] | [bigint],
-}
-export interface _CaffeineStorageRefillResult {
-  'success' : [] | [boolean],
-  'topped_up_amount' : [] | [bigint],
-}
 export interface http_header { 'value' : string, 'name' : string }
 export interface http_request_result {
   'status' : bigint,
@@ -144,25 +124,66 @@ export interface http_request_result {
   'headers' : Array<http_header>,
 }
 export interface _SERVICE {
-  '_caffeineStorageBlobIsLive' : ActorMethod<[Uint8Array], boolean>,
-  '_caffeineStorageBlobsToDelete' : ActorMethod<[], Array<Uint8Array>>,
-  '_caffeineStorageConfirmBlobDeletion' : ActorMethod<
-    [Array<Uint8Array>],
-    undefined
-  >,
-  '_caffeineStorageCreateCertificate' : ActorMethod<
-    [string],
-    _CaffeineStorageCreateCertificateResult
-  >,
-  '_caffeineStorageRefillCashier' : ActorMethod<
-    [[] | [_CaffeineStorageRefillInformation]],
-    _CaffeineStorageRefillResult
-  >,
-  '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   'addBill' : ActorMethod<[Bill], undefined>,
   'addClient' : ActorMethod<[Client], undefined>,
+  'addContractor' : ActorMethod<
+    [
+      string,
+      Array<string>,
+      string,
+      string,
+      number,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ],
+    string
+  >,
+  'addContractorBill' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      number,
+      string,
+      number,
+      string,
+      string,
+      number,
+      number,
+    ],
+    string
+  >,
+  'addContractorPayment' : ActorMethod<
+    [string, string, string, string, number, string, string],
+    string
+  >,
   'addPayment' : ActorMethod<[Payment], undefined>,
   'addProject' : ActorMethod<[Project], undefined>,
+  'addSftEntry' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      string,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      string,
+    ],
+    string
+  >,
   'addUser' : ActorMethod<[UserProfile], Principal>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'bulkDeleteBillsWithPassword' : ActorMethod<
@@ -176,8 +197,12 @@ export interface _SERVICE {
   >,
   'deleteBill' : ActorMethod<[string, string, string], undefined>,
   'deleteClient' : ActorMethod<[string, string], undefined>,
+  'deleteContractorBills' : ActorMethod<[Array<string>, string], undefined>,
+  'deleteContractorPayments' : ActorMethod<[Array<string>, string], undefined>,
+  'deleteContractors' : ActorMethod<[Array<string>, string], undefined>,
   'deletePayment' : ActorMethod<[string, string], undefined>,
   'deleteProject' : ActorMethod<[string, string], undefined>,
+  'deleteSftEntries' : ActorMethod<[Array<string>, string], undefined>,
   'deleteUsers' : ActorMethod<[string, Array<string>], undefined>,
   'filterBills' : ActorMethod<[BillFilters], Array<Bill>>,
   'filterBillsByProject' : ActorMethod<[string], Array<Bill>>,
@@ -189,21 +214,17 @@ export interface _SERVICE {
   'getAllPayments' : ActorMethod<[], Array<Payment>>,
   'getAllProjectNames' : ActorMethod<[], Array<string>>,
   'getAllProjects' : ActorMethod<[], Array<Project>>,
-  'getCompletedProjectIds' : ActorMethod<[], Array<string>>,
-  'toggleProjectCompleted' : ActorMethod<[string], undefined>,
-  'setProjectMapLocation' : ActorMethod<[string, string], undefined>,
-  'getProjectMapLocations' : ActorMethod<[], Array<[string, string]>>,
-  'saveTickerMessages' : ActorMethod<[Array<[string, string]>], undefined>,
-  'getTickerMessages' : ActorMethod<[], Array<[string, string]>>,
   'getBillDetails' : ActorMethod<[string, string], [] | [Bill]>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getCompletedProjectIds' : ActorMethod<[], Array<string>>,
   'getDashboardMetrics' : ActorMethod<[], DashboardMetrics>,
   'getDefaultAdminProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getGreetingMessage' : ActorMethod<[null], string>,
   'getHintQuestion' : ActorMethod<[], [] | [string]>,
   'getOutstandingAmount' : ActorMethod<[], number>,
   'getPaymentDetails' : ActorMethod<[string], [] | [Payment]>,
+  'getProjectMapLocations' : ActorMethod<[], Array<[string, string]>>,
   'getProjectSummary' : ActorMethod<
     [string],
     [] | [
@@ -223,6 +244,7 @@ export interface _SERVICE {
     Array<ProjectAnalyticsData>
   >,
   'getSortedBills' : ActorMethod<[[] | [string], boolean], Array<Bill>>,
+  'getTickerMessages' : ActorMethod<[], Array<[string, string]>>,
   'getTotalGst' : ActorMethod<[], number>,
   'getUserAccess' : ActorMethod<[string], Array<string>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
@@ -233,35 +255,164 @@ export interface _SERVICE {
   'isAdminPasswordSet' : ActorMethod<[], boolean>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'linkMasterAdminPrincipal' : ActorMethod<[], boolean>,
+  'linkUserByEmail' : ActorMethod<[string], boolean>,
+  'listContractorBills' : ActorMethod<
+    [],
+    Array<
+      {
+        'id' : string,
+        'area' : number,
+        'date' : string,
+        'blockId' : string,
+        'item' : string,
+        'unit' : string,
+        'contractorId' : string,
+        'projectId' : string,
+        'workRetention' : number,
+        'workRetentionAmount' : number,
+        'unitPrice' : number,
+        'amount' : number,
+        'remarks' : string,
+        'billNo' : string,
+      }
+    >
+  >,
+  'listContractorPayments' : ActorMethod<
+    [],
+    Array<
+      {
+        'id' : string,
+        'date' : string,
+        'contractorId' : string,
+        'projectId' : string,
+        'paymentNo' : string,
+        'paymentMode' : string,
+        'amount' : number,
+        'remarks' : string,
+      }
+    >
+  >,
+  'listContractors' : ActorMethod<
+    [],
+    Array<
+      {
+        'id' : string,
+        'contact1' : string,
+        'contact2' : string,
+        'date' : string,
+        'trades' : Array<string>,
+        'name' : string,
+        'note' : string,
+        'unit' : string,
+        'woNo' : string,
+        'completed' : boolean,
+        'email' : string,
+        'link1' : string,
+        'link2' : string,
+        'projectId' : string,
+        'address' : string,
+        'contractingPrice' : number,
+      }
+    >
+  >,
+  'listSftEntries' : ActorMethod<
+    [],
+    Array<
+      {
+        'id' : string,
+        'rw' : number,
+        'oht' : number,
+        'footings' : number,
+        'slab' : number,
+        'contractorId' : string,
+        'slabNo' : string,
+        'totalSft' : number,
+        'projectId' : string,
+        'beams' : number,
+        'remarks' : string,
+        'billNo' : string,
+        'columns' : number,
+      }
+    >
+  >,
   'listUsers' : ActorMethod<[], Array<[Principal, UserProfile]>>,
   'revealAdminPassword' : ActorMethod<[string], [] | [string]>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'saveTickerMessages' : ActorMethod<[Array<[string, string]>], undefined>,
   'setHintQuestionAndAnswer' : ActorMethod<[string, string], undefined>,
-  'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
+  'setProjectMapLocation' : ActorMethod<[string, string], undefined>,
+  'toggleContractorCompleted' : ActorMethod<[string], undefined>,
+  'toggleProjectCompleted' : ActorMethod<[string], undefined>,
+  'transform' : ActorMethod<[http_request_result], http_request_result>,
   'updateBill' : ActorMethod<[Bill, string], undefined>,
   'updateClient' : ActorMethod<[Client, string], undefined>,
+  'updateContractor' : ActorMethod<
+    [
+      string,
+      string,
+      Array<string>,
+      string,
+      string,
+      number,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+    ],
+    undefined
+  >,
+  'updateContractorBill' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      number,
+      string,
+      number,
+      string,
+      string,
+      string,
+      number,
+      number,
+    ],
+    undefined
+  >,
+  'updateContractorPayment' : ActorMethod<
+    [string, string, string, string, string, number, string, string, string],
+    undefined
+  >,
   'updatePayment' : ActorMethod<[Payment, string], undefined>,
   'updateProject' : ActorMethod<[Project, string], undefined>,
+  'updateSftEntry' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      string,
+      string,
+    ],
+    undefined
+  >,
   'updateUser' : ActorMethod<[Principal, UserProfile], undefined>,
   'validateActiveUser' : ActorMethod<[string], undefined>,
   'verifyHintAnswer' : ActorMethod<[string], string>,
-  'addSftEntry' : ActorMethod<[string, string, string, string, number, number, number, number, number, number, string], string>,
-  'updateSftEntry' : ActorMethod<[string, string, string, string, string, number, number, number, number, number, number, string, string], undefined>,
-  'deleteSftEntries' : ActorMethod<[string[], string], undefined>,
-  'listSftEntries' : ActorMethod<[], Array<{ id: string, contractorId: string, projectId: string, billNo: string, slabNo: string, footings: number, rw: number, columns: number, beams: number, slab: number, oht: number, totalSft: number, remarks: string }>>,
-  'addContractor' : ActorMethod<[string, string[], string, string, number, string, string, string, string, string, string, string, string, string], string>,
-  'updateContractor' : ActorMethod<[string, string, string[], string, string, number, string, string, string, string, string, string, string, string, string, string], undefined>,
-  'toggleContractorCompleted' : ActorMethod<[string], undefined>,
-  'deleteContractors' : ActorMethod<[string[], string], undefined>,
-  'listContractors' : ActorMethod<[], Array<{ id: string; name: string; trades: string[]; projectId: string; date: string; contractingPrice: number; unit: string; contact1: string; contact2: string; email: string; address: string; link1: string; link2: string; note: string; woNo: string; completed: boolean; }>>,
-  'addContractorBill' : ActorMethod<[string, string, string, string, string, number, string, number, string, string, number, number], string>,
-  'updateContractorBill' : ActorMethod<[string, string, string, string, string, string, number, string, number, string, string, string, number, number], undefined>,
-  'deleteContractorBills' : ActorMethod<[string[], string], undefined>,
-  'listContractorBills' : ActorMethod<[], Array<{ id: string; contractorId: string; projectId: string; billNo: string; date: string; item: string; area: number; unit: string; unitPrice: number; amount: number; remarks: string; blockId: string; workRetention: number; workRetentionAmount: number; }>>,
-  'addContractorPayment' : ActorMethod<[string, string, string, string, number, string, string], string>,
-  'updateContractorPayment' : ActorMethod<[string, string, string, string, string, number, string, string, string], undefined>,
-  'deleteContractorPayments' : ActorMethod<[string[], string], undefined>,
-  'listContractorPayments' : ActorMethod<[], Array<{ id: string; contractorId: string; projectId: string; paymentNo: string; date: string; amount: number; paymentMode: string; remarks: string; }>>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

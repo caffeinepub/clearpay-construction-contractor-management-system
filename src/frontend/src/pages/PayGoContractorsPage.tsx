@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  ArrowUpDown,
+  Briefcase,
   ChevronDown,
   ChevronUp,
   Download,
@@ -32,13 +34,15 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type PayGoContractor, usePayGo } from "../context/PayGoContext";
 import { formatINR } from "../utils/money";
 
 const GREEN = "#28A745";
+const TEAL = "#0891b2";
 const DEFAULT_PW = "3554";
+
 const UNITS = [
   "Rft",
   "Sft",
@@ -61,6 +65,8 @@ const ROLES = [
 type Role = (typeof ROLES)[number];
 
 type FormData = Omit<PayGoContractor, "id">;
+type SortDir = "asc" | "desc" | null;
+type SortCol = keyof PayGoContractor | null;
 
 const emptyForm = (): FormData => ({
   name: "",
@@ -82,9 +88,9 @@ type Filters = {
   contractorName: string;
   trade: string;
   project: string;
+  year: string;
   fromDate: string;
   toDate: string;
-  year: string;
   minPrice: string;
   maxPrice: string;
 };
@@ -93,14 +99,18 @@ const emptyFilters = (): Filters => ({
   contractorName: "",
   trade: "",
   project: "",
+  year: "",
   fromDate: "",
   toDate: "",
-  year: "",
   minPrice: "",
   maxPrice: "",
 });
 
-export default function PayGoContractorsPage() {
+interface Props {
+  onNavigate?: (module: string) => void;
+}
+
+export default function PayGoContractorsPage({ onNavigate }: Props) {
   const {
     projects,
     contractors,
@@ -121,14 +131,39 @@ export default function PayGoContractorsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(emptyFilters());
   const [viewItem, setViewItem] = useState<PayGoContractor | null>(null);
+  const [sortCol, setSortCol] = useState<SortCol>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [colFilters, setColFilters] = useState<Partial<Record<string, string>>>(
+    {},
+  );
+  const importRef = useRef<HTMLInputElement>(null);
 
   const projectNames = useMemo(
     () => [...new Set(projects.map((p) => p.name))],
     [projects],
   );
+  const tradeNames = useMemo(
+    () => [...new Set(contractors.map((c) => c.trade).filter(Boolean))],
+    [contractors],
+  );
+  const yearOptions = useMemo(() => {
+    const yr = new Date().getFullYear();
+    const years = new Set<string>([String(yr), String(yr - 1), String(yr - 2)]);
+    return [...years].sort((a, b) => Number(b) - Number(a));
+  }, []);
+
+  const applySort = (col: SortCol) => {
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : d === "desc" ? null : "asc"));
+      if (sortDir === "desc") setSortCol(null);
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  };
 
   const filtered = useMemo(() => {
-    return contractors.filter((c) => {
+    let list = contractors.filter((c) => {
       const q = search.toLowerCase();
       const matchSearch =
         !q ||
@@ -138,24 +173,48 @@ export default function PayGoContractorsPage() {
       const matchName =
         !filters.contractorName ||
         c.name.toLowerCase().includes(filters.contractorName.toLowerCase());
-      const matchTrade =
-        !filters.trade ||
-        c.trade.toLowerCase().includes(filters.trade.toLowerCase());
+      const matchTrade = !filters.trade || c.trade === filters.trade;
       const matchProject = !filters.project || c.project === filters.project;
       const matchMinPrice =
         !filters.minPrice || c.contractingPrice >= Number(filters.minPrice);
       const matchMaxPrice =
         !filters.maxPrice || c.contractingPrice <= Number(filters.maxPrice);
+      // column filters
+      const matchColName =
+        !colFilters.name ||
+        c.name.toLowerCase().includes((colFilters.name ?? "").toLowerCase());
+      const matchColTrade =
+        !colFilters.trade ||
+        c.trade.toLowerCase().includes((colFilters.trade ?? "").toLowerCase());
+      const matchColStatus =
+        !colFilters.status ||
+        c.status
+          .toLowerCase()
+          .includes((colFilters.status ?? "").toLowerCase());
       return (
         matchSearch &&
         matchName &&
         matchTrade &&
         matchProject &&
         matchMinPrice &&
-        matchMaxPrice
+        matchMaxPrice &&
+        matchColName &&
+        matchColTrade &&
+        matchColStatus
       );
     });
-  }, [contractors, search, filters]);
+    if (sortCol && sortDir) {
+      list = [...list].sort((a, b) => {
+        const av = a[sortCol] ?? "";
+        const bv = b[sortCol] ?? "";
+        const cmp = String(av).localeCompare(String(bv), undefined, {
+          numeric: true,
+        });
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+    return list;
+  }, [contractors, search, filters, sortCol, sortDir, colFilters]);
 
   const openAdd = () => {
     setEditItem(null);
@@ -215,10 +274,15 @@ export default function PayGoContractorsPage() {
       "Trade",
       "Sub-Trade",
       "Project",
-      "Contracting Price",
+      "Unit Price",
       "Unit",
-      "Contact",
+      "Contact No 1",
+      "Contact No 2",
       "Email",
+      "Link 1",
+      "Link 2",
+      "Address",
+      "Notes",
       "Status",
     ];
     const rows = contractors.map((c) => [
@@ -229,10 +293,17 @@ export default function PayGoContractorsPage() {
       c.contractingPrice,
       c.unit,
       c.contact,
+      "",
       c.email,
+      c.attachmentLink1 ?? "",
+      c.attachmentLink2 ?? "",
+      c.address,
+      c.notes,
       c.status,
     ]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+    const csv = [headers, ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = "paygo-contractors.csv";
@@ -240,8 +311,98 @@ export default function PayGoContractorsPage() {
     toast.success("CSV exported.");
   };
 
+  const downloadFormat = () => {
+    const headers = [
+      "Name",
+      "Trade",
+      "Sub-Trade",
+      "Project",
+      "Unit Price",
+      "Unit",
+      "Contact No 1",
+      "Contact No 2",
+      "Email",
+      "Link 1",
+      "Link 2",
+      "Address",
+      "Notes",
+    ];
+    const example = [
+      "Ramesh & Sons",
+      "Mason",
+      "Foundation",
+      "Sunrise Towers",
+      "1000",
+      "Sft",
+      "9876543210",
+      "",
+      "ramesh@example.com",
+      "",
+      "",
+      "Chennai, TN",
+      "Sample note",
+    ];
+    const csv = [headers, example]
+      .map((r) => r.map((v) => `"${v}"`).join(","))
+      .join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "paygo-contractors-format.csv";
+    a.click();
+    toast.success("Format downloaded.");
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.trim().split("\n");
+      if (lines.length < 2) {
+        toast.error("No data rows found.");
+        return;
+      }
+      const parseRow = (line: string) =>
+        line
+          .split(",")
+          .map((c) => c.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
+      const headers = parseRow(lines[0]).map((h) => h.toLowerCase());
+      let count = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseRow(lines[i]);
+        if (cols.length < 1) continue;
+        const get = (name: string) => {
+          const idx = headers.findIndex((h) => h.includes(name));
+          return idx >= 0 ? (cols[idx] ?? "") : "";
+        };
+        const name = get("name");
+        if (!name) continue;
+        addContractor({
+          name,
+          trade: get("trade"),
+          subTrade: get("sub"),
+          project: get("project"),
+          contractingPrice: Number(get("unit price") || get("price")) || 0,
+          unit: (get("unit") as string) || "Sft",
+          contact: get("contact no 1") || get("contact"),
+          email: get("email"),
+          address: get("address"),
+          attachmentLink1: get("link 1") || get("link1"),
+          attachmentLink2: get("link 2") || get("link2"),
+          notes: get("note"),
+          status: "Active",
+        });
+        count++;
+      }
+      toast.success(`${count} contractor(s) imported.`);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   const handleShare = (c: PayGoContractor) => {
-    const text = `Contractor: ${c.name}\nTrade: ${c.trade}\nSub-Trade: ${c.subTrade || "—"}\nProject: ${c.project}\nContracting Price: ${formatINR(c.contractingPrice)}\nUnit: ${c.unit}\nContact: ${c.contact}\nEmail: ${c.email}\nAddress: ${c.address}\nStatus: ${c.status}`;
+    const text = `Contractor: ${c.name}\nTrade: ${c.trade}\nSub-Trade: ${c.subTrade || "—"}\nProject: ${c.project}\nUnit Price: ${formatINR(c.contractingPrice)}\nUnit: ${c.unit}\nContact: ${c.contact}\nEmail: ${c.email}\nAddress: ${c.address}\nStatus: ${c.status}`;
     if (navigator.share) {
       navigator
         .share({ title: "Contractor Receipt", text })
@@ -257,10 +418,11 @@ export default function PayGoContractorsPage() {
   const clearFilters = () => {
     setFilters(emptyFilters());
     setSearch("");
+    setColFilters({});
   };
 
   const toolbarBtnClass =
-    "flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors cursor-pointer";
+    "flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors cursor-pointer whitespace-nowrap";
 
   const hasActiveFilters =
     search ||
@@ -271,7 +433,19 @@ export default function PayGoContractorsPage() {
     filters.toDate ||
     filters.year ||
     filters.minPrice ||
-    filters.maxPrice;
+    filters.maxPrice ||
+    Object.values(colFilters).some(Boolean);
+
+  const SortIcon = ({ col }: { col: keyof PayGoContractor }) => (
+    <ArrowUpDown
+      size={12}
+      className={`inline ml-1 cursor-pointer opacity-60 hover:opacity-100 ${sortCol === col ? "opacity-100 text-yellow-200" : ""}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        applySort(col);
+      }}
+    />
+  );
 
   return (
     <div
@@ -279,66 +453,84 @@ export default function PayGoContractorsPage() {
       style={{ fontFamily: "'Century Gothic', Arial, sans-serif" }}
     >
       {/* Toolbar */}
-      <div className="bg-white border-b shadow-sm px-4 py-3 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Role switcher */}
-          <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-md px-3 py-1.5">
-            <User size={13} className="text-purple-600" />
-            <select
-              value={currentRole}
-              onChange={(e) => setCurrentRole(e.target.value as Role)}
-              className="text-xs font-semibold text-purple-700 bg-transparent border-none outline-none cursor-pointer"
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className={toolbarBtnClass}
+      <div className="bg-white border-b shadow-sm px-4 py-3 flex items-center gap-2 flex-wrap">
+        {/* Role switcher */}
+        <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-md px-3 py-1.5">
+          <User size={13} className="text-purple-600" />
+          <select
+            value={currentRole}
+            onChange={(e) => setCurrentRole(e.target.value as Role)}
+            className="text-xs font-semibold text-purple-700 bg-transparent border-none outline-none cursor-pointer"
           >
-            <Printer size={14} /> Print
-          </button>
-          <button type="button" className={toolbarBtnClass}>
-            <FileText size={14} /> Export PDF
-          </button>
-          {isAdmin && (
-            <button type="button" className={toolbarBtnClass}>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Work Order sub-module button */}
+        <button
+          type="button"
+          onClick={() => onNavigate?.("workorder")}
+          className="flex items-center gap-1.5 border rounded-md px-3 py-1.5 text-xs font-semibold shadow-sm transition-colors cursor-pointer whitespace-nowrap"
+          style={{ background: "#e0f2fe", borderColor: TEAL, color: TEAL }}
+          title="Open Work Order Module"
+        >
+          <Briefcase size={14} /> Work Order
+        </button>
+
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className={toolbarBtnClass}
+        >
+          <Printer size={14} /> Print
+        </button>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className={toolbarBtnClass}
+          title="Export PDF (uses print dialog)"
+        >
+          <FileText size={14} /> Export PDF
+        </button>
+        {isAdmin && (
+          <>
+            <button
+              type="button"
+              onClick={() => importRef.current?.click()}
+              className={toolbarBtnClass}
+            >
               <Upload size={14} /> Import CSV
             </button>
-          )}
-          <button type="button" onClick={exportCSV} className={toolbarBtnClass}>
-            <Download size={14} /> Export CSV
-          </button>
-          {isAdmin && (
-            <button type="button" className={toolbarBtnClass}>
-              <FileDown size={14} /> Download Format
-            </button>
-          )}
-        </div>
+            <input
+              ref={importRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImport}
+            />
+          </>
+        )}
+        <button type="button" onClick={exportCSV} className={toolbarBtnClass}>
+          <Download size={14} /> Export CSV
+        </button>
         {isAdmin && (
           <button
             type="button"
-            onClick={openAdd}
-            className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-sm font-semibold shadow-md hover:opacity-90 transition-opacity"
-            style={{ background: GREEN }}
-            data-ocid="paygo.contractors.primary_button"
+            onClick={downloadFormat}
+            className={toolbarBtnClass}
           >
-            <Plus size={16} /> New Contractor
+            <FileDown size={14} /> Download Format
           </button>
         )}
-      </div>
 
-      {/* Search bar */}
-      <div className="px-4 py-3 bg-white border-b">
-        <div className="relative">
+        {/* Search bar — between Download Format and +New Contractor */}
+        <div className="relative flex-1 min-w-[160px]">
           <Search
-            size={16}
+            size={14}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
           />
           <input
@@ -346,24 +538,36 @@ export default function PayGoContractorsPage() {
             placeholder="Search contractors..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-400 bg-white"
+            className="w-full pl-8 pr-3 py-1.5 rounded-md border border-gray-300 text-xs focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-400 bg-white"
             data-ocid="paygo.contractors.search_input"
           />
         </div>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={openAdd}
+            className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-xs font-semibold shadow-md hover:opacity-90 transition-opacity whitespace-nowrap"
+            style={{ background: GREEN }}
+            data-ocid="paygo.contractors.primary_button"
+          >
+            <Plus size={14} /> New Contractor
+          </button>
+        )}
       </div>
 
-      {/* Filter toggle bar */}
-      <div className="px-4 py-2 bg-white border-b flex items-center justify-start">
+      {/* Filter toggle row */}
+      <div className="px-4 py-1.5 bg-white border-b flex items-center gap-2">
         <button
           type="button"
           onClick={() => setShowFilters((v) => !v)}
-          className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+          className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 transition-colors border border-gray-200 rounded px-2 py-1 bg-gray-50 hover:bg-gray-100"
         >
-          {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {showFilters ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           {showFilters ? "Hide Filters" : "Show Filters"}
-          {hasActiveFilters && !showFilters && (
+          {hasActiveFilters && (
             <span
-              className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full"
+              className="ml-1 text-xs font-medium px-1.5 py-0.5 rounded-full"
               style={{ background: GREEN, color: "#fff" }}
             >
               Active
@@ -374,40 +578,49 @@ export default function PayGoContractorsPage() {
           <button
             type="button"
             onClick={clearFilters}
-            className="ml-4 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+            className="text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
           >
             Clear Filters
           </button>
         )}
+        <span className="ml-auto text-xs text-gray-400">
+          Showing <strong>{filtered.length}</strong> /{" "}
+          <strong>{contractors.length}</strong>
+        </span>
       </div>
 
-      {/* Filters Card */}
+      {/* Filters Card — 2 rows */}
       {showFilters && (
-        <div className="px-4 pt-3 pb-1">
-          <div
-            className="rounded-xl shadow-sm border"
-            style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-yellow-200">
-              <span className="font-semibold text-gray-700 text-sm">
-                Filters
+        <div className="px-4 py-3 bg-amber-50 border-b border-yellow-200">
+          <div className="rounded-xl border border-yellow-200 bg-amber-50 pb-3">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-yellow-200">
+              <span className="text-xs font-semibold text-gray-700">
+                Advanced Filters
               </span>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1 hover:bg-red-50 transition-colors"
-              >
-                Clear Filters
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-xs font-medium text-red-500 border border-red-200 rounded px-2 py-0.5 hover:bg-red-50 transition-colors"
+                >
+                  Clear Filters
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(false)}
+                  className="text-xs font-medium text-gray-500 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-100 transition-colors"
+                >
+                  Hide Filters
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 pb-4 pt-3">
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Contractor Name
+            {/* Row 1 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 pt-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-600">
+                  Contractor
                 </span>
-                <input
-                  type="text"
-                  placeholder="Search name"
+                <select
                   value={filters.contractorName}
                   onChange={(e) =>
                     setFilters((f) => ({
@@ -415,25 +628,37 @@ export default function PayGoContractorsPage() {
                       contractorName: e.target.value,
                     }))
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                />
+                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                >
+                  <option value="">All Contractors</option>
+                  {[...new Set(contractors.map((c) => c.name))].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-600">
                   Trade
                 </span>
-                <input
-                  type="text"
-                  placeholder="Search trade"
+                <select
                   value={filters.trade}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, trade: e.target.value }))
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                />
+                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                >
+                  <option value="">All Trades</option>
+                  {tradeNames.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-600">
                   Project
                 </span>
                 <select
@@ -441,7 +666,7 @@ export default function PayGoContractorsPage() {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, project: e.target.value }))
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 >
                   <option value="">All Projects</option>
                   {projectNames.map((n) => (
@@ -451,8 +676,30 @@ export default function PayGoContractorsPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-600">
+                  Year
+                </span>
+                <select
+                  value={filters.year}
+                  onChange={(e) =>
+                    setFilters((f) => ({ ...f, year: e.target.value }))
+                  }
+                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                >
+                  <option value="">All Years</option>
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {/* Row 2 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 pt-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-600">
                   From Date
                 </span>
                 <input
@@ -461,11 +708,11 @@ export default function PayGoContractorsPage() {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, fromDate: e.target.value }))
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 />
               </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-600">
                   To Date
                 </span>
                 <input
@@ -474,25 +721,11 @@ export default function PayGoContractorsPage() {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, toDate: e.target.value }))
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 />
               </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Year
-                </span>
-                <input
-                  type="text"
-                  placeholder="e.g. 2025"
-                  value={filters.year}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, year: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
-                />
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-600">
                   Min Unit Price (₹)
                 </span>
                 <input
@@ -502,11 +735,11 @@ export default function PayGoContractorsPage() {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, minPrice: e.target.value }))
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 />
               </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-gray-600">
                   Max Unit Price (₹)
                 </span>
                 <input
@@ -516,54 +749,86 @@ export default function PayGoContractorsPage() {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, maxPrice: e.target.value }))
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 />
               </div>
-            </div>
-            <div className="px-4 pb-3 flex items-center justify-between border-t border-yellow-200 pt-2">
-              <span className="text-sm text-gray-500">
-                Showing <strong>{filtered.length}</strong> of{" "}
-                <strong>{contractors.length}</strong> contractors
-              </span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Results count */}
-      <div className="px-4 pt-2 pb-1">
-        <span className="text-xs text-gray-500">
-          Showing <strong>{filtered.length}</strong> of{" "}
-          <strong>{contractors.length}</strong> contractors
-        </span>
-      </div>
-
       {/* Table */}
-      <div className="px-4 pb-4">
+      <div className="px-4 py-3">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: GREEN }}>
-                  {[
-                    "#",
-                    "Name",
-                    "Trade",
-                    "Sub-Trade",
-                    "Project",
-                    "Price (₹)",
-                    "Unit",
-                    "Contact",
-                    "Status",
-                    "Actions",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  <th className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap w-10">
+                    #
+                  </th>
+                  {(
+                    [
+                      "name",
+                      "trade",
+                      "subTrade",
+                      "project",
+                      "contractingPrice",
+                      "unit",
+                      "contact",
+                      "status",
+                    ] as (keyof PayGoContractor)[]
+                  ).map((col) => {
+                    const labels: Record<string, string> = {
+                      name: "Name",
+                      trade: "Trade",
+                      subTrade: "Sub-Trade",
+                      project: "Project",
+                      contractingPrice: "Price (₹)",
+                      unit: "Unit",
+                      contact: "Contact",
+                      status: "Status",
+                    };
+                    return (
+                      <th
+                        key={col}
+                        className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap cursor-pointer select-none"
+                        onClick={() => applySort(col)}
+                        onKeyDown={(e) => e.key === "Enter" && applySort(col)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1">
+                            {labels[col]}
+                            <SortIcon col={col} />
+                            {sortCol === col && (
+                              <span className="text-yellow-200 text-xs">
+                                {sortDir === "asc" ? "↑" : "↓"}
+                              </span>
+                            )}
+                          </div>
+                          {/* Inline column filter for text cols */}
+                          {["name", "trade", "status"].includes(col) && (
+                            <input
+                              type="text"
+                              placeholder="Filter…"
+                              value={colFilters[col] ?? ""}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) =>
+                                setColFilters((f) => ({
+                                  ...f,
+                                  [col]: e.target.value,
+                                }))
+                              }
+                              className="mt-0.5 rounded px-1.5 py-0.5 text-xs text-gray-700 bg-white border-0 focus:outline-none focus:ring-1 focus:ring-yellow-300 w-full"
+                            />
+                          )}
+                        </div>
+                      </th>
+                    );
+                  })}
+                  <th className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -584,23 +849,25 @@ export default function PayGoContractorsPage() {
                       style={{ background: i % 2 === 0 ? "#f0fff4" : "#fff" }}
                       data-ocid={`paygo.contractors.item.${i + 1}`}
                     >
-                      <td className="px-4 py-2.5 text-gray-500">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-semibold text-gray-800">
+                      <td className="px-3 py-2.5 text-gray-500 text-xs">
+                        {i + 1}
+                      </td>
+                      <td className="px-3 py-2.5 font-semibold text-gray-800">
                         {c.name}
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600">{c.trade}</td>
-                      <td className="px-4 py-2.5 text-gray-500 text-xs">
+                      <td className="px-3 py-2.5 text-gray-600">{c.trade}</td>
+                      <td className="px-3 py-2.5 text-gray-500 text-xs">
                         {c.subTrade || "—"}
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600 max-w-[120px] truncate">
+                      <td className="px-3 py-2.5 text-gray-600 max-w-[120px] truncate">
                         {c.project}
                       </td>
-                      <td className="px-4 py-2.5 font-medium text-gray-700">
+                      <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap">
                         {formatINR(c.contractingPrice)}
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600">{c.unit}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{c.contact}</td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-2.5 text-gray-600">{c.unit}</td>
+                      <td className="px-3 py-2.5 text-gray-600">{c.contact}</td>
+                      <td className="px-3 py-2.5">
                         <span
                           className="px-2 py-0.5 rounded-full text-xs font-semibold"
                           style={{
@@ -613,14 +880,14 @@ export default function PayGoContractorsPage() {
                           {c.status}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => setViewItem(c)}
                             title="View"
                             className="text-emerald-600 hover:text-emerald-800"
-                            data-ocid={`paygo.contractors.edit_button.${i + 1}`}
+                            data-ocid={`paygo.contractors.view_button.${i + 1}`}
                           >
                             <Eye size={15} />
                           </button>
@@ -659,11 +926,11 @@ export default function PayGoContractorsPage() {
         </div>
       </div>
 
-      {/* View Receipt Modal */}
+      {/* View Receipt Modal — Share | Print | Close only (no duplicate X) */}
       {viewItem && (
         <Dialog open={!!viewItem} onOpenChange={() => setViewItem(null)}>
           <DialogContent
-            className="max-w-lg max-h-[85vh] overflow-y-auto"
+            className="max-w-lg max-h-[85vh] overflow-y-auto [&>button:last-child]:hidden"
             style={{ border: "3px solid #28A745" }}
             data-ocid="paygo.contractors.modal"
           >
@@ -671,12 +938,14 @@ export default function PayGoContractorsPage() {
               <h2 className="text-base font-bold" style={{ color: GREEN }}>
                 Contractor Receipt
               </h2>
-              <div className="flex items-center gap-2">
+              {/* ONLY Share, Print, Close — no duplicate X */}
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => handleShare(viewItem)}
                   title="Share"
                   className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+                  data-ocid="paygo.contractors.share_button"
                 >
                   <Share2 size={16} />
                 </button>
@@ -685,6 +954,7 @@ export default function PayGoContractorsPage() {
                   onClick={() => window.print()}
                   title="Print"
                   className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+                  data-ocid="paygo.contractors.print_button"
                 >
                   <Printer size={16} />
                 </button>
@@ -706,15 +976,15 @@ export default function PayGoContractorsPage() {
                   ["Trade", viewItem.trade],
                   ["Sub-Trade", viewItem.subTrade || "—"],
                   ["Project", viewItem.project],
-                  ["Contracting Price", formatINR(viewItem.contractingPrice)],
+                  ["Unit Price", formatINR(viewItem.contractingPrice)],
                   ["Unit", viewItem.unit],
-                  ["Contact", viewItem.contact],
+                  ["Contact No", viewItem.contact],
                   ["Email", viewItem.email],
                   ["Status", viewItem.status],
                 ] as [string, string][]
               ).map(([k, v]) => (
                 <div key={k} className="flex gap-2">
-                  <span className="w-32 text-gray-500 font-medium shrink-0 text-xs">
+                  <span className="w-28 text-gray-500 font-medium shrink-0 text-xs">
                     {k}:
                   </span>
                   <span className="text-gray-800 font-semibold text-xs">
@@ -724,8 +994,8 @@ export default function PayGoContractorsPage() {
               ))}
               {viewItem.attachmentLink1 && (
                 <div className="col-span-2 flex gap-2">
-                  <span className="w-32 text-gray-500 font-medium shrink-0 text-xs">
-                    Attachment 1:
+                  <span className="w-28 text-gray-500 font-medium shrink-0 text-xs">
+                    Link 1 (W.O):
                   </span>
                   <a
                     href={viewItem.attachmentLink1}
@@ -739,8 +1009,8 @@ export default function PayGoContractorsPage() {
               )}
               {viewItem.attachmentLink2 && (
                 <div className="col-span-2 flex gap-2">
-                  <span className="w-32 text-gray-500 font-medium shrink-0 text-xs">
-                    Attachment 2:
+                  <span className="w-28 text-gray-500 font-medium shrink-0 text-xs">
+                    Link 2:
                   </span>
                   <a
                     href={viewItem.attachmentLink2}
@@ -754,7 +1024,7 @@ export default function PayGoContractorsPage() {
               )}
               {viewItem.address && (
                 <div className="col-span-2 flex gap-2">
-                  <span className="w-32 text-gray-500 font-medium shrink-0 text-xs">
+                  <span className="w-28 text-gray-500 font-medium shrink-0 text-xs">
                     Address:
                   </span>
                   <span className="text-gray-800 text-xs">
@@ -841,9 +1111,7 @@ export default function PayGoContractorsPage() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs font-semibold">
-                  Contracting Price (₹)
-                </Label>
+                <Label className="text-xs font-semibold">Unit Price (₹)</Label>
                 <Input
                   type="number"
                   value={form.contractingPrice || ""}
@@ -875,7 +1143,7 @@ export default function PayGoContractorsPage() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs font-semibold">Contact</Label>
+                <Label className="text-xs font-semibold">Contact No 1</Label>
                 <Input
                   value={form.contact}
                   onChange={(e) =>
@@ -907,7 +1175,7 @@ export default function PayGoContractorsPage() {
               </div>
               <div>
                 <Label className="text-xs font-semibold">
-                  Attachment Link 1
+                  Attachment Link 1 (W.O)
                 </Label>
                 <Input
                   type="url"
@@ -985,7 +1253,7 @@ export default function PayGoContractorsPage() {
         </Dialog>
       )}
 
-      {/* Delete Confirm — admin only */}
+      {/* Delete Confirm */}
       {isAdmin && (
         <Dialog
           open={!!deleteId}

@@ -4,9 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowLeft, FileDown, Printer, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import { PaymentMode } from "../backend";
 import { useGetAllPayments, useGetAllProjects } from "../hooks/useQueries";
 import { exportPaymentDetailsToPDF } from "../lib/exportUtils";
+import { PaymentMode } from "../types";
 
 export default function PaymentDetailsPage() {
   const navigate = useNavigate();

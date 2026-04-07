@@ -90,10 +90,25 @@ export type PayGoBill = {
   paidAmount: number;
   remainingAmount: number;
   paymentStatus: "Unpaid" | "Partially Paid" | "Completed";
+  paymentEntries: PaymentEntry[];
   amount: number;
   status: "Pending" | "Approved" | "Paid" | "Rejected";
   year: string;
   financialYear: string;
+};
+
+// NMR Labour row
+export type NMRLabourRow = {
+  id: string;
+  description: string;
+  date: string;
+  masonCount: number;
+  masonRate: number;
+  maleHelperCount: number;
+  maleHelperRate: number;
+  femaleHelperCount: number;
+  femaleHelperRate: number;
+  amount: number;
 };
 
 export type PayGoNMRBill = {
@@ -102,16 +117,28 @@ export type PayGoNMRBill = {
   project: string;
   contractor: string;
   trade: string;
+  subTrade: string;
+  blockId: string;
   weekFrom: string;
   weekTo: string;
-  labourCount: number;
-  totalDays: number;
-  ratePerDay: number;
+  description: string;
+  rows: NMRLabourRow[];
   totalAmount: number;
   status: "Pending" | "Approved" | "Paid";
+  workflowStatus:
+    | "Pending PM Review"
+    | "PM Approved"
+    | "QC Approved"
+    | "Billing Approved"
+    | "Rejected";
+  workflowHistory: WorkflowStep[];
   remarks: string;
   year: string;
   financialYear: string;
+  // Simple flat fields for quick NMR entry (alternative to rows)
+  labourCount?: number;
+  totalDays?: number;
+  ratePerDay?: number;
 };
 
 // ─── BOQ Types ─────────────────────────────────────────────────────────────────
@@ -120,6 +147,7 @@ export type BOQItem = {
   id: string;
   description: string;
   unit: string;
+  nos: number;
   length: number;
   width: number;
   height: number;
@@ -127,6 +155,14 @@ export type BOQItem = {
   isManualQty: boolean;
   rate: number;
   amount: number;
+};
+
+export type PaymentEntry = {
+  id: string;
+  date: string;
+  amount: number;
+  paymentMode?: string;
+  reference?: string;
 };
 
 export type BOQSubCategory = {
@@ -230,8 +266,14 @@ type PayGoContextValue = {
     remarks: string,
     debitAmount?: number,
     reasonForDebit?: string,
+    retentionPct?: number,
   ) => void;
-  payBill: (id: string, payAmount: number) => void;
+  payBill: (
+    id: string,
+    payAmount: number,
+    paymentMode?: string,
+    reference?: string,
+  ) => void;
   addNMRBill: (b: Omit<PayGoNMRBill, "id" | "billNo">) => void;
   updateNMRBill: (b: PayGoNMRBill) => void;
   deleteNMRBill: (id: string) => void;
@@ -297,6 +339,7 @@ const SEED_BILLS: PayGoBill[] = [
     paidAmount: 0,
     remainingAmount: 95000,
     paymentStatus: "Unpaid",
+    paymentEntries: [],
     amount: 95000,
     status: "Approved",
     year: "2025",
@@ -350,6 +393,7 @@ const SEED_BILLS: PayGoBill[] = [
     paidAmount: 80750,
     remainingAmount: 0,
     paymentStatus: "Completed",
+    paymentEntries: [{ id: "pe-b2-1", date: "2025-02-15", amount: 80750 }],
     amount: 80750,
     status: "Paid",
     year: "2025",
@@ -384,6 +428,7 @@ const SEED_BILLS: PayGoBill[] = [
     paidAmount: 0,
     remainingAmount: 93100,
     paymentStatus: "Unpaid",
+    paymentEntries: [],
     amount: 93100,
     status: "Pending",
     year: "2025",
@@ -425,6 +470,7 @@ const SEED_BILLS: PayGoBill[] = [
     paidAmount: 0,
     remainingAmount: 58900,
     paymentStatus: "Unpaid",
+    paymentEntries: [],
     amount: 58900,
     status: "Pending",
     year: "2025",
@@ -439,13 +485,29 @@ const SEED_NMR: PayGoNMRBill[] = [
     project: "Sunrise Towers",
     contractor: "Ramesh & Sons",
     trade: "Mason",
+    subTrade: "",
+    blockId: "BLK-A1",
     weekFrom: "2025-01-06",
     weekTo: "2025-01-12",
-    labourCount: 10,
-    totalDays: 6,
-    ratePerDay: 750,
-    totalAmount: 45000,
+    description: "Week 2 masonry labour",
+    rows: [
+      {
+        id: "r1",
+        description: "Foundation masonry",
+        date: "2025-01-06",
+        masonCount: 5,
+        masonRate: 500,
+        maleHelperCount: 3,
+        maleHelperRate: 400,
+        femaleHelperCount: 2,
+        femaleHelperRate: 350,
+        amount: 5500,
+      },
+    ],
+    totalAmount: 5500,
     status: "Approved",
+    workflowStatus: "Billing Approved",
+    workflowHistory: [],
     remarks: "Week 2 labour",
     year: "2025",
     financialYear: "2024-25",
@@ -456,13 +518,29 @@ const SEED_NMR: PayGoNMRBill[] = [
     project: "Green Valley Roads",
     contractor: "Kumar Scaffolding",
     trade: "Scaffolding",
+    subTrade: "",
+    blockId: "BLK-R1",
     weekFrom: "2025-02-03",
     weekTo: "2025-02-09",
-    labourCount: 8,
-    totalDays: 5,
-    ratePerDay: 700,
-    totalAmount: 28000,
+    description: "Road crew week 1",
+    rows: [
+      {
+        id: "r3",
+        description: "Scaffolding erection",
+        date: "2025-02-03",
+        masonCount: 0,
+        masonRate: 500,
+        maleHelperCount: 4,
+        maleHelperRate: 400,
+        femaleHelperCount: 2,
+        femaleHelperRate: 350,
+        amount: 2300,
+      },
+    ],
+    totalAmount: 2300,
     status: "Pending",
+    workflowStatus: "Pending PM Review",
+    workflowHistory: [],
     remarks: "Road crew week 1",
     year: "2025",
     financialYear: "2024-25",
@@ -631,6 +709,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-ew1a",
                 description: "Earth excavation for foundation",
                 unit: "Cumtr",
+                nos: 1,
                 length: 20,
                 width: 15,
                 height: 2.5,
@@ -643,6 +722,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-ew1b",
                 description: "Rock excavation",
                 unit: "Cumtr",
+                nos: 1,
                 length: 10,
                 width: 8,
                 height: 1.5,
@@ -661,6 +741,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-ew2a",
                 description: "Filling with selected earth",
                 unit: "Cumtr",
+                nos: 1,
                 length: 20,
                 width: 15,
                 height: 1,
@@ -673,6 +754,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-ew2b",
                 description: "Compaction by vibro-roller",
                 unit: "Sft",
+                nos: 1,
                 length: 20,
                 width: 15,
                 height: 1,
@@ -685,6 +767,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-ew2c",
                 description: "Disposal of surplus earth",
                 unit: "Cumtr",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -710,6 +793,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-rcc1a",
                 description: "M25 concrete for footings",
                 unit: "Cumtr",
+                nos: 1,
                 length: 3,
                 width: 3,
                 height: 0.5,
@@ -722,6 +806,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-rcc1b",
                 description: "Steel reinforcement in footings",
                 unit: "Kg",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -740,6 +825,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-rcc2a",
                 description: "M25 concrete for columns",
                 unit: "Cumtr",
+                nos: 1,
                 length: 0.3,
                 width: 0.3,
                 height: 3,
@@ -752,6 +838,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-rcc2b",
                 description: "M25 concrete for beams",
                 unit: "Cumtr",
+                nos: 1,
                 length: 6,
                 width: 0.23,
                 height: 0.45,
@@ -777,6 +864,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-mas1a",
                 description: "230mm thick brick wall in CM 1:4",
                 unit: "Sft",
+                nos: 1,
                 length: 50,
                 width: 1,
                 height: 3,
@@ -789,6 +877,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-mas1b",
                 description: "115mm thick partition wall",
                 unit: "Sft",
+                nos: 1,
                 length: 30,
                 width: 1,
                 height: 3,
@@ -807,6 +896,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-mas2a",
                 description: "Internal plastering 12mm thick",
                 unit: "Sft",
+                nos: 1,
                 length: 80,
                 width: 1,
                 height: 3,
@@ -819,6 +909,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-mas2b",
                 description: "External plastering 20mm thick",
                 unit: "Sft",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -844,6 +935,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-fin1a",
                 description: "Ceramic tile flooring 600x600mm",
                 unit: "Sft",
+                nos: 1,
                 length: 20,
                 width: 15,
                 height: 1,
@@ -856,6 +948,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-fin1b",
                 description: "Granite flooring in lobby",
                 unit: "Sft",
+                nos: 1,
                 length: 8,
                 width: 5,
                 height: 1,
@@ -874,6 +967,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-fin2a",
                 description: "Emulsion paint 2 coats internal",
                 unit: "Sft",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -886,6 +980,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-fin2b",
                 description: "Weather coat paint external",
                 unit: "Sft",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -911,6 +1006,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-elec1a",
                 description: "1.5 sqmm FR wire in conduit",
                 unit: "Rmtr",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -923,6 +1019,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-elec1b",
                 description: "4 sqmm FR wire in conduit",
                 unit: "Rmtr",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -941,6 +1038,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-elec2a",
                 description: "Modular switches and sockets",
                 unit: "Nos",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -953,6 +1051,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-elec2b",
                 description: "LED light fixtures",
                 unit: "Nos",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -978,6 +1077,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-plumb1a",
                 description: "CPVC pipe 25mm dia",
                 unit: "Rmtr",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -990,6 +1090,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-plumb1b",
                 description: "GI pipe 50mm dia main line",
                 unit: "Rmtr",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -1008,6 +1109,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-plumb2a",
                 description: "PVC drainage pipe 110mm",
                 unit: "Rmtr",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -1020,6 +1122,7 @@ const SEED_BOQS: PayGoBOQ[] = [
                 id: "i-plumb2b",
                 description: "Sanitary fixtures per unit",
                 unit: "Nos",
+                nos: 1,
                 length: 0,
                 width: 0,
                 height: 0,
@@ -1222,6 +1325,7 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
       remarks: string,
       debitAmount?: number,
       reasonForDebit?: string,
+      retentionPct?: number,
     ) => {
       setBills((prev) => {
         const next = prev.map((b) => {
@@ -1235,25 +1339,42 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
             timestamp: new Date().toISOString(),
           };
           let newWorkflowStatus = b.workflowStatus;
-          let newDebitAmount = b.debitAmount;
-          let newReasonForDebit = b.reasonForDebit;
+          // Never overwrite engineer's original debit — accumulate only workflow debits in history
+          let newWorkRetention = b.workRetention;
 
           if (action === "Approved") {
             if (step === "PM") newWorkflowStatus = "PM Approved";
             else if (step === "QC") newWorkflowStatus = "QC Approved";
-            else if (step === "Billing Engineer")
+            else if (step === "Billing Engineer") {
               newWorkflowStatus = "Billing Approved";
+              // BE sets retention %
+              if (retentionPct !== undefined) newWorkRetention = retentionPct;
+            }
           } else if (action === "Rejected") {
             newWorkflowStatus = "Rejected";
-          } else if (action === "Added Debit") {
-            newDebitAmount = (b.debitAmount || 0) + (debitAmount || 0);
-            newReasonForDebit = reasonForDebit || b.reasonForDebit;
           }
+          // "Added Debit" — debitAmount is stored in history entry only, not overwriting b.debitAmount
 
-          const effectiveDebit = newReasonForDebit?.trim() ? newDebitAmount : 0;
-          const retentionAmount =
-            ((b.grossAmount - effectiveDebit) / 100) * b.workRetention;
-          const netAmount = b.grossAmount - effectiveDebit - retentionAmount;
+          // Compute total effective debit:
+          // Engineer's original debit (if reason valid)
+          const engineerDebitVal =
+            b.reasonForDebit && b.reasonForDebit.length > 20
+              ? b.debitAmount
+              : 0;
+          // All workflow debits from history (including new entry if it's a debit)
+          const allHistory = [...b.workflowHistory, historyEntry];
+          const historyDebits = allHistory
+            .filter((h) => h.action === "Added Debit")
+            .reduce((s, h) => s + (h.debitAmount || 0), 0);
+          const totalEffectiveDebit = engineerDebitVal + historyDebits;
+
+          // Retention only applied once BE approves
+          const applyRetention = newWorkflowStatus === "Billing Approved";
+          const retentionAmount = applyRetention
+            ? ((b.grossAmount - totalEffectiveDebit) / 100) * newWorkRetention
+            : 0;
+          const netAmount =
+            b.grossAmount - totalEffectiveDebit - retentionAmount;
 
           return {
             ...b,
@@ -1263,13 +1384,13 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
               : newWorkflowStatus === "Rejected"
                 ? "Rejected"
                 : "Pending") as PayGoBill["status"],
-            debitAmount: newDebitAmount,
-            reasonForDebit: newReasonForDebit,
+            // Do NOT update debitAmount — it stays as engineer's original debit
+            workRetention: newWorkRetention,
             retentionAmount,
             netAmount,
             amount: netAmount,
-            remainingAmount: netAmount - b.paidAmount,
-            workflowHistory: [...b.workflowHistory, historyEntry],
+            remainingAmount: netAmount - (b.paidAmount || 0),
+            workflowHistory: allHistory,
           };
         });
         saveToStorage("bills", next);
@@ -1279,26 +1400,42 @@ export function PayGoProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const payBill = useCallback((id: string, payAmount: number) => {
-    setBills((prev) => {
-      const next = prev.map((b) => {
-        if (b.id !== id) return b;
-        const newPaid = (b.paidAmount || 0) + payAmount;
-        const remaining = (b.remainingAmount || 0) - payAmount;
-        let paymentStatus: PayGoBill["paymentStatus"] = "Partially Paid";
-        if (remaining <= 0) paymentStatus = "Completed";
-        return {
-          ...b,
-          paidAmount: newPaid,
-          remainingAmount: Math.max(0, remaining),
-          paymentStatus,
-          status: paymentStatus === "Completed" ? "Paid" : b.status,
-        };
+  const payBill = useCallback(
+    (
+      id: string,
+      payAmount: number,
+      paymentMode?: string,
+      reference?: string,
+    ) => {
+      setBills((prev) => {
+        const next = prev.map((b) => {
+          if (b.id !== id) return b;
+          const newPaid = (b.paidAmount || 0) + payAmount;
+          const remaining = (b.remainingAmount || 0) - payAmount;
+          let paymentStatus: PayGoBill["paymentStatus"] = "Partially Paid";
+          if (remaining <= 0) paymentStatus = "Completed";
+          const newEntry: PaymentEntry = {
+            id: `pe-${Date.now()}`,
+            date: new Date().toISOString().split("T")[0],
+            amount: payAmount,
+            paymentMode,
+            reference,
+          };
+          return {
+            ...b,
+            paidAmount: newPaid,
+            remainingAmount: Math.max(0, remaining),
+            paymentStatus,
+            paymentEntries: [...(b.paymentEntries || []), newEntry],
+            status: paymentStatus === "Completed" ? "Paid" : b.status,
+          };
+        });
+        saveToStorage("bills", next);
+        return next;
       });
-      saveToStorage("bills", next);
-      return next;
-    });
-  }, []);
+    },
+    [],
+  );
 
   const addNMRBill = useCallback((b: Omit<PayGoNMRBill, "id" | "billNo">) => {
     setNMRBills((prev) => {

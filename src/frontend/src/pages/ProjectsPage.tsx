@@ -59,7 +59,6 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { type Project, UserRole } from "../backend";
 import { ActionButton } from "../components/ActionButton";
 import { DateInput } from "../components/DateInput";
 import { useActor } from "../hooks/useActor";
@@ -83,6 +82,7 @@ import {
   formatProjectsForExport,
   parseCSV,
 } from "../lib/exportUtils";
+import { type Project, UserRole } from "../types";
 
 type SortField =
   | "name"

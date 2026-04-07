@@ -22,7 +22,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FileDown, FileUp, Pencil, Plus, Printer, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { type Client, UserRole } from "../backend";
 import { ActionButton } from "../components/ActionButton";
 import { usePageShortcuts } from "../hooks/usePageShortcuts";
 import {
@@ -32,6 +31,7 @@ import {
   useGetCallerUserRole,
   useUpdateClient,
 } from "../hooks/useQueries";
+import { type Client, UserRole } from "../types";
 
 export default function ClientsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);

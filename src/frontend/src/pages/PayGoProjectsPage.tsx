@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  ArrowUpDown,
   ChevronDown,
   ChevronUp,
   Download,
@@ -23,6 +24,7 @@ import {
   Eye,
   FileDown,
   FileText,
+  FolderOpen,
   Plus,
   Printer,
   Search,
@@ -32,12 +34,13 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type PayGoProject, usePayGo } from "../context/PayGoContext";
 import { formatINR } from "../utils/money";
 
 const GREEN = "#28A745";
+const TEAL = "#0891b2";
 const DEFAULT_PW = "3554";
 
 const ROLES = [
@@ -50,6 +53,8 @@ const ROLES = [
 type Role = (typeof ROLES)[number];
 
 type FormData = Omit<PayGoProject, "id">;
+type SortDir = "asc" | "desc" | null;
+type SortCol = keyof PayGoProject | null;
 
 const emptyForm = (): FormData => ({
   name: "",
@@ -63,21 +68,17 @@ const emptyForm = (): FormData => ({
 });
 
 type Filters = {
-  projectName: string;
-  clientName: string;
+  project: string;
+  client: string;
   fromDate: string;
   toDate: string;
-  minPrice: string;
-  maxPrice: string;
 };
 
 const emptyFilters = (): Filters => ({
-  projectName: "",
-  clientName: "",
+  project: "",
+  client: "",
   fromDate: "",
   toDate: "",
-  minPrice: "",
-  maxPrice: "",
 });
 
 function fmtDate(d: string): string {
@@ -87,7 +88,11 @@ function fmtDate(d: string): string {
   return d;
 }
 
-export default function PayGoProjectsPage() {
+interface Props {
+  onNavigate?: (module: string) => void;
+}
+
+export default function PayGoProjectsPage({ onNavigate }: Props) {
   const { projects, addProject, updateProject, deleteProject } = usePayGo();
 
   const [currentRole, setCurrentRole] = useState<Role>("Admin");
@@ -102,37 +107,77 @@ export default function PayGoProjectsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(emptyFilters());
   const [viewItem, setViewItem] = useState<PayGoProject | null>(null);
+  const [sortCol, setSortCol] = useState<SortCol>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [colFilters, setColFilters] = useState<Partial<Record<string, string>>>(
+    {},
+  );
+  const importRef = useRef<HTMLInputElement>(null);
+
+  // Unique values for filter dropdowns
+  const projectNames = useMemo(
+    () => [...new Set(projects.map((p) => p.name))],
+    [projects],
+  );
+  const clientNames = useMemo(
+    () => [...new Set(projects.map((p) => p.client))],
+    [projects],
+  );
+
+  const applySort = (col: SortCol) => {
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : d === "desc" ? null : "asc"));
+      if (sortDir === "desc") setSortCol(null);
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  };
 
   const filtered = useMemo(() => {
-    return projects.filter((p) => {
+    let list = projects.filter((p) => {
       const q = search.toLowerCase();
       const matchSearch =
         !q ||
         p.name.toLowerCase().includes(q) ||
         p.client.toLowerCase().includes(q);
-      const matchName =
-        !filters.projectName ||
-        p.name.toLowerCase().includes(filters.projectName.toLowerCase());
-      const matchClient =
-        !filters.clientName ||
-        p.client.toLowerCase().includes(filters.clientName.toLowerCase());
+      const matchProject = !filters.project || p.name === filters.project;
+      const matchClient = !filters.client || p.client === filters.client;
       const matchFrom = !filters.fromDate || p.startDate >= filters.fromDate;
       const matchTo = !filters.toDate || p.startDate <= filters.toDate;
-      const matchMinPrice =
-        !filters.minPrice || p.unitPrice >= Number(filters.minPrice);
-      const matchMaxPrice =
-        !filters.maxPrice || p.unitPrice <= Number(filters.maxPrice);
+      // column filters
+      const matchColName =
+        !colFilters.name ||
+        p.name.toLowerCase().includes(colFilters.name.toLowerCase());
+      const matchColClient =
+        !colFilters.client ||
+        p.client.toLowerCase().includes(colFilters.client.toLowerCase());
+      const matchColStatus =
+        !colFilters.status ||
+        p.status.toLowerCase().includes(colFilters.status.toLowerCase());
       return (
         matchSearch &&
-        matchName &&
+        matchProject &&
         matchClient &&
         matchFrom &&
         matchTo &&
-        matchMinPrice &&
-        matchMaxPrice
+        matchColName &&
+        matchColClient &&
+        matchColStatus
       );
     });
-  }, [projects, search, filters]);
+    if (sortCol && sortDir) {
+      list = [...list].sort((a, b) => {
+        const av = a[sortCol] ?? "";
+        const bv = b[sortCol] ?? "";
+        const cmp = String(av).localeCompare(String(bv), undefined, {
+          numeric: true,
+        });
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+    return list;
+  }, [projects, search, filters, sortCol, sortDir, colFilters]);
 
   const openAdd = () => {
     setEditItem(null);
@@ -183,7 +228,7 @@ export default function PayGoProjectsPage() {
 
   const exportCSV = () => {
     const headers = [
-      "Name",
+      "Project Name",
       "Client",
       "Start Date",
       "End Date",
@@ -194,13 +239,15 @@ export default function PayGoProjectsPage() {
     const rows = projects.map((p) => [
       p.name,
       p.client,
-      p.startDate,
-      p.endDate,
+      fmtDate(p.startDate),
+      fmtDate(p.endDate),
       p.budget,
       p.status,
       p.notes,
     ]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+    const csv = [headers, ...rows]
+      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = "mph-projects.csv";
@@ -208,11 +255,86 @@ export default function PayGoProjectsPage() {
     toast.success("CSV exported.");
   };
 
+  const downloadFormat = () => {
+    const headers = [
+      "Project Name",
+      "Client",
+      "Start Date",
+      "End Date",
+      "Budget",
+      "Status",
+      "Notes",
+    ];
+    const example = [
+      "Sunrise Towers",
+      "Sunrise Developers",
+      "01-01-2025",
+      "31-12-2025",
+      "5000000",
+      "Active",
+      "Sample project",
+    ];
+    const csv = [headers, example]
+      .map((r) => r.map((v) => `"${v}"`).join(","))
+      .join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "mph-projects-format.csv";
+    a.click();
+    toast.success("Format downloaded.");
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.trim().split("\n");
+      if (lines.length < 2) {
+        toast.error("No data rows found.");
+        return;
+      }
+      const parseRow = (line: string) =>
+        line
+          .split(",")
+          .map((c) => c.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
+      const headers = parseRow(lines[0]).map((h) => h.toLowerCase());
+      let count = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseRow(lines[i]);
+        if (cols.length < 2) continue;
+        const get = (name: string) => {
+          const idx = headers.findIndex((h) => h.includes(name));
+          return idx >= 0 ? (cols[idx] ?? "") : "";
+        };
+        const name = get("project") || get("name");
+        const client = get("client");
+        if (!name || !client) continue;
+        addProject({
+          name,
+          client,
+          startDate: get("start"),
+          endDate: get("end"),
+          budget: Number(get("budget")) || 0,
+          unitPrice: 0,
+          status: (get("status") as PayGoProject["status"]) || "Active",
+          notes: get("note"),
+        });
+        count++;
+      }
+      toast.success(`${count} project(s) imported.`);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   const handlePrint = () => window.print();
 
   const clearFilters = () => {
     setFilters(emptyFilters());
     setSearch("");
+    setColFilters({});
   };
 
   const handleShare = (p: PayGoProject) => {
@@ -230,16 +352,26 @@ export default function PayGoProjectsPage() {
   };
 
   const toolbarBtnClass =
-    "flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors cursor-pointer";
+    "flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors cursor-pointer whitespace-nowrap";
 
   const hasActiveFilters =
     search ||
-    filters.projectName ||
-    filters.clientName ||
+    filters.project ||
+    filters.client ||
     filters.fromDate ||
     filters.toDate ||
-    filters.minPrice ||
-    filters.maxPrice;
+    Object.values(colFilters).some(Boolean);
+
+  const SortIcon = ({ col }: { col: keyof PayGoProject }) => (
+    <ArrowUpDown
+      size={12}
+      className={`inline ml-1 cursor-pointer opacity-60 hover:opacity-100 ${sortCol === col ? "opacity-100 text-yellow-200" : ""}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        applySort(col);
+      }}
+    />
+  );
 
   return (
     <div
@@ -247,66 +379,80 @@ export default function PayGoProjectsPage() {
       style={{ fontFamily: "'Century Gothic', Arial, sans-serif" }}
     >
       {/* Toolbar */}
-      <div className="bg-white border-b shadow-sm px-4 py-3 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Role switcher */}
-          <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-md px-3 py-1.5">
-            <User size={13} className="text-purple-600" />
-            <select
-              value={currentRole}
-              onChange={(e) => setCurrentRole(e.target.value as Role)}
-              className="text-xs font-semibold text-purple-700 bg-transparent border-none outline-none cursor-pointer"
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            type="button"
-            onClick={handlePrint}
-            className={toolbarBtnClass}
+      <div className="bg-white border-b shadow-sm px-4 py-3 flex items-center gap-2 flex-wrap">
+        {/* Role switcher */}
+        <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-md px-3 py-1.5">
+          <User size={13} className="text-purple-600" />
+          <select
+            value={currentRole}
+            onChange={(e) => setCurrentRole(e.target.value as Role)}
+            className="text-xs font-semibold text-purple-700 bg-transparent border-none outline-none cursor-pointer"
           >
-            <Printer size={14} /> Print
-          </button>
-          <button type="button" className={toolbarBtnClass}>
-            <FileText size={14} /> Export PDF
-          </button>
-          {isAdmin && (
-            <button type="button" className={toolbarBtnClass}>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* BOQ sub-module button */}
+        <button
+          type="button"
+          onClick={() => onNavigate?.("boq")}
+          className="flex items-center gap-1.5 border rounded-md px-3 py-1.5 text-xs font-semibold shadow-sm transition-colors cursor-pointer whitespace-nowrap"
+          style={{ background: "#e0f2fe", borderColor: TEAL, color: TEAL }}
+          title="Open BOQ Module"
+        >
+          <FolderOpen size={14} /> BOQ
+        </button>
+
+        <button type="button" onClick={handlePrint} className={toolbarBtnClass}>
+          <Printer size={14} /> Print
+        </button>
+        <button
+          type="button"
+          onClick={handlePrint}
+          className={toolbarBtnClass}
+          title="Export PDF (uses print dialog)"
+        >
+          <FileText size={14} /> Export PDF
+        </button>
+        {isAdmin && (
+          <>
+            <button
+              type="button"
+              onClick={() => importRef.current?.click()}
+              className={toolbarBtnClass}
+            >
               <Upload size={14} /> Import CSV
             </button>
-          )}
-          <button type="button" onClick={exportCSV} className={toolbarBtnClass}>
-            <Download size={14} /> Export CSV
-          </button>
-          {isAdmin && (
-            <button type="button" className={toolbarBtnClass}>
-              <FileDown size={14} /> Download Format
-            </button>
-          )}
-        </div>
+            <input
+              ref={importRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleImport}
+            />
+          </>
+        )}
+        <button type="button" onClick={exportCSV} className={toolbarBtnClass}>
+          <Download size={14} /> Export CSV
+        </button>
         {isAdmin && (
           <button
             type="button"
-            onClick={openAdd}
-            className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-sm font-semibold shadow-md hover:opacity-90 transition-opacity"
-            style={{ background: GREEN }}
-            data-ocid="paygo.projects.primary_button"
+            onClick={downloadFormat}
+            className={toolbarBtnClass}
           >
-            <Plus size={16} /> New Project
+            <FileDown size={14} /> Download Format
           </button>
         )}
-      </div>
 
-      {/* Search bar */}
-      <div className="px-4 py-3 bg-white border-b">
-        <div className="relative">
+        {/* Search bar — between Download Format and +New Project */}
+        <div className="relative flex-1 min-w-[160px]">
           <Search
-            size={16}
+            size={14}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
           />
           <input
@@ -314,24 +460,36 @@ export default function PayGoProjectsPage() {
             placeholder="Search projects..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-400 bg-white"
+            className="w-full pl-8 pr-3 py-1.5 rounded-md border border-gray-300 text-xs focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-400 bg-white"
             data-ocid="paygo.projects.search_input"
           />
         </div>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={openAdd}
+            className="flex items-center gap-2 text-white rounded-md px-4 py-1.5 text-xs font-semibold shadow-md hover:opacity-90 transition-opacity whitespace-nowrap"
+            style={{ background: GREEN }}
+            data-ocid="paygo.projects.primary_button"
+          >
+            <Plus size={14} /> New Project
+          </button>
+        )}
       </div>
 
-      {/* Filter toggle bar */}
-      <div className="px-4 py-2 bg-white border-b flex items-center justify-start">
+      {/* Filter toggle row — single horizontal row, fixed height */}
+      <div className="px-4 py-1.5 bg-white border-b flex items-center gap-1">
         <button
           type="button"
           onClick={() => setShowFilters((v) => !v)}
-          className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+          className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 transition-colors border border-gray-200 rounded px-2 py-1 bg-gray-50 hover:bg-gray-100"
         >
-          {showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {showFilters ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           {showFilters ? "Hide Filters" : "Show Filters"}
-          {hasActiveFilters && !showFilters && (
+          {hasActiveFilters && (
             <span
-              className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full"
+              className="ml-1 text-xs font-medium px-1.5 py-0.5 rounded-full"
               style={{ background: GREEN, color: "#fff" }}
             >
               Active
@@ -342,160 +500,164 @@ export default function PayGoProjectsPage() {
           <button
             type="button"
             onClick={clearFilters}
-            className="ml-4 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+            className="text-xs font-medium text-red-500 hover:text-red-700 transition-colors ml-2"
           >
             Clear Filters
           </button>
         )}
+        <span className="ml-auto text-xs text-gray-400">
+          Showing <strong>{filtered.length}</strong> /{" "}
+          <strong>{projects.length}</strong>
+        </span>
       </div>
 
-      {/* Advanced Filters Card */}
+      {/* Filter Bar — single row, hidden by default */}
       {showFilters && (
-        <div className="px-4 pt-3 pb-1">
-          <div
-            className="rounded-xl shadow-sm border"
-            style={{ background: "#FFFDE7", borderColor: "#FFE082" }}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-yellow-200">
-              <span className="font-semibold text-gray-700 text-sm">
-                Advanced Filters
-                {hasActiveFilters && (
-                  <span
-                    className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full"
-                    style={{ background: GREEN, color: "#fff" }}
-                  >
-                    Active
-                  </span>
-                )}
+        <div className="px-4 py-2 bg-amber-50 border-b border-yellow-200">
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="flex flex-col gap-1 min-w-[160px]">
+              <span className="text-xs font-semibold text-gray-600">
+                Project
               </span>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1 hover:bg-red-50 transition-colors"
+              <select
+                value={filters.project}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, project: e.target.value }))
+                }
+                className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
               >
-                Clear Filters
-              </button>
+                <option value="">All Projects</option>
+                {projectNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 pb-4 pt-3">
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Project Name
-                </span>
-                <input
-                  type="text"
-                  placeholder="Enter project name"
-                  value={filters.projectName}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, projectName: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                />
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Client Name
-                </span>
-                <input
-                  type="text"
-                  placeholder="Enter client name"
-                  value={filters.clientName}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, clientName: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                />
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  From Date
-                </span>
-                <input
-                  type="date"
-                  value={filters.fromDate}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, fromDate: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                />
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  To Date
-                </span>
-                <input
-                  type="date"
-                  value={filters.toDate}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, toDate: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                />
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Min Budget (₹)
-                </span>
-                <input
-                  type="number"
-                  placeholder="Min budget"
-                  value={filters.minPrice}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, minPrice: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                />
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-gray-600 mb-1">
-                  Max Budget (₹)
-                </span>
-                <input
-                  type="number"
-                  placeholder="Max budget"
-                  value={filters.maxPrice}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, maxPrice: e.target.value }))
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-300 bg-white"
-                />
-              </div>
+            <div className="flex flex-col gap-1 min-w-[160px]">
+              <span className="text-xs font-semibold text-gray-600">
+                Client
+              </span>
+              <select
+                value={filters.client}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, client: e.target.value }))
+                }
+                className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              >
+                <option value="">All Clients</option>
+                {clientNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
             </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-gray-600">
+                From Date
+              </span>
+              <input
+                type="date"
+                value={filters.fromDate}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, fromDate: e.target.value }))
+                }
+                className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-gray-600">
+                To Date
+              </span>
+              <input
+                type="date"
+                value={filters.toDate}
+                onChange={(e) =>
+                  setFilters((f) => ({ ...f, toDate: e.target.value }))
+                }
+                className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs font-medium text-red-500 border border-red-200 rounded px-3 py-1.5 hover:bg-red-50 transition-colors self-end"
+            >
+              Clear
+            </button>
           </div>
         </div>
       )}
 
-      {/* Results count */}
-      <div className="px-4 pt-2 pb-1">
-        <span className="text-xs text-gray-500">
-          Showing <strong>{filtered.length}</strong> of{" "}
-          <strong>{projects.length}</strong> projects
-        </span>
-      </div>
-
       {/* Table */}
-      <div className="px-4 pb-4">
+      <div className="px-4 py-3">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: GREEN }}>
-                  {[
-                    "#",
-                    "Project Name",
-                    "Client",
-                    "Start Date",
-                    "End Date",
-                    "Budget (₹)",
-                    "Status",
-                    "Actions",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  <th className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap w-10">
+                    #
+                  </th>
+                  {(
+                    [
+                      "name",
+                      "client",
+                      "startDate",
+                      "endDate",
+                      "budget",
+                      "status",
+                    ] as (keyof PayGoProject)[]
+                  ).map((col) => {
+                    const labels: Record<string, string> = {
+                      name: "Project Name",
+                      client: "Client",
+                      startDate: "Start Date",
+                      endDate: "End Date",
+                      budget: "Budget (₹)",
+                      status: "Status",
+                    };
+                    return (
+                      <th
+                        key={col}
+                        className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap cursor-pointer select-none"
+                        onClick={() => applySort(col)}
+                        onKeyDown={(e) => e.key === "Enter" && applySort(col)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1">
+                            {labels[col]}
+                            <SortIcon col={col} />
+                            {sortCol === col && (
+                              <span className="text-yellow-200 text-xs">
+                                {sortDir === "asc" ? "↑" : "↓"}
+                              </span>
+                            )}
+                          </div>
+                          {/* Inline column filter */}
+                          {["name", "client", "status"].includes(col) && (
+                            <input
+                              type="text"
+                              placeholder="Filter…"
+                              value={colFilters[col] ?? ""}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) =>
+                                setColFilters((f) => ({
+                                  ...f,
+                                  [col]: e.target.value,
+                                }))
+                              }
+                              className="mt-0.5 rounded px-1.5 py-0.5 text-xs text-gray-700 bg-white border-0 focus:outline-none focus:ring-1 focus:ring-yellow-300 w-full"
+                            />
+                          )}
+                        </div>
+                      </th>
+                    );
+                  })}
+                  <th className="px-3 py-3 text-left text-white font-semibold text-xs uppercase tracking-wide whitespace-nowrap">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -516,21 +678,23 @@ export default function PayGoProjectsPage() {
                       style={{ background: i % 2 === 0 ? "#F0FFF4" : "#fff" }}
                       data-ocid={`paygo.projects.item.${i + 1}`}
                     >
-                      <td className="px-4 py-2.5 text-gray-500">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-semibold text-gray-800">
+                      <td className="px-3 py-2.5 text-gray-500 text-xs">
+                        {i + 1}
+                      </td>
+                      <td className="px-3 py-2.5 font-semibold text-gray-800">
                         {p.name}
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600">{p.client}</td>
-                      <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-gray-600">{p.client}</td>
+                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
                         {fmtDate(p.startDate)}
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
                         {fmtDate(p.endDate)}
                       </td>
-                      <td className="px-4 py-2.5 font-medium text-gray-700 whitespace-nowrap">
+                      <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap">
                         {formatINR(p.budget)}
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-2.5">
                         <span
                           className="px-2 py-0.5 rounded-full text-xs font-semibold"
                           style={{
@@ -543,14 +707,14 @@ export default function PayGoProjectsPage() {
                           {p.status}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => setViewItem(p)}
                             title="View"
                             className="text-emerald-600 hover:text-emerald-800"
-                            data-ocid={`paygo.projects.edit_button.${i + 1}`}
+                            data-ocid={`paygo.projects.view_button.${i + 1}`}
                           >
                             <Eye size={15} />
                           </button>
@@ -589,11 +753,11 @@ export default function PayGoProjectsPage() {
         </div>
       </div>
 
-      {/* View Receipt Modal */}
+      {/* View Receipt Modal — Share | Print | Close (no duplicate X) */}
       {viewItem && (
         <Dialog open={!!viewItem} onOpenChange={() => setViewItem(null)}>
           <DialogContent
-            className="max-w-lg"
+            className="max-w-lg [&>button:last-child]:hidden"
             style={{ border: "3px solid #0078D7" }}
             data-ocid="paygo.projects.modal"
           >
@@ -601,13 +765,14 @@ export default function PayGoProjectsPage() {
               <h2 className="text-base font-bold" style={{ color: GREEN }}>
                 Project Receipt
               </h2>
-              <div className="flex items-center gap-2">
+              {/* ONLY these 3 icons — no duplicate X from DialogContent default */}
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => handleShare(viewItem)}
                   title="Share"
                   className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
-                  data-ocid="paygo.projects.secondary_button"
+                  data-ocid="paygo.projects.share_button"
                 >
                   <Share2 size={16} />
                 </button>
@@ -616,6 +781,7 @@ export default function PayGoProjectsPage() {
                   onClick={() => window.print()}
                   title="Print"
                   className="p-1.5 rounded hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+                  data-ocid="paygo.projects.print_button"
                 >
                   <Printer size={16} />
                 </button>
@@ -781,7 +947,7 @@ export default function PayGoProjectsPage() {
         </Dialog>
       )}
 
-      {/* Delete Confirm — admin only */}
+      {/* Delete Confirm */}
       {isAdmin && (
         <Dialog
           open={!!deleteId}

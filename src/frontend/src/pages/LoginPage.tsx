@@ -37,15 +37,14 @@ export default function LoginPage() {
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
             <img
-              src="/assets/bms_logo-019d4322-c766-7414-bc34-e217a90db159.png"
-              alt="ClearPay Logo"
+              src="/assets/download-019d70f9-6e4b-708c-8888-54967c12cc42.webp"
+              alt="BMS Logo"
               className="h-20 w-20"
             />
           </div>
           <div>
             <CardTitle className="text-3xl" style={{ fontWeight: 700 }}>
-              <span className="text-[#0078D7]">Clear</span>
-              <span className="text-[#555555]">Pay</span>
+              <span className="text-[#0078D7]">BMS</span>
             </CardTitle>
             <div
               className="text-base text-gray-500 mt-3"

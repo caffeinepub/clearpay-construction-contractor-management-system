@@ -10,10 +10,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
   Bot,
-  ClipboardList,
   CreditCard,
   FileBarChart,
-  FileSignature,
   FileText,
   FolderKanban,
   Grid3X3,
@@ -557,18 +555,6 @@ export default function MainLayout() {
       label: "AI Assistant",
       icon: Bot,
       shortcut: "Alt+8",
-    },
-    {
-      id: "pg-boq" as PayGoPage,
-      label: "BOQ",
-      icon: ClipboardList,
-      adminOnly: false,
-    },
-    {
-      id: "pg-workorder" as PayGoPage,
-      label: "Work Orders",
-      icon: FileSignature,
-      adminOnly: false,
     },
   ];
 

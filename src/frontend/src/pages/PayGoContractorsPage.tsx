@@ -34,10 +34,11 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type PayGoContractor, usePayGo } from "../context/PayGoContext";
 import { formatINR } from "../utils/money";
+import PayGoWorkOrderPage from "./PayGoWorkOrderPage";
 
 const GREEN = "#28A745";
 const TEAL = "#0891b2";
@@ -110,7 +111,174 @@ interface Props {
   onNavigate?: (module: string) => void;
 }
 
-export default function PayGoContractorsPage({ onNavigate }: Props) {
+// ── Draggable wrapper used for +New / Edit form ──────────────────────────────
+function DraggableModal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+}) {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      setDragging(true);
+      dragStart.current = {
+        mx: e.clientX,
+        my: e.clientY,
+        px: pos.x,
+        py: pos.y,
+      };
+      e.preventDefault();
+    },
+    [pos],
+  );
+
+  const onMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!dragging) return;
+      const dx = e.clientX - dragStart.current.mx;
+      const dy = e.clientY - dragStart.current.my;
+      setPos({ x: dragStart.current.px + dx, y: dragStart.current.py + dy });
+    },
+    [dragging],
+  );
+
+  const onMouseUp = useCallback(() => setDragging(false), []);
+
+  // Attach/detach window listeners while dragging
+  useState(() => {
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  });
+
+  // Reset position when closed
+  const handleClose = () => {
+    setPos({ x: 0, y: 0 });
+    onClose();
+  };
+
+  if (!open) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        pointerEvents: "none",
+      }}
+    >
+      {/* Backdrop */}
+      <div
+        role="button"
+        tabIndex={0}
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "rgba(0,0,0,0.35)",
+          pointerEvents: "auto",
+        }}
+        onClick={handleClose}
+        onKeyDown={(e) => e.key === "Escape" && handleClose()}
+      />
+      {/* Modal box */}
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
+          width: "min(680px, 95vw)",
+          maxHeight: "88vh",
+          background: "#fff",
+          borderRadius: "12px",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+          pointerEvents: "auto",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          userSelect: dragging ? "none" : undefined,
+        }}
+      >
+        {/* Drag handle — header */}
+        <div
+          onMouseDown={onMouseDown}
+          style={{
+            cursor: dragging ? "grabbing" : "grab",
+            background: GREEN,
+            color: "#fff",
+            padding: "12px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexShrink: 0,
+            borderRadius: "12px 12px 0 0",
+          }}
+        >
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: "14px",
+              fontFamily: "'Century Gothic', Arial, sans-serif",
+            }}
+          >
+            {title}
+          </span>
+          <button
+            type="button"
+            onClick={handleClose}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#fff",
+              cursor: "pointer",
+              display: "flex",
+              padding: "2px",
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        {/* Scrollable body */}
+        <div style={{ overflowY: "auto", flex: 1, padding: "16px" }}>
+          {children}
+        </div>
+        {/* Footer */}
+        <div
+          style={{
+            borderTop: "1px solid #e5e7eb",
+            padding: "12px 16px",
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: "8px",
+            flexShrink: 0,
+            background: "#fafafa",
+          }}
+        >
+          {footer}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function PayGoContractorsPage({
+  onNavigate: _onNavigate,
+}: Props) {
   const {
     projects,
     contractors,
@@ -122,20 +290,37 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
   const [currentRole, setCurrentRole] = useState<Role>("Admin");
   const isAdmin = currentRole === "Admin";
 
+  // New/Edit form state
   const [formOpen, setFormOpen] = useState(false);
   const [editItem, setEditItem] = useState<PayGoContractor | null>(null);
   const [form, setForm] = useState<FormData>(emptyForm());
+
+  // Password-before-edit modal
+  const [editPwOpen, setEditPwOpen] = useState(false);
+  const [editPwValue, setEditPwValue] = useState("");
+  const [editPwError, setEditPwError] = useState("");
+  const [pendingEditContractor, setPendingEditContractor] =
+    useState<PayGoContractor | null>(null);
+
+  // Delete confirm
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pw, setPw] = useState("");
+
+  // Filters / search
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>(emptyFilters());
+
+  // View receipt
   const [viewItem, setViewItem] = useState<PayGoContractor | null>(null);
+
+  // Sort
   const [sortCol, setSortCol] = useState<SortCol>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
-  const [colFilters, setColFilters] = useState<Partial<Record<string, string>>>(
-    {},
-  );
+
+  // Work Order inline modal
+  const [showWorkOrder, setShowWorkOrder] = useState(false);
+
   const importRef = useRef<HTMLInputElement>(null);
 
   const projectNames = useMemo(
@@ -179,28 +364,13 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
         !filters.minPrice || c.contractingPrice >= Number(filters.minPrice);
       const matchMaxPrice =
         !filters.maxPrice || c.contractingPrice <= Number(filters.maxPrice);
-      // column filters
-      const matchColName =
-        !colFilters.name ||
-        c.name.toLowerCase().includes((colFilters.name ?? "").toLowerCase());
-      const matchColTrade =
-        !colFilters.trade ||
-        c.trade.toLowerCase().includes((colFilters.trade ?? "").toLowerCase());
-      const matchColStatus =
-        !colFilters.status ||
-        c.status
-          .toLowerCase()
-          .includes((colFilters.status ?? "").toLowerCase());
       return (
         matchSearch &&
         matchName &&
         matchTrade &&
         matchProject &&
         matchMinPrice &&
-        matchMaxPrice &&
-        matchColName &&
-        matchColTrade &&
-        matchColStatus
+        matchMaxPrice
       );
     });
     if (sortCol && sortDir) {
@@ -214,7 +384,7 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
       });
     }
     return list;
-  }, [contractors, search, filters, sortCol, sortDir, colFilters]);
+  }, [contractors, search, filters, sortCol, sortDir]);
 
   const openAdd = () => {
     setEditItem(null);
@@ -222,24 +392,42 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
     setFormOpen(true);
   };
 
-  const openEdit = (c: PayGoContractor) => {
-    setEditItem(c);
-    setForm({
-      name: c.name,
-      trade: c.trade,
-      subTrade: c.subTrade ?? "",
-      project: c.project,
-      contractingPrice: c.contractingPrice,
-      unit: c.unit,
-      contact: c.contact,
-      email: c.email,
-      address: c.address,
-      attachmentLink1: c.attachmentLink1 ?? "",
-      attachmentLink2: c.attachmentLink2 ?? "",
-      notes: c.notes,
-      status: c.status,
-    });
-    setFormOpen(true);
+  // Show password prompt before opening edit form
+  const requestEdit = (c: PayGoContractor) => {
+    setPendingEditContractor(c);
+    setEditPwValue("");
+    setEditPwError("");
+    setEditPwOpen(true);
+  };
+
+  const confirmEditPw = () => {
+    if (editPwValue !== DEFAULT_PW) {
+      setEditPwError("Incorrect password. Please try again.");
+      return;
+    }
+    setEditPwOpen(false);
+    setEditPwError("");
+    if (pendingEditContractor) {
+      const c = pendingEditContractor;
+      setEditItem(c);
+      setForm({
+        name: c.name,
+        trade: c.trade,
+        subTrade: c.subTrade ?? "",
+        project: c.project,
+        contractingPrice: c.contractingPrice,
+        unit: c.unit,
+        contact: c.contact,
+        email: c.email,
+        address: c.address,
+        attachmentLink1: c.attachmentLink1 ?? "",
+        attachmentLink2: c.attachmentLink2 ?? "",
+        notes: c.notes,
+        status: c.status,
+      });
+      setFormOpen(true);
+    }
+    setPendingEditContractor(null);
   };
 
   const handleSave = () => {
@@ -268,6 +456,54 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
     setPw("");
   };
 
+  // ── Print helpers ────────────────────────────────────────────────────────
+  const handlePrint = () => {
+    const rows = filtered
+      .map(
+        (c, i) =>
+          `<tr style="background:${i % 2 === 0 ? "#f0fff4" : "#fff"}">
+            <td>${i + 1}</td>
+            <td>${c.name}</td>
+            <td>${c.trade}</td>
+            <td>${c.subTrade || "—"}</td>
+            <td>${c.project}</td>
+            <td style="text-align:right">${formatINR(c.contractingPrice)}</td>
+            <td>${c.unit}</td>
+            <td>${c.contact}</td>
+            <td>${c.status}</td>
+          </tr>`,
+      )
+      .join("");
+    const html = `<!DOCTYPE html><html><head><title>Contractors List – MPH Developers</title>
+      <style>
+        body { font-family: 'Century Gothic', Arial, sans-serif; margin: 20px; font-size: 12px; }
+        h2 { color: #28A745; margin-bottom: 4px; }
+        p { color:#555; margin:0 0 12px; font-size:11px; }
+        table { border-collapse: collapse; width: 100%; }
+        th { background:#28A745; color:#fff; padding:6px 8px; text-align:left; font-size:11px; }
+        td { padding:5px 8px; border-bottom:1px solid #e5e7eb; }
+      </style></head><body>
+      <h2>Contractors List</h2>
+      <p>MPH Developers &nbsp;|&nbsp; Showing ${filtered.length} of ${contractors.length} contractors</p>
+      <table><thead><tr>
+        <th>#</th><th>Name</th><th>Trade</th><th>Sub-Trade</th><th>Project</th>
+        <th>Price (₹)</th><th>Unit</th><th>Contact</th><th>Status</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      </body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const handleExportPDF = () => {
+    // Generate printable HTML that the browser can print-to-PDF
+    handlePrint();
+    toast.info("Use 'Save as PDF' in the print dialog to export PDF.");
+  };
+
   const exportCSV = () => {
     const headers = [
       "Name",
@@ -277,7 +513,6 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
       "Unit Price",
       "Unit",
       "Contact No 1",
-      "Contact No 2",
       "Email",
       "Link 1",
       "Link 2",
@@ -293,7 +528,6 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
       c.contractingPrice,
       c.unit,
       c.contact,
-      "",
       c.email,
       c.attachmentLink1 ?? "",
       c.attachmentLink2 ?? "",
@@ -418,7 +652,6 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
   const clearFilters = () => {
     setFilters(emptyFilters());
     setSearch("");
-    setColFilters({});
   };
 
   const toolbarBtnClass =
@@ -433,8 +666,7 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
     filters.toDate ||
     filters.year ||
     filters.minPrice ||
-    filters.maxPrice ||
-    Object.values(colFilters).some(Boolean);
+    filters.maxPrice;
 
   const SortIcon = ({ col }: { col: keyof PayGoContractor }) => (
     <ArrowUpDown
@@ -447,6 +679,7 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
     />
   );
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
       className="flex flex-col gap-0"
@@ -470,10 +703,10 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
           </select>
         </div>
 
-        {/* Work Order sub-module button */}
+        {/* Work Order sub-module button — opens inline modal */}
         <button
           type="button"
-          onClick={() => onNavigate?.("workorder")}
+          onClick={() => setShowWorkOrder(true)}
           className="flex items-center gap-1.5 border rounded-md px-3 py-1.5 text-xs font-semibold shadow-sm transition-colors cursor-pointer whitespace-nowrap"
           style={{ background: "#e0f2fe", borderColor: TEAL, color: TEAL }}
           title="Open Work Order Module"
@@ -481,18 +714,14 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
           <Briefcase size={14} /> Work Order
         </button>
 
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className={toolbarBtnClass}
-        >
+        <button type="button" onClick={handlePrint} className={toolbarBtnClass}>
           <Printer size={14} /> Print
         </button>
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={handleExportPDF}
           className={toolbarBtnClass}
-          title="Export PDF (uses print dialog)"
+          title="Export PDF"
         >
           <FileText size={14} /> Export PDF
         </button>
@@ -527,7 +756,7 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
           </button>
         )}
 
-        {/* Search bar — between Download Format and +New Contractor */}
+        {/* Search bar */}
         <div className="relative flex-1 min-w-[160px]">
           <Search
             size={14}
@@ -589,7 +818,7 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
         </span>
       </div>
 
-      {/* Filters Card — 2 rows */}
+      {/* Filters Card — ALL 8 fields in a SINGLE ROW */}
       {showFilters && (
         <div className="px-4 py-3 bg-amber-50 border-b border-yellow-200">
           <div className="rounded-xl border border-yellow-200 bg-amber-50 pb-3">
@@ -614,9 +843,10 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                 </button>
               </div>
             </div>
-            {/* Row 1 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 pt-3">
-              <div className="flex flex-col gap-1">
+            {/* Single row — 8 fields */}
+            <div className="flex flex-wrap gap-2 px-4 pt-3 items-end">
+              {/* 1. Contractor Name */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[110px]">
                 <span className="text-xs font-semibold text-gray-600">
                   Contractor
                 </span>
@@ -628,9 +858,9 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                       contractorName: e.target.value,
                     }))
                   }
-                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  className="rounded border border-gray-300 px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 >
-                  <option value="">All Contractors</option>
+                  <option value="">All</option>
                   {[...new Set(contractors.map((c) => c.name))].map((n) => (
                     <option key={n} value={n}>
                       {n}
@@ -638,7 +868,8 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   ))}
                 </select>
               </div>
-              <div className="flex flex-col gap-1">
+              {/* 2. Trade */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[100px]">
                 <span className="text-xs font-semibold text-gray-600">
                   Trade
                 </span>
@@ -647,9 +878,9 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, trade: e.target.value }))
                   }
-                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  className="rounded border border-gray-300 px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 >
-                  <option value="">All Trades</option>
+                  <option value="">All</option>
                   {tradeNames.map((t) => (
                     <option key={t} value={t}>
                       {t}
@@ -657,7 +888,8 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   ))}
                 </select>
               </div>
-              <div className="flex flex-col gap-1">
+              {/* 3. Project */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[100px]">
                 <span className="text-xs font-semibold text-gray-600">
                   Project
                 </span>
@@ -666,9 +898,9 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, project: e.target.value }))
                   }
-                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  className="rounded border border-gray-300 px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 >
-                  <option value="">All Projects</option>
+                  <option value="">All</option>
                   {projectNames.map((n) => (
                     <option key={n} value={n}>
                       {n}
@@ -676,7 +908,8 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   ))}
                 </select>
               </div>
-              <div className="flex flex-col gap-1">
+              {/* 4. Year */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[80px]">
                 <span className="text-xs font-semibold text-gray-600">
                   Year
                 </span>
@@ -685,9 +918,9 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, year: e.target.value }))
                   }
-                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  className="rounded border border-gray-300 px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 >
-                  <option value="">All Years</option>
+                  <option value="">All</option>
                   {yearOptions.map((y) => (
                     <option key={y} value={y}>
                       {y}
@@ -695,10 +928,8 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   ))}
                 </select>
               </div>
-            </div>
-            {/* Row 2 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4 pt-2">
-              <div className="flex flex-col gap-1">
+              {/* 5. From Date */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[110px]">
                 <span className="text-xs font-semibold text-gray-600">
                   From Date
                 </span>
@@ -708,10 +939,11 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, fromDate: e.target.value }))
                   }
-                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  className="rounded border border-gray-300 px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 />
               </div>
-              <div className="flex flex-col gap-1">
+              {/* 6. To Date */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[110px]">
                 <span className="text-xs font-semibold text-gray-600">
                   To Date
                 </span>
@@ -721,35 +953,37 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, toDate: e.target.value }))
                   }
-                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  className="rounded border border-gray-300 px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 />
               </div>
-              <div className="flex flex-col gap-1">
+              {/* 7. Min Unit Price */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[100px]">
                 <span className="text-xs font-semibold text-gray-600">
-                  Min Unit Price (₹)
+                  Min Price (₹)
                 </span>
                 <input
                   type="number"
-                  placeholder="Min price"
+                  placeholder="Min"
                   value={filters.minPrice}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, minPrice: e.target.value }))
                   }
-                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  className="rounded border border-gray-300 px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 />
               </div>
-              <div className="flex flex-col gap-1">
+              {/* 8. Max Unit Price */}
+              <div className="flex flex-col gap-0.5 flex-1 min-w-[100px]">
                 <span className="text-xs font-semibold text-gray-600">
-                  Max Unit Price (₹)
+                  Max Price (₹)
                 </span>
                 <input
                   type="number"
-                  placeholder="Max price"
+                  placeholder="Max"
                   value={filters.maxPrice}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, maxPrice: e.target.value }))
                   }
-                  className="rounded border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  className="rounded border border-gray-300 px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                 />
               </div>
             </div>
@@ -757,7 +991,7 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — no column-level filter inputs */}
       <div className="px-4 py-3">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -796,31 +1030,13 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                         onClick={() => applySort(col)}
                         onKeyDown={(e) => e.key === "Enter" && applySort(col)}
                       >
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-1">
-                            {labels[col]}
-                            <SortIcon col={col} />
-                            {sortCol === col && (
-                              <span className="text-yellow-200 text-xs">
-                                {sortDir === "asc" ? "↑" : "↓"}
-                              </span>
-                            )}
-                          </div>
-                          {/* Inline column filter for text cols */}
-                          {["name", "trade", "status"].includes(col) && (
-                            <input
-                              type="text"
-                              placeholder="Filter…"
-                              value={colFilters[col] ?? ""}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) =>
-                                setColFilters((f) => ({
-                                  ...f,
-                                  [col]: e.target.value,
-                                }))
-                              }
-                              className="mt-0.5 rounded px-1.5 py-0.5 text-xs text-gray-700 bg-white border-0 focus:outline-none focus:ring-1 focus:ring-yellow-300 w-full"
-                            />
+                        <div className="flex items-center gap-1">
+                          {labels[col]}
+                          <SortIcon col={col} />
+                          {sortCol === col && (
+                            <span className="text-yellow-200 text-xs">
+                              {sortDir === "asc" ? "↑" : "↓"}
+                            </span>
                           )}
                         </div>
                       </th>
@@ -894,7 +1110,7 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
                           {isAdmin && (
                             <button
                               type="button"
-                              onClick={() => openEdit(c)}
+                              onClick={() => requestEdit(c)}
                               title="Edit"
                               className="text-blue-600 hover:text-blue-800"
                             >
@@ -926,7 +1142,80 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
         </div>
       </div>
 
-      {/* View Receipt Modal — Share | Print | Close only (no duplicate X) */}
+      {/* Work Order inline modal */}
+      {showWorkOrder && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 60,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            paddingTop: "40px",
+            paddingBottom: "40px",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "12px",
+              width: "min(980px, 95vw)",
+              minHeight: "400px",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            {/* Modal header */}
+            <div
+              style={{
+                background: TEAL,
+                color: "#fff",
+                padding: "12px 16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexShrink: 0,
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: "14px",
+                  fontFamily: "'Century Gothic', Arial, sans-serif",
+                }}
+              >
+                Work Orders
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowWorkOrder(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#fff",
+                  cursor: "pointer",
+                  display: "flex",
+                  padding: "2px",
+                }}
+                data-ocid="paygo.contractors.workorder_close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {/* Work Order content */}
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              <PayGoWorkOrderPage />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Receipt Modal */}
       {viewItem && (
         <Dialog open={!!viewItem} onOpenChange={() => setViewItem(null)}>
           <DialogContent
@@ -938,7 +1227,6 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
               <h2 className="text-base font-bold" style={{ color: GREEN }}>
                 Contractor Receipt
               </h2>
-              {/* ONLY Share, Print, Close — no duplicate X */}
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -1047,190 +1335,73 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
         </Dialog>
       )}
 
-      {/* Add / Edit Dialog — admin only */}
+      {/* Password prompt — BEFORE edit */}
+      <Dialog
+        open={editPwOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditPwOpen(false);
+            setEditPwError("");
+            setPendingEditContractor(null);
+          }
+        }}
+      >
+        <DialogContent data-ocid="paygo.contractors.edit_pw_dialog">
+          <DialogHeader>
+            <DialogTitle style={{ color: "#0078D7" }}>Confirm Edit</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600 mb-2">
+            Enter admin password to edit this contractor.
+          </p>
+          <Input
+            type="password"
+            value={editPwValue}
+            onChange={(e) => {
+              setEditPwValue(e.target.value);
+              setEditPwError("");
+            }}
+            onKeyDown={(e) => e.key === "Enter" && confirmEditPw()}
+            placeholder="Enter admin password"
+            data-ocid="paygo.contractors.edit_pw_input"
+            autoFocus
+          />
+          {editPwError && (
+            <p className="text-xs text-red-600 mt-1">{editPwError}</p>
+          )}
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => {
+                setEditPwOpen(false);
+                setEditPwError("");
+                setPendingEditContractor(null);
+              }}
+              className="border border-gray-300 rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              data-ocid="paygo.contractors.cancel_button"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmEditPw}
+              className="rounded-md px-4 py-2 text-sm text-white font-semibold"
+              style={{ background: "#0078D7" }}
+              data-ocid="paygo.contractors.confirm_edit_button"
+            >
+              Confirm
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add / Edit Dialog — draggable popup */}
       {isAdmin && (
-        <Dialog open={formOpen} onOpenChange={setFormOpen}>
-          <DialogContent
-            className="max-w-2xl max-h-[85vh] overflow-y-auto"
-            data-ocid="paygo.contractors.dialog"
-          >
-            <DialogHeader>
-              <DialogTitle style={{ color: GREEN }}>
-                {editItem ? "Edit Contractor" : "New Contractor"}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-3 py-2">
-              <div className="col-span-2">
-                <Label className="text-xs font-semibold">Name *</Label>
-                <Input
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, name: e.target.value }))
-                  }
-                  placeholder="Contractor Name"
-                  data-ocid="paygo.contractors.input"
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Trade</Label>
-                <Input
-                  value={form.trade}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, trade: e.target.value }))
-                  }
-                  placeholder="e.g. Mason, Scaffolding, M S"
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Sub-Trade</Label>
-                <Input
-                  value={form.subTrade}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, subTrade: e.target.value }))
-                  }
-                  placeholder="e.g. Foundation, Plastering"
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Project</Label>
-                <Select
-                  value={form.project}
-                  onValueChange={(v) => setForm((f) => ({ ...f, project: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projectNames.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="-">None</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Unit Price (₹)</Label>
-                <Input
-                  type="number"
-                  value={form.contractingPrice || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      contractingPrice: Number(e.target.value),
-                    }))
-                  }
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Unit</Label>
-                <Select
-                  value={form.unit}
-                  onValueChange={(v) => setForm((f) => ({ ...f, unit: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {UNITS.map((u) => (
-                      <SelectItem key={u} value={u}>
-                        {u}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Contact No 1</Label>
-                <Input
-                  value={form.contact}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, contact: e.target.value }))
-                  }
-                  placeholder="Mobile"
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Email</Label>
-                <Input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, email: e.target.value }))
-                  }
-                  placeholder="email@example.com"
-                />
-              </div>
-              <div className="col-span-2">
-                <Label className="text-xs font-semibold">Address</Label>
-                <Input
-                  value={form.address}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, address: e.target.value }))
-                  }
-                  placeholder="Address"
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">
-                  Attachment Link 1 (W.O)
-                </Label>
-                <Input
-                  type="url"
-                  value={form.attachmentLink1}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, attachmentLink1: e.target.value }))
-                  }
-                  placeholder="https://..."
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">
-                  Attachment Link 2
-                </Label>
-                <Input
-                  type="url"
-                  value={form.attachmentLink2}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, attachmentLink2: e.target.value }))
-                  }
-                  placeholder="https://..."
-                />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold">Status</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) =>
-                    setForm((f) => ({
-                      ...f,
-                      status: v as PayGoContractor["status"],
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Completed">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-2">
-                <Label className="text-xs font-semibold">Notes</Label>
-                <Textarea
-                  value={form.notes}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, notes: e.target.value }))
-                  }
-                  rows={2}
-                />
-              </div>
-            </div>
-            <DialogFooter>
+        <DraggableModal
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          title={editItem ? "Edit Contractor" : "New Contractor"}
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => setFormOpen(false)}
@@ -1248,9 +1419,183 @@ export default function PayGoContractorsPage({ onNavigate }: Props) {
               >
                 Save
               </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </>
+          }
+        >
+          <div
+            className="grid grid-cols-2 gap-3"
+            style={{ fontFamily: "'Century Gothic', Arial, sans-serif" }}
+            data-ocid="paygo.contractors.dialog"
+          >
+            <div className="col-span-2">
+              <Label className="text-xs font-semibold">Name *</Label>
+              <Input
+                value={form.name}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
+                placeholder="Contractor Name"
+                data-ocid="paygo.contractors.input"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Trade</Label>
+              <Input
+                value={form.trade}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, trade: e.target.value }))
+                }
+                placeholder="e.g. Mason, Scaffolding, M S"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Sub-Trade</Label>
+              <Input
+                value={form.subTrade}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, subTrade: e.target.value }))
+                }
+                placeholder="e.g. Foundation, Plastering"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Project</Label>
+              <Select
+                value={form.project}
+                onValueChange={(v) => setForm((f) => ({ ...f, project: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projectNames.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="-">None</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Unit Price (₹)</Label>
+              <Input
+                type="number"
+                value={form.contractingPrice || ""}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    contractingPrice: Number(e.target.value),
+                  }))
+                }
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Unit</Label>
+              <Select
+                value={form.unit}
+                onValueChange={(v) => setForm((f) => ({ ...f, unit: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNITS.map((u) => (
+                    <SelectItem key={u} value={u}>
+                      {u}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Contact No 1</Label>
+              <Input
+                value={form.contact}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, contact: e.target.value }))
+                }
+                placeholder="Mobile"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Email</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, email: e.target.value }))
+                }
+                placeholder="email@example.com"
+              />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-xs font-semibold">Address</Label>
+              <Input
+                value={form.address}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, address: e.target.value }))
+                }
+                placeholder="Address"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">
+                Attachment Link 1 (W.O)
+              </Label>
+              <Input
+                type="url"
+                value={form.attachmentLink1}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, attachmentLink1: e.target.value }))
+                }
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Attachment Link 2</Label>
+              <Input
+                type="url"
+                value={form.attachmentLink2}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, attachmentLink2: e.target.value }))
+                }
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold">Status</Label>
+              <Select
+                value={form.status}
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    status: v as PayGoContractor["status"],
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <Label className="text-xs font-semibold">Notes</Label>
+              <Textarea
+                value={form.notes}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, notes: e.target.value }))
+                }
+                rows={2}
+              />
+            </div>
+          </div>
+        </DraggableModal>
       )}
 
       {/* Delete Confirm */}
